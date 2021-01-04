@@ -59,6 +59,7 @@ create_environment:
 ifeq (True,$(HAS_CONDA))
 	@echo ">>> Detected conda, creating conda environment."
 	conda create --name $(PROJECT_NAME) python=3
+	pip install -e .
 	@echo ">>> New conda env created. Activate with:\n conda activate $(PROJECT_NAME)"
 else
 	$(PYTHON_INTERPRETER) -m pip install -q virtualenv virtualenvwrapper
