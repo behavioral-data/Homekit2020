@@ -1,8 +1,28 @@
 SeattleFluStudy
 ==============================
 
-CCode pertaining to the UW Behavioral Data Science Lab's contributions to the Seattle Flu Study 
+Code pertaining to the UW Behavioral Data Science Lab's contributions to the Seattle Flu Study. 
 
+
+How to contibute:
+------------
+1. Clone this repo: `git clone https://github.com/behavioral-data/RobustDataScience.git`
+2. cd into it:  `cd RobustDataScience`
+3. Build the conda environment: `make create_environment`
+4. Follow the project structure outlined below.
+
+
+Why is this project set up like this?
+------------
+Great question. For a more satisfying answer than can be provided here, look to the [original cookiecutter page](https://drivendata.github.io/cookiecutter-data-science/): 
+
+One thing that I really like about using the setup is that it's really easy to modularize code.
+Say that you wrote some really handy function in `src/visualization.py` that you wanted to use in a notebook. One option might have been to write your notebook in the main directory, and use `src` as a module. This is all well and good for notebook, but what if you have several? A more heinous (and common!) idea might have been to copy and paste over the code to your notebook. 
+However, since we turned `src` into a module and added it to the PATH in `make create_environment`, we can just do something like this in our notebook, no matter where it is in the project:
+```
+from src.visualization import handy_viz
+handy_viz(df)
+```
 Project Organization
 ------------
 
