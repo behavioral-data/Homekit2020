@@ -6,7 +6,7 @@ REQUIRED_PYTHON = "python"
 def main():
     system_major = sys.version_info.major
     if REQUIRED_PYTHON == "python":
-        required_major = 2
+        required_major = 3
     elif REQUIRED_PYTHON == "python3":
         required_major = 3
     else:
