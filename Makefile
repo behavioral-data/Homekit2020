@@ -25,7 +25,7 @@ requirements: test_environment
 	conda install -n $(PROJECT_NAME) requirements.txt
 
 ## Make Dataset
-data: requirements
+data: 
 	$(PYTHON_INTERPRETER) src/data/make_dataset.py data/raw data/processed
 
 ## Delete all compiled Python files
@@ -55,7 +55,7 @@ endif
 
 ## Sync Data from bdatasets
 sync_bdata:
-cp -r /projects/bdata/datasets/gatesfoundation/raw/ data/
+	cp -r /projects/bdata/datasets/gatesfoundation/raw/ data/
 
 ## Set up python interpreter environment
 create_environment:
