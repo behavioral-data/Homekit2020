@@ -22,8 +22,7 @@ endif
 
 ## Install Python Dependencies
 requirements: test_environment
-	$(PYTHON_INTERPRETER) -m pip install -U pip setuptools wheel
-	$(PYTHON_INTERPRETER) -m pip install -r requirements.txt
+	conda install -n $(PROJECT_NAME) requirements.txt
 
 ## Make Dataset
 data: requirements
@@ -53,6 +52,10 @@ ifeq (default,$(PROFILE))
 else
 	aws s3 sync s3://$(BUCKET)/data/ data/ --profile $(PROFILE)
 endif
+
+## Sync Data from bdatasets
+sync_bdata:
+cp -r /projects/bdata/datasets/gatesfoundation/raw/ data/
 
 ## Set up python interpreter environment
 create_environment:
