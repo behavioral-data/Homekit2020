@@ -231,7 +231,7 @@ man_pages = [
 texinfo_documents = [
     ('index', 'seattleflustudy', u'SeattleFluStudy Documentation',
      u"TheMikeMerrill", 'SeattleFluStudy',
-     'CCode pertaining to the UW Behavioral Data Science Lab's contributions to the Seattle Flu Study ', 'Miscellaneous'),
+     "Code pertaining to the UW Behavioral Data Science Lab's contributions to the Seattle Flu Study", 'Miscellaneous'),
 ]
 
 # Documents to append as an appendix to all manuals.
