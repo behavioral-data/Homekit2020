@@ -14,7 +14,6 @@ def process_surveys(output_filepath):
     df_baseline = load_raw_table("baseline")
     df_fup_a = load_raw_table("follow_up_a")
     df_fup_b = load_raw_table("follow_up_b")
-    df_recovery = load_raw_table("recovery")
     df_screener = load_raw_table("screener")
 
     df_trigerred_fup_a = df_fup_a.loc[
@@ -56,7 +55,7 @@ def process_surveys(output_filepath):
     for col in one_hot_encode:
             df_daily_survey = pd.get_dummies(df_daily_survey ,prefix = col, columns = [col])
     df_daily_survey['have_flu'] = df_daily_survey['have_flu'].astype('uint8')
-    
+
     one_hot_path = get_processed_dataset_path("daily_surveys_onehot")
     df_daily_survey.to_csv(one_hot_path,index=False)
 
