@@ -1,5 +1,4 @@
-# local package
--e .
+
 
 # external requirements
 click
@@ -14,6 +13,6 @@ transformers
 pandas
 scikit-learn
 scipy
-
+dask
 # backwards compatibility
 pathlib2
