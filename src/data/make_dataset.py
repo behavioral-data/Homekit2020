@@ -1,11 +1,62 @@
 # -*- coding: utf-8 -*-
 import click
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
+import numpy as np
+import dask.dataframe as dd
+
 import logging
 from pathlib import Path
 from dotenv import find_dotenv, load_dotenv
+import glob
+
+from src.utils import get_logger
+import os
+logger = get_logger()
 
 from src.data.utils import load_raw_table, load_processed_table, get_processed_dataset_path
+
+def process_minute_level(output_filepath):
+    minute_level_df = load_raw_table("fitbit_minute_level_activity")
+    logger.info("Processing minute-level fitbit activity data. This will take a while...")
+    # Add missing flag to heart rate
+    missing_heartrate = (minute_level_df.heart_rate.isnull()) | (minute_level_df.heart_rate == 0)
+    minute_level_df["missing_heartrate"] = missing_heartrate
+    minute_level_df["heart_rate"] = minute_level_df["heart_rate"].fillna(0)
+    # Properly encode heart rate
+    minute_level_df["heart_rate"] = minute_level_df["heart_rate"].astype(int)
+    
+
+    minute_level_df['missing_steps'] = False
+    minute_level_df.loc[minute_level_df.steps.isnull(),'missing_steps'] = True
+    minute_level_df.steps.fillna(0,inplace = True)
+    minute_level_df['missing_steps'] = minute_level_df['missing_steps'].astype(bool)
+    minute_level_df['steps'] = minute_level_df['steps'].astype(np.int16)
+    
+    minute_level_df.sleep_classic.fillna(0,inplace = True)
+    minute_level_df['sleep_classic'] = minute_level_df['sleep_classic'].astype('Int8')
+    
+    minute_level_df = pd.get_dummies(minute_level_df ,prefix = 'sleep_classic', columns = ['sleep_classic'],
+                                    dtype = bool)
+                                        
+    minute_level_df.reset_index(drop = True, inplace = True)
+    
+    minute_level_df["date"] = minute_level_df["timestamp"].dt.date
+
+    #Sorting will speed up dask queries later
+    minute_level_df = minute_level_df.sort_values("participant_id")
+    
+    # minute_level_df.to_csv("data/interim/processed_fitbit_minute_level_activity.csv")
+    table = pa.Table.from_pandas(minute_level_df, preserve_index=False)
+
+    processed_fitbit_minute_level_activity_path = get_processed_dataset_path("processed_fitbit_minute_level_activity")
+
+    pq.write_to_dataset(table, root_path=processed_fitbit_minute_level_activity_path,
+                    partition_cols=['date'])
+
+    paths = glob.glob(os.path.join(processed_fitbit_minute_level_activity_path,"*","*.parquet"))
+    dd.io.parquet.create_metadata_file(paths)
 
 def process_surveys(output_filepath):
     # Ported from notebooks/melih_notebooks/EDA_survey.ipynb
@@ -40,7 +91,6 @@ def process_surveys(output_filepath):
     
     lab_updates_with_trigger_path = get_processed_dataset_path("lab_results_with_triggerdate")
     df_lab_results_w_triggerdate.to_csv(lab_updates_with_trigger_path,index=False)
-
     
     baseline_screener_survey_path = get_processed_dataset_path("baseline_screener_survey")
     pd.merge(df_screener[['participant_id','timestamp', 'sex', 'ethnicity', 'race__0', 'race__1',
@@ -91,12 +141,15 @@ def main(input_filepath, output_filepath):
     logger = logging.getLogger(__name__)
     logger.info('making final data set from raw data')
 
-    #Lab updates:
+    # Lab updates:
     lab_updates(output_filepath)
     lab_results(output_filepath)
 
-    #Surveys
+    # Surveys
     process_surveys(output_filepath)
+
+    # Minute Level Activity
+    process_minute_level(output_filepath)
 
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
