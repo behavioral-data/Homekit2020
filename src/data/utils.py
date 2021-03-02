@@ -70,7 +70,7 @@ def load_processed_table(name,fmt="df"):
     else:
         raise ValueError("Unsupported fmt") 
 
-@dask.delayed
+# @dask.delayed
 def get_dask_df(name,min_date=None,max_date=None,index=None):
     path = get_processed_dataset_path(name)
     filters = []
