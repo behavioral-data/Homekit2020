@@ -1,4 +1,6 @@
 from datetime import datetime
+import multiprocessing
+from functools import lru_cache
 
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
@@ -15,6 +17,8 @@ from src.utils import get_logger
 logger = get_logger()
 
 from src.data.utils import get_dask_df, load_processed_table
+
+from tqdm import tqdm
 
 MIN_IN_DAY = 24*60
 
@@ -33,15 +37,21 @@ class MinuteLevelActivityReader(object):
         self.max_missing_days_in_window = max_missing_days_in_window
         self.min_windows = min_windows
         
-        dask_df = get_dask_df("processed_fitbit_minute_level_activity",
-                                    min_date=min_date,
-                                    max_date=max_date)
-    
-        if not participant_ids is None:
-            dask_df = dask_df[dask_df["participant_id"].isin(participant_ids)] 
+        n_cores = multiprocessing.cpu_count()
+        pbar = ProgressBar()
+        pbar.register()
+        
+        #pylint:disable=unused-variable 
+        with Client(n_workers=min(n_cores,16), threads_per_worker=1) as client:
 
-        # pylint: disable=unused-variable
-        with Client(n_workers=32,threads_per_worker=1) as client:         
+            dask_df = get_dask_df("processed_fitbit_minute_level_activity",
+                                        min_date=min_date,
+                                        max_date=max_date)
+        
+            if not participant_ids is None:
+                dask_df = dask_df[dask_df["participant_id"].isin(participant_ids)] 
+        
+            
 
             self.day_window_size = day_window_size
             self.max_missing_days_in_window = max_missing_days_in_window
@@ -50,9 +60,9 @@ class MinuteLevelActivityReader(object):
             valid_participant_dates = dask_df.groupby("participant_id").apply(self.get_valid_dates, meta=("dates",object))
             
             self.minute_data = dask_df
-            with ProgressBar():
-                logger.info("Using Dask to pre-process data:")
-                valid_participant_dates, self.minute_data = dask.compute(valid_participant_dates,self.minute_data)
+        
+            logger.info("Using Dask to pre-process data:")
+            valid_participant_dates, self.minute_data = dask.compute(valid_participant_dates,self.minute_data)
             
             self.minute_data = self.minute_data.set_index(["participant_id","timestamp"]).drop(columns=["date"])
             self.participant_dates = list(valid_participant_dates.apply(pd.Series).stack().droplevel(-1).items())
@@ -60,6 +70,7 @@ class MinuteLevelActivityReader(object):
         if self.scaler:
             scale_model = self.scaler()
             self.minute_data[self.minute_data.columns] = scale_model.fit_transform(self.minute_data)
+        self.minute_data = self.minute_data.sort_index()
 
     def get_valid_dates(self, partition):
         dates_with_data = pd.DatetimeIndex(partition[~partition["missing_heartrate"]]["timestamp"].dt.date.unique())
@@ -84,9 +95,8 @@ class MinuteLevelActivityReader(object):
 
     def split_participant_dates(self,date):
         """Split participant dates to be before and after a given date"""
-        before_mask = self.participant_dates.index(level=-1) <= pd.to_datetime(date)
-        before = self.participant_dates[before_mask]
-        after = self.participant_dates[~before_mask]
+        before = [x for x in self.participant_dates if x[1] <= pd.to_datetime(date) ]
+        after = [x for x in self.participant_dates if x[1] > pd.to_datetime(date) ]
         return before, after
 
 class LabResultsReader(object):
@@ -113,7 +123,8 @@ class MinuteLevelActivtyDataset(Dataset):
                        day_window_size=15,
                        max_missing_days_in_window=5,
                        min_windows=1,
-                       scaler = MinMaxScaler):
+                       scaler = MinMaxScaler,
+                       time_encoding=None):
         
         self.minute_level_activity_reader = minute_level_activity_reader
         self.minute_data = self.minute_level_activity_reader.minute_data
@@ -121,6 +132,7 @@ class MinuteLevelActivtyDataset(Dataset):
 
         self.lab_results_reader = lab_results_reader
         self.participant_dates = participant_dates
+        self.time_encoding = time_encoding
         
 
     def get_user_data_in_time_range(self,participant_id,start,end):
@@ -132,16 +144,13 @@ class MinuteLevelActivtyDataset(Dataset):
         except KeyError:
             return None
 
-        result = participant_results["trigger_datetime"].date == date
-        if result:
-            return result["result"]
-        else:
-            return None
-
+        return participant_results["trigger_datetime"].date() == date.date()
+        
 
     def __len__(self):
         return len(self.participant_dates)
     
+    @lru_cache(maxsize=None)
     def __getitem__(self,index):
         # Could cache this later
         participant_id, end_date = self.participant_dates[index]
@@ -149,16 +158,33 @@ class MinuteLevelActivtyDataset(Dataset):
         minute_data = self.get_user_data_in_time_range(participant_id,start_date,end_date)
         
         result = self.look_for_test_result(participant_id,end_date)
-        if result and result == "Detected":
+        if result:
             label = 1
         else:
             label = 0
         
-        return {
-            "label": label,
-            "data" : minute_data
-        }
+        if self.time_encoding == "sincos":
+            minute_data["sin_time"]  = sin_time(minute_data.index)
+            minute_data["cos_time"]  = cos_time(minute_data.index)
+
+        return minute_data.values, label
     
+    def to_stacked_numpy(self):
+        X = []
+        y = []
+
+        for el_x, el_y in tqdm(self, desc = "Converting to np Array"): 
+            X.append(el_x)
+            y.append(el_y)
+            
+        return np.stack(X), np.stack(y)
+
+def sin_time(timestamps):
+    return np.sin(2*np.pi*(timestamps.hour * 60 + timestamps.minute)/MIN_IN_DAY).astype(np.float32)
+
+def cos_time(timestamps):
+    return np.cos(2*np.pi*(timestamps.hour * 60 + timestamps.minute)/MIN_IN_DAY).astype(np.float32)
+
 if __name__ == "__main__":
     
     lab_results_reader = LabResultsReader()
