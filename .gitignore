@@ -88,6 +88,8 @@ target/
 # Mypy cache
 .mypy_cache/
 
-
 #dask
 dask-worker-space/dask-worker-space/*
+
+#wandb
+wandb/*
