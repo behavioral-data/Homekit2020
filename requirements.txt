@@ -14,5 +14,8 @@ pandas
 scikit-learn
 scipy
 dask
+pylint
+tensorflow-gpu
+ipython
 # backwards compatibility
 pathlib2

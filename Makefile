@@ -22,9 +22,8 @@ endif
 
 ## Install Python Dependencies
 requirements: test_environment
-	pip install -e .
-	conda install -n $(PROJECT_NAME) --file requirements.txt --channel pytorch
-	conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch
+	conda install -n $(PROJECT_NAME) --file requirements.txt --channel pytorch --yes
+	conda install -n $(PROJECT_NAME) pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch --yes
 ## Make Dataset
 data: 
 	$(PYTHON_INTERPRETER) src/data/make_dataset.py data/raw data/processed
@@ -62,7 +61,7 @@ sync_bdata:
 create_environment:
 ifeq (True,$(HAS_CONDA))
 	@echo ">>> Detected conda, creating conda environment."
-	conda create --name $(PROJECT_NAME) python=3  
+	conda create --name $(PROJECT_NAME) python=3
 	pip install -e .
 	@echo ">>> New conda env created. Activate with:\n conda activate $(PROJECT_NAME)"
 else
