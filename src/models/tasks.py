@@ -1,4 +1,17 @@
+import sys
+
 import src.data.task_datasets as td
+from src.models.eval import classification_eval
+
+
+def get_task_with_name(name):
+    try:
+        identifier = getattr(sys.modules[__name__], name)
+    except AttributeError:
+        raise NameError(f"{name} is not a valid task.")
+    if isinstance(identifier, type):
+        return identifier
+    raise TypeError(f"{name} is not a valid task.")
 
 class Task(object):
     def __init__(self):
@@ -34,9 +47,11 @@ class PredictFluPos(Task):
 
     def get_train_dataset(self):
         return self.train_dataset
-    
+
     def get_eval_dataset(self):
         return self.eval_dataset
-
+    
+    def evaluate_results(self,logits,labels):
+        return classification_eval(logits,labels)
     
     
