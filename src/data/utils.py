@@ -19,6 +19,7 @@ logger = get_logger()
 DATASET_VERSION="2020-07-15"
 RAW_DATA_PATH = os.path.join("data","raw","audere","data-export",DATASET_VERSION)
 PROCESSED_DATA_PATH = os.path.join("data","processed")
+DEBUG_DATA_PATH = os.path.join("data","debug")
 
 def get_raw_dataset_path(name):
     if name in constants.MTL_NAMES:
@@ -45,12 +46,17 @@ def load_raw_table(name,fmt="df"):
         raise ValueError("Unsupported fmt") 
 
 def get_processed_dataset_path(name):
-    if name in constants.PROCESSED_DATASETS:
-        return os.path.join(PROCESSED_DATA_PATH,name+".csv")        
-    elif name in constants.PARQUET_DATASETS:
-        return os.path.join(PROCESSED_DATA_PATH,name) 
+    if os.environ.get("DEBUG_DATA"): 
+        logger.warning("DEBUG_DATA is set, only loading subset of data")
+        data_path = DEBUG_DATA_PATH
     else:
-        raise ValueError(f"Looked for {name} in {PROCESSED_DATA_PATH}, not found!")
+        data_path = PROCESSED_DATA_PATH
+    if name in constants.PROCESSED_DATASETS:
+        return os.path.join(data_path,name+".csv")        
+    elif name in constants.PARQUET_DATASETS:
+        return os.path.join(data_path,name) 
+    else:
+        raise ValueError(f"Looked for {name} in {data_path}, not found!")
         
 def find_processed_dataset(name):
     path = get_processed_dataset_path(name)
