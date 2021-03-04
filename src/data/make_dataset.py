@@ -17,8 +17,11 @@ logger = get_logger()
 
 from src.data.utils import load_raw_table, load_processed_table, get_processed_dataset_path
 
-def process_minute_level(output_filepath):
+def process_minute_level(output_filepath, participant_ids=None, random_state=42):
     minute_level_df = load_raw_table("fitbit_minute_level_activity")
+    if not participant_ids is None:
+        minute_level_df = minute_level_df[minute_level_df["participant_id"].isin(participant_ids)]                                                     
+        
     logger.info("Processing minute-level fitbit activity data. This will take a while...")
     # Add missing flag to heart rate
     missing_heartrate = (minute_level_df.heart_rate.isnull()) | (minute_level_df.heart_rate == 0)
@@ -46,7 +49,14 @@ def process_minute_level(output_filepath):
 
     #Sorting will speed up dask queries later
     minute_level_df = minute_level_df.sort_values("participant_id")
-    
+    minute_level_df = minute_level_df.groupby("participant_id").apply(fill_missing_minutes)
+    del minute_level_df["participant_id"]
+    minute_level_df = minute_level_df.reset_index()
+
+    minute_level_df["sleep_classic_0"] = minute_level_df["sleep_classic_0"].astype(bool)
+    minute_level_df["sleep_classic_1"] = minute_level_df["sleep_classic_1"].astype(bool)
+    minute_level_df["sleep_classic_2"] = minute_level_df["sleep_classic_2"].astype(bool)
+    minute_level_df["sleep_classic_3"] = minute_level_df["sleep_classic_3"].astype(bool)
     # minute_level_df.to_csv("data/interim/processed_fitbit_minute_level_activity.csv")
     table = pa.Table.from_pandas(minute_level_df, preserve_index=False)
 
@@ -58,7 +68,20 @@ def process_minute_level(output_filepath):
     paths = glob.glob(os.path.join(processed_fitbit_minute_level_activity_path,"*","*.parquet"))
     dd.io.parquet.create_metadata_file(paths)
 
-def process_surveys(output_filepath):
+def fill_missing_minutes(user_df):
+    min_date = user_df["date"].min()
+    max_date = user_df["date"].max()
+    new_index = pd.DatetimeIndex(pd.date_range(start=min_date,end=max_date,freq="1min"),
+                                name = "timestamp")
+    user_df = user_df.set_index("timestamp").reindex(new_index)
+    user_df["missing_heartrate"] = user_df["missing_heartrate"].fillna(True)
+    user_df["missing_steps"] = user_df["missing_steps"].fillna(True)
+    user_df["steps"] = user_df["missing_steps"].fillna(True)
+    user_df = user_df.fillna(0)
+    return user_df
+
+
+def process_surveys(output_filepath,return_result=False):
     # Ported from notebooks/melih_notebooks/EDA_survey.ipynb
     # Produces lab_results_with_trigger, baseline_screener_survey, daily_surveys_onehot
 
@@ -109,7 +132,10 @@ def process_surveys(output_filepath):
     one_hot_path = get_processed_dataset_path("daily_surveys_onehot")
     df_daily_survey.to_csv(one_hot_path,index=False)
 
-def lab_updates(output_filepath):
+    if return_result:
+        return df_daily_survey
+
+def lab_updates(output_filepath, return_result=False):
     df_updates = load_raw_table("mtl_lab_order_updates")
 
     # From notebooks/melih_notebooks/EDA_mtl_lab.ipynb
@@ -120,8 +146,11 @@ def lab_updates(output_filepath):
 
     lab_updates_path = get_processed_dataset_path("lab_updates")
     df_updates.to_csv(lab_updates_path,index=False)
+    
+    if return_result:
+        return df_updates
 
-def lab_results(output_filepath):
+def lab_results(output_filepath, return_result=False):
     df_results = load_raw_table("mtl_lab_order_results")
 
     # From notebooks/melih_notebooks/EDA_mtl_lab.ipynb
@@ -130,6 +159,9 @@ def lab_results(output_filepath):
 
     lab_results_path = get_processed_dataset_path("lab_results")
     df_results.to_csv(lab_results_path,index=False)
+
+    if return_result:
+        return df_results
 
 @click.command()
 @click.argument('input_filepath', type=click.Path(exists=True))
