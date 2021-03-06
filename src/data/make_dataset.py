@@ -76,7 +76,7 @@ def fill_missing_minutes(user_df):
     user_df = user_df.set_index("timestamp").reindex(new_index)
     user_df["missing_heartrate"] = user_df["missing_heartrate"].fillna(True)
     user_df["missing_steps"] = user_df["missing_steps"].fillna(True)
-    user_df["steps"] = user_df["missing_steps"].fillna(True)
+    user_df["steps"] = user_df["steps"].fillna(0)
     user_df["date"] = user_df.index.date
     user_df = user_df.fillna(0)
     return user_df
