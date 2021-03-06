@@ -21,6 +21,7 @@ logger = get_logger()
 @click.option("--val_split", default=0.15)
 @click.option("--no_early_stopping",is_flag=True)
 @click.option("--no_wandb",is_flag=True)
+@click.option("--notes", type=str, default=None, help="Notes to save to wandb")
 @click.option('--dataset_args', default={})
 def train_neural_baseline(model_name,task_name,
                          n_epochs=10,
@@ -29,6 +30,7 @@ def train_neural_baseline(model_name,task_name,
                          neg_class_weight = 1,
                          val_split = 0.15,
                          no_wandb=False,
+                         notes=None,
                          dataset_args = {}):
 
     # Annoyingly need to load all of this into RAM:
@@ -69,7 +71,8 @@ def train_neural_baseline(model_name,task_name,
         import wandb
         wandb.init(project="flu",
                    entity="mikeamerrill",
-                   config=config_info)
+                   config=config_info,
+                   notes=notes)
         wandb.log({"train_class_balance":train_class_balance})                   
         callbacks.append(WandbCallback())
     else:
