@@ -35,13 +35,17 @@ class PredictFluPos(Task):
         
         min_date = dataset_args.pop("min_date",None)
         max_date = dataset_args.pop("max_date",None)
+        day_window_size = dataset_args.pop("day_window_size",None)
+        max_missing_days_in_window = dataset_args.pop("max_missing_days_in_window",None)
 
         lab_results_reader = td.LabResultsReader()
         participant_ids = lab_results_reader.participant_ids
 
         minute_level_reader = td.MinuteLevelActivityReader(participant_ids=participant_ids,
                                                            min_date = min_date,
-                                                           max_date = max_date)
+                                                           max_date = max_date,
+                                                           day_window_size=day_window_size,
+                                                           max_missing_days_in_window=max_missing_days_in_window)
 
         train_participant_dates, eval_participant_dates = minute_level_reader.split_participant_dates(split_date)
     
