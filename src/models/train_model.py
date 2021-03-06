@@ -16,6 +16,7 @@ logger = get_logger()
 @click.command()
 @click.argument("model_name")
 @click.argument("task_name")
+@click.option("--n_epochs", default=10)
 @click.option("--pos_class_weight", default=100)
 @click.option("--neg_class_weight", default=1)
 @click.option("--val_split", default=0.15)
@@ -50,10 +51,12 @@ def train_neural_baseline(model_name,task_name,
                    "pos_class_weight": pos_class_weight,
                    "neg_class_weight": neg_class_weight,
                    "model_type":model_name,
-                   "task":task.get_name()}
+                   "task":task.get_name(),
+                   "dataset_args":dataset_args}
     
     train_class_balance = pd.Series(train_y).value_counts().to_dict()
-
+    logger.info(f"Train class balance: {train_class_balance}")
+    
     callbacks = []
     if not no_early_stopping:
         early_stopping_monitor = EarlyStopping(
@@ -77,7 +80,7 @@ def train_neural_baseline(model_name,task_name,
         callbacks.append(WandbCallback())
     else:
         logger.info(f"Config: {config_info}")
-        logger.info(f"Train class balance: {train_class_balance}")
+
 
     logger.info(f"Training {model_name}")
     model.fit(train_X, train_y, 

@@ -194,6 +194,15 @@ class MinuteLevelActivtyDataset(Dataset):
         
         return np.stack(X), np.stack(y)
 
+class MeanStepsDataset(MinuteLevelActivtyDataset):
+    def __init__(self,*args,**kwargs):
+        super(MeanStepsDataset, self).__init__(*args, **kwargs)
+        self.mean_steps =  self.minute_data["steps"].mean()
+    
+    def get_label(self,participant_id,date):
+        participant_data = self.minute_data.loc[participant_id]
+        return participant_data[participant_data.index.date == date.date()]["steps"].mean() > self.mean_steps        
+
 def sin_time(timestamps):
     return np.sin(2*np.pi*(timestamps.hour * 60 + timestamps.minute)/MIN_IN_DAY).astype(np.float32)
 
