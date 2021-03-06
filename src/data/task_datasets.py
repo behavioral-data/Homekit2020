@@ -150,7 +150,7 @@ class MinuteLevelActivtyDataset(Dataset):
         data = self.minute_data.loc[participant_id].loc[start:end]
         return data
     
-    def look_for_test_result(self,participant_id,date):
+    def get_label(self,participant_id,date):
         try:
             participant_results = self.lab_results_reader.results.loc[participant_id]
         except KeyError:
@@ -169,7 +169,7 @@ class MinuteLevelActivtyDataset(Dataset):
         start_date = end_date - pd.Timedelta(self.day_window_size, unit = "days")
         minute_data = self.get_user_data_in_time_range(participant_id,start_date,end_date)
         
-        result = self.look_for_test_result(participant_id,end_date)
+        result = self.get_label(participant_id,end_date)
         if result:
             label = 1
         else:
