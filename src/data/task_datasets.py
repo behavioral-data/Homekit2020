@@ -99,7 +99,7 @@ class MinuteLevelActivityReader(object):
 
         mask = []
         for a,b in zip(all_possible_start_dates, all_possible_end_dates):
-            has_enough_data = len(dates_with_data[(dates_with_data >= a) & (dates_with_data < b) ] )> min_days_with_data
+            has_enough_data = len(dates_with_data[(dates_with_data >= a) & (dates_with_data < b) ] )>= min_days_with_data
             mask.append(has_enough_data)
 
         return all_possible_end_dates[mask].rename("dates")
@@ -131,6 +131,9 @@ class MinuteLevelActivtyDataset(Dataset):
     def __init__(self, minute_level_activity_reader,
                        lab_results_reader,
                        participant_dates,
+                       day_window_size=15,
+                       max_missing_days_in_window=5,
+                       min_windows=1,
                        scaler = MinMaxScaler,
                        time_encoding=None):
         
