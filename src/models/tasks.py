@@ -28,10 +28,20 @@ class PredictFluPos(Task):
        We validate on data after split_date, but before
        max_date, if provided"""
 
-    def __init__(self,split_date,dataset_args={}):
+    def __init__(self,dataset_args={}):
+        split_date = dataset_args.pop("split_date",None)
+        if not split_date:
+            raise KeyError("Must provide a date for splitting train and ")
+        
+        min_date = dataset_args.pop("min_date",None)
+        max_date = dataset_args.pop("max_date",None)
+
         lab_results_reader = td.LabResultsReader()
         participant_ids = lab_results_reader.participant_ids
-        minute_level_reader = td.MinuteLevelActivityReader(participant_ids=participant_ids)
+
+        minute_level_reader = td.MinuteLevelActivityReader(participant_ids=participant_ids,
+                                                           min_date = min_date,
+                                                           max_date = max_date)
 
         train_participant_dates, eval_participant_dates = minute_level_reader.split_participant_dates(split_date)
     
@@ -50,6 +60,9 @@ class PredictFluPos(Task):
 
     def get_eval_dataset(self):
         return self.eval_dataset
+    
+    def get_name(self):
+        return "PredictFluPos"
     
     def evaluate_results(self,logits,labels):
         return classification_eval(logits,labels)

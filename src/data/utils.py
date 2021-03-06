@@ -80,13 +80,13 @@ def load_processed_table(name,fmt="df"):
 def get_dask_df(name,min_date=None,max_date=None,index=None):
     path = get_processed_dataset_path(name)
     filters = []
-    if min_date:
-        filters.append(["date",">=",min_date])
-    if max_date:
-        filters.append(["date","<",max_date])
-   
+    # if min_date:
+    #     filters.append(("date",">=",min_date))
+    # if max_date:
+    #     filters.append(("date","<",max_date))
+        
     if filters:
-        df = dd.read_parquet(path,filters=filters,infer_divisions=True)
+        df = dd.read_parquet(path,filters=filters)
     else: 
         df = dd.read_parquet(path,index=index)
     return df

@@ -1,6 +1,7 @@
 from datetime import datetime
 import multiprocessing
-from functools import lru_cache
+from functools import lru_cache, reduce
+from operator import and_ as bit_and
 
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
@@ -44,15 +45,25 @@ class MinuteLevelActivityReader(object):
         #pylint:disable=unused-variable 
         with Client(n_workers=min(n_cores,16), threads_per_worker=1) as client:
 
-            dask_df = get_dask_df("processed_fitbit_minute_level_activity",
-                                        min_date=min_date,
-                                        max_date=max_date)
+            dask_df = get_dask_df("processed_fitbit_minute_level_activity")
         
             if not participant_ids is None:
                 dask_df = dask_df[dask_df["participant_id"].isin(participant_ids)] 
-        
-            
 
+            date_filters = []
+            
+            if min_date: 
+                min_datetime = pd.to_datetime(min_date)
+                date_filters.append(dask_df["timestamp"] >= min_datetime)
+            
+            if max_date:
+                max_datetime = pd.to_datetime(max_date)
+                date_filters.append(dask_df["timestamp"] < max_datetime)
+            filters = reduce(bit_and,date_filters)
+
+            if not len(filters) == 0:
+                dask_df = dask_df[filters]
+            
             self.day_window_size = day_window_size
             self.max_missing_days_in_window = max_missing_days_in_window
             self.min_windows = min_windows
@@ -65,7 +76,7 @@ class MinuteLevelActivityReader(object):
             valid_participant_dates, self.minute_data = dask.compute(valid_participant_dates,self.minute_data)
             
             self.minute_data = self.minute_data.set_index(["participant_id","timestamp"]).drop(columns=["date"])
-            self.participant_dates = list(valid_participant_dates.apply(pd.Series).stack().droplevel(-1).items())
+            self.participant_dates = list(valid_participant_dates.dropna().apply(pd.Series).stack().droplevel(-1).items())
         
         if self.scaler:
             scale_model = self.scaler()
@@ -120,9 +131,6 @@ class MinuteLevelActivtyDataset(Dataset):
     def __init__(self, minute_level_activity_reader,
                        lab_results_reader,
                        participant_dates,
-                       day_window_size=15,
-                       max_missing_days_in_window=5,
-                       min_windows=1,
                        scaler = MinMaxScaler,
                        time_encoding=None):
         
@@ -136,7 +144,8 @@ class MinuteLevelActivtyDataset(Dataset):
         
 
     def get_user_data_in_time_range(self,participant_id,start,end):
-        return self.minute_data.loc[participant_id].loc[start:end]
+        data = self.minute_data.loc[participant_id].loc[start:end]
+        return data
     
     def look_for_test_result(self,participant_id,date):
         try:
@@ -170,13 +179,16 @@ class MinuteLevelActivtyDataset(Dataset):
         return minute_data.values, label
     
     def to_stacked_numpy(self):
+        
+        if len(self)==0:
+            return np.array([]), np.array([])
         X = []
         y = []
 
         for el_x, el_y in tqdm(self, desc = "Converting to np Array"): 
             X.append(el_x)
             y.append(el_y)
-            
+        
         return np.stack(X), np.stack(y)
 
 def sin_time(timestamps):
