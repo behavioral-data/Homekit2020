@@ -135,7 +135,8 @@ class MinuteLevelActivtyDataset(Dataset):
                        max_missing_days_in_window=5,
                        min_windows=1,
                        scaler = MinMaxScaler,
-                       time_encoding=None):
+                       time_encoding=None,
+                       return_dict=False):
         
         self.minute_level_activity_reader = minute_level_activity_reader
         self.minute_data = self.minute_level_activity_reader.minute_data
@@ -179,6 +180,9 @@ class MinuteLevelActivtyDataset(Dataset):
             minute_data["sin_time"]  = sin_time(minute_data.index)
             minute_data["cos_time"]  = cos_time(minute_data.index)
 
+        if self.return_dict:
+            return {"inputs_embeds":minute_data.values,
+                    "labels":label}
         return minute_data.values, label
     
     def to_stacked_numpy(self):
