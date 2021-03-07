@@ -93,3 +93,5 @@ dask-worker-space/dask-worker-space/*
 
 #wandb
 wandb/*
+results/*
+logs/*
