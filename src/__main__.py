@@ -7,7 +7,7 @@ warnings.filterwarnings("ignore")
 
 import click
 
-from src.models.train_model import train_neural_baseline
+from src.models.train_model import train_neural_baseline, train_bert
 from src.utils import get_logger
 logger = get_logger()
 
@@ -15,6 +15,7 @@ logger = get_logger()
 def cli():
     pass
 cli.add_command(train_neural_baseline)
+cli.add_command(train_bert)
 
 # @cli.command(context_settings=dict(
 #     ignore_unknown_options=True,
