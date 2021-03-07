@@ -27,6 +27,8 @@ class GeqMeanSteps(Task):
 
     def __init__(self,dataset_args={}):
         split_date = dataset_args.pop("split_date",None)
+        eval_frac = dataset_args.pop("eval_frac",None)
+
         if not split_date:
             raise KeyError("Must provide a date for splitting train and ")
         
@@ -44,7 +46,7 @@ class GeqMeanSteps(Task):
                                                            day_window_size=day_window_size,
                                                            max_missing_days_in_window=max_missing_days_in_window)
 
-        train_participant_dates, eval_participant_dates = minute_level_reader.split_participant_dates(split_date)
+        train_participant_dates, eval_participant_dates = minute_level_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
     
 
         self.train_dataset = td.MeanStepsDataset(minute_level_reader, lab_results_reader,
@@ -58,11 +60,18 @@ class GeqMeanSteps(Task):
     def get_eval_dataset(self):
         return self.eval_dataset
     
-    def evaluate_results(self,logits,labels):
-        return classification_eval(logits,labels)
+    def evaluate_results(self,logits,labels,threshold=0.5):
+        return classification_eval(logits,labels,threshold=threshold)
     
     def get_name(self):
         return "GeqMedianSteps"
+    
+    def get_huggingface_metrics(self,threshold=0.5):
+        def evaluator(pred):
+            labels = pred.label_ids
+            logits = pred.predictions
+            return self.evaluate_results(logits,labels,threshold=threshold)
+        return evaluator
 
 class PredictFluPos(Task):
     """Predict the whether a participant was positive
@@ -72,6 +81,8 @@ class PredictFluPos(Task):
 
     def __init__(self,dataset_args={}):
         split_date = dataset_args.pop("split_date",None)
+        eval_frac = dataset_args.pop("eval_frac",None)
+
         if not split_date:
             raise KeyError("Must provide a date for splitting train and ")
         
@@ -89,7 +100,7 @@ class PredictFluPos(Task):
                                                            day_window_size=day_window_size,
                                                            max_missing_days_in_window=max_missing_days_in_window)
 
-        train_participant_dates, eval_participant_dates = minute_level_reader.split_participant_dates(split_date)
+        train_participant_dates, eval_participant_dates = minute_level_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
     
 
         self.train_dataset = td.MinuteLevelActivtyDataset(minute_level_reader, lab_results_reader,
@@ -110,7 +121,14 @@ class PredictFluPos(Task):
     def get_name(self):
         return "PredictFluPos"
     
-    def evaluate_results(self,logits,labels):
-        return classification_eval(logits,labels)
-    
+    def evaluate_results(self,logits,labels,threshold=0.5):
+        return classification_eval(logits,labels,threshold=threshold)
+
+    def get_huggingface_metrics(self,threshold=0.5):
+        def evaluator(pred):
+            labels = pred.label_ids
+            logits = pred.predictions
+            return self.evaluate_results(logits,labels,threshold=threshold)
+        return evaluator
+
     

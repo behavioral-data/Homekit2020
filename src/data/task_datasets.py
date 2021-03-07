@@ -13,6 +13,7 @@ import dask.dataframe as dd
 dask.config.set({"distributed.comm.timeouts.connect": "60"})
 
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split
 
 from src.utils import get_logger
 logger = get_logger()
@@ -104,11 +105,19 @@ class MinuteLevelActivityReader(object):
 
         return all_possible_end_dates[mask].rename("dates")
 
-    def split_participant_dates(self,date):
-        """Split participant dates to be before and after a given date"""
-        before = [x for x in self.participant_dates if x[1] <= pd.to_datetime(date) ]
-        after = [x for x in self.participant_dates if x[1] > pd.to_datetime(date) ]
-        return before, after
+    def split_participant_dates(self,date=None,eval_frac=None):
+        """If random, split a fraction equal to random for eval,
+            else, split participant dates to be before and after a given date"""
+
+        if eval_frac:
+            train,eval = train_test_split(self.participant_dates,test_size=eval_frac)
+            return train,eval
+        elif date:
+            before = [x for x in self.participant_dates if x[1] <= pd.to_datetime(date) ]
+            after = [x for x in self.participant_dates if x[1] > pd.to_datetime(date) ]
+            return before, after
+        else:
+            raise ValueError("If splitting, must either provide a date or fraction")
 
 class LabResultsReader(object):
     def __init__(self,min_date=None,
@@ -145,8 +154,9 @@ class MinuteLevelActivtyDataset(Dataset):
         self.lab_results_reader = lab_results_reader
         self.participant_dates = participant_dates
         self.time_encoding = time_encoding
-        
 
+        self.return_dict = return_dict
+        
     def get_user_data_in_time_range(self,participant_id,start,end):
         data = self.minute_data.loc[participant_id].loc[start:end]
         return data
@@ -181,7 +191,7 @@ class MinuteLevelActivtyDataset(Dataset):
             minute_data["cos_time"]  = cos_time(minute_data.index)
 
         if self.return_dict:
-            return {"inputs_embeds":minute_data.values,
+            return {"inputs_embeds":minute_data.values.astype(np.float32),
                     "labels":label}
         return minute_data.values, label
     
