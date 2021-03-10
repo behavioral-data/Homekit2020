@@ -86,8 +86,7 @@ class PredictFluPos(MinuteLevelTask):
        max_date, if provided"""
 
     def __init__(self,dataset_args={}):
-            super(GeqMeanSteps,self).__init__(dataset_args=dataset_args)
-
+        super(GeqMeanSteps,self).__init__(dataset_args=dataset_args)
         
     def get_description(self):
         return self.__doc__
@@ -112,4 +111,5 @@ class PredictFluPos(MinuteLevelTask):
         return evaluator
 
 
-class Autoencode(Task):
+class Autoencode(MinuteLevelTask):
+    pass
