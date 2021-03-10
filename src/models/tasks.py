@@ -21,10 +21,9 @@ class Task(object):
     def __str__(self):
         raise NotImplementedError
 
-class GeqMeanSteps(Task):
-    """A dummy task to predict whether or not the median number of steps
-       on the last day of a window is >= the mean across the whole dataset"""
-
+class MinuteLevelTask(Task):
+    """ Is inhereited by anything that operatres over the minute
+        level data"""
     def __init__(self,dataset_args={}):
         split_date = dataset_args.pop("split_date",None)
         eval_frac = dataset_args.pop("eval_frac",None)
@@ -53,7 +52,14 @@ class GeqMeanSteps(Task):
                         participant_dates = train_participant_dates,**dataset_args)
         self.eval_dataset = td.MeanStepsDataset(minute_level_reader, lab_results_reader,
                         participant_dates = eval_participant_dates,**dataset_args)
+
+class GeqMeanSteps(MinuteLevelTask):
+    """A dummy task to predict whether or not the total number of steps
+       on the first day of a window is >= the mean across the whole dataset"""
     
+    def __init__(self,dataset_args={}):
+        super(GeqMeanSteps,self).__init__(dataset_args=dataset_args)
+
     def get_train_dataset(self):
         return self.train_dataset
 
@@ -73,40 +79,14 @@ class GeqMeanSteps(Task):
             return self.evaluate_results(logits,labels,threshold=threshold)
         return evaluator
 
-class PredictFluPos(Task):
+class PredictFluPos(MinuteLevelTask):
     """Predict the whether a participant was positive
        given a rolling window of minute level activity data.
        We validate on data after split_date, but before
        max_date, if provided"""
 
     def __init__(self,dataset_args={}):
-        split_date = dataset_args.pop("split_date",None)
-        eval_frac = dataset_args.pop("eval_frac",None)
-
-        if not split_date:
-            raise KeyError("Must provide a date for splitting train and ")
-        
-        min_date = dataset_args.pop("min_date",None)
-        max_date = dataset_args.pop("max_date",None)
-        day_window_size = dataset_args.pop("day_window_size",None)
-        max_missing_days_in_window = dataset_args.pop("max_missing_days_in_window",None)
-
-        lab_results_reader = td.LabResultsReader()
-        participant_ids = lab_results_reader.participant_ids
-
-        minute_level_reader = td.MinuteLevelActivityReader(participant_ids=participant_ids,
-                                                           min_date = min_date,
-                                                           max_date = max_date,
-                                                           day_window_size=day_window_size,
-                                                           max_missing_days_in_window=max_missing_days_in_window)
-
-        train_participant_dates, eval_participant_dates = minute_level_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
-    
-
-        self.train_dataset = td.MinuteLevelActivtyDataset(minute_level_reader, lab_results_reader,
-                        participant_dates = train_participant_dates,**dataset_args)
-        self.eval_dataset = td.MinuteLevelActivtyDataset(minute_level_reader, lab_results_reader,
-                        participant_dates = eval_participant_dates,**dataset_args)
+            super(GeqMeanSteps,self).__init__(dataset_args=dataset_args)
 
         
     def get_description(self):
@@ -131,4 +111,5 @@ class PredictFluPos(Task):
             return self.evaluate_results(logits,labels,threshold=threshold)
         return evaluator
 
-    
+
+class Autoencode(Task):
