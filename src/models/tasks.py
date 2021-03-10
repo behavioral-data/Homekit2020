@@ -58,7 +58,7 @@ class GeqMeanSteps(MinuteLevelTask):
        on the first day of a window is >= the mean across the whole dataset"""
     
     def __init__(self,dataset_args={}):
-        super(GeqMeanSteps,self).__init__(dataset_args=dataset_args)
+        super().__init__(dataset_args=dataset_args)
 
     def get_train_dataset(self):
         return self.train_dataset
@@ -86,7 +86,7 @@ class PredictFluPos(MinuteLevelTask):
        max_date, if provided"""
 
     def __init__(self,dataset_args={}):
-        super(GeqMeanSteps,self).__init__(dataset_args=dataset_args)
+        super().__init__(dataset_args=dataset_args)
         
     def get_description(self):
         return self.__doc__
