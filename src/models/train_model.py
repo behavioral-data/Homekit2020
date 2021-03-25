@@ -4,11 +4,17 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import click
+
+from src.models.commands import HuggingFaceCommand
 from src.models.tasks import get_task_with_name
 from src.models.neural_baselines import create_neural_model
 from src.utils import get_logger
 
-from transformers import BertForSequenceClassification, Trainer, TrainingArguments, BertConfig
+from transformers import (BertForSequenceClassification, Trainer, 
+                         TrainingArguments, BertConfig, 
+                         EncoderDecoderConfig, EncoderDecoderModel,
+                         LongformerForSequenceClassification,
+                         LongformerConfig)
 
 from tensorflow.keras.callbacks import EarlyStopping
 import pandas as pd
@@ -97,29 +103,8 @@ def train_neural_baseline(model_name,task_name,
         logger.info(results)
 
 
-@click.command()
+@click.command(cls=HuggingFaceCommand)
 @click.argument("task_name")
-# Model Args:
-@click.option("--n_epochs", default=10)
-@click.option("--hidden_size",default=768)
-@click.option("--num_attention_heads", default=4)
-@click.option("--num_hidden_layers", default=4)
-@click.option("--max_length", default=24*60+1)
-@click.option("--max_position_embeddings",default=2048)
-# Training Args:
-@click.option("--pos_class_weight", default=100)
-@click.option("--neg_class_weight", default=1)
-@click.option("--train_batch_size",default=20)
-@click.option("--eval_batch_size",default=60)
-@click.option("--no_early_stopping",is_flag=True)
-@click.option("--warmup_steps",default=500)
-@click.option("--weight_decay",default=0.1)
-@click.option("--eval_frac",default=0.15)
-@click.option("--classification_threshold",default=0.5)
-# WandB Args:
-@click.option("--no_wandb",is_flag=True)
-@click.option("--notes", type=str, default=None, help="Notes to save to wandb")
-@click.option('--dataset_args', default={})
 def train_bert(task_name,
                 n_epochs=10,
                 hidden_size=768,
@@ -132,7 +117,8 @@ def train_bert(task_name,
                 neg_class_weight = 1,
                 train_batch_size = 4,
                 eval_batch_size = 16,
-                eval_frac = 0.15,
+                eval_frac = None,
+                learning_rate = 5e-5,
                 classification_threshold=0.5,
                 warmup_steps=500,
                 weight_decay=0.1,
@@ -144,51 +130,152 @@ def train_bert(task_name,
     dataset_args = loads(dataset_args)
     dataset_args["return_dict"] = True
     dataset_args["eval_frac"] = eval_frac
-    
-    if not no_wandb:
-        import wandb
-        wandb.init(project="flu",
-                   entity="mikeamerrill",
-                   notes=notes)
-        # wandb.log({"train_class_balance":train_class_balance})                   
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args)
     
     train_dataset = task.get_train_dataset()
-    eval_dataset = task.get_eval_dataset()
-
     infer_example = train_dataset[0]["inputs_embeds"]
     n_timesteps, n_features = infer_example.shape
 
-    config = BertConfig(hidden_size=n_features,
-                        num_attention_heads=num_attention_heads,
-                        num_hidden_layers=num_hidden_layers,
-                        max_position_embeddings=max_position_embeddings)
-    
-    
     training_args = TrainingArguments(
         output_dir='./results',          # output directory
         num_train_epochs=n_epochs,              # total # of training epochs
         per_device_train_batch_size=train_batch_size,  # batch size per device during training
         per_device_eval_batch_size=eval_batch_size,   # batch size for evaluation
         warmup_steps=warmup_steps,                # number of warmup steps for learning rate scheduler
-        weight_decay=weight_decay,               # strength of weight decay
+        weight_decay=weight_decay,
+        learning_rate=learning_rate,               # strength of weight decay
         logging_dir='./logs',
+        logging_steps=10,
         do_eval=True,
         prediction_loss_only=False,
         evaluation_strategy="epoch",
         report_to=["wandb"]            # directory for storing logs
     )
 
-    model = BertForSequenceClassification(config)
-    model.cuda()
+    if task.is_classification:
+        config = BertConfig(hidden_size=n_features,
+                        num_attention_heads=num_attention_heads,
+                        num_hidden_layers=num_hidden_layers,
+                        max_position_embeddings=n_timesteps)
+        model = BertForSequenceClassification(config)
+        model.cuda()
+
+        metrics = task.get_huggingface_metrics(threshold=classification_threshold)
     
-    metrics = task.get_huggingface_metrics(threshold=classification_threshold)
-    trainer = Trainer(
-                model=model,
-                args=training_args,
-                train_dataset=train_dataset,
-                eval_dataset=eval_dataset,
-                compute_metrics=metrics)
+    elif task.is_autoencoder:
+        raise NotImplementedError
+        config = BertConfig(hidden_size=n_features,
+                        num_attention_heads=num_attention_heads,
+                        num_hidden_layers=num_hidden_layers,
+                        max_position_embeddings=n_timesteps,
+                        output_hidden_states=True)
+        config  = EncoderDecoderConfig.from_encoder_decoder_configs(config,config)
+        model = EncoderDecoderModel(config=config)
+        model.config.decoder.is_decoder = True
+        model.config.add_cross_attention = True
+
+    run_huggingface(model=model, base_trainer=Trainer,
+                   training_args=training_args,
+                   metrics = metrics, task=task,
+                   no_wandb=no_wandb, notes=notes)
+
+
+@click.command(cls=HuggingFaceCommand)
+@click.argument("task_name")
+def train_longformer(task_name,
+                    n_epochs=10,
+                    hidden_size=768,
+                    num_attention_heads=4,
+                    num_hidden_layers=4,
+                    max_length = 24*60+1,
+                    max_position_embeddings=2048, 
+                    no_early_stopping=False,
+                    pos_class_weight = 100,
+                    neg_class_weight = 1,
+                    train_batch_size = 4,
+                    eval_batch_size = 16,
+                    eval_frac = None,
+                    learning_rate = 5e-5,
+                    classification_threshold=0.5,
+                    warmup_steps=500,
+                    weight_decay=0.1,
+                    no_wandb=False,
+                    notes=None,
+                    dataset_args = {}):
+    
+    logger.info(f"Training Longformer on {task_name}")
+    dataset_args = loads(dataset_args)
+    dataset_args["return_dict"] = True
+    dataset_args["eval_frac"] = eval_frac
+    dataset_args["return_global_attention_mask"] = True
+
+    task = get_task_with_name(task_name)(dataset_args=dataset_args)
+    
+    train_dataset = task.get_train_dataset()
+    infer_example = train_dataset[0]["inputs_embeds"]
+    n_timesteps, n_features = infer_example.shape
+
+    training_args = TrainingArguments(
+        output_dir='./results',          # output directory
+        num_train_epochs=n_epochs,              # total # of training epochs
+        per_device_train_batch_size=train_batch_size,  # batch size per device during training
+        per_device_eval_batch_size=eval_batch_size,   # batch size for evaluation
+        warmup_steps=warmup_steps,                # number of warmup steps for learning rate scheduler
+        weight_decay=weight_decay,
+        learning_rate=learning_rate,               # strength of weight decay
+        logging_dir='./logs',
+        logging_steps=10,
+        do_eval=True,
+        prediction_loss_only=False,
+        evaluation_strategy="epoch",
+        report_to=["wandb"]            # directory for storing logs
+    )
+
+    if task.is_classification:
+        
+        config = LongformerConfig(hidden_size=n_features,
+                        num_attention_heads=num_attention_heads,
+                        num_hidden_layers=num_hidden_layers,
+                        max_position_embeddings=int(n_timesteps*1.25))
+        model = LongformerForSequenceClassification(config)
+        model.resize_token_embeddings(n_features)
+        model.cuda()
+        metrics = task.get_huggingface_metrics(threshold=classification_threshold)
+    
+    else:
+        raise NotImplementedError
+
+    run_huggingface(model=model, base_trainer=Trainer,
+                   training_args=training_args,
+                   metrics = metrics, task=task,
+                   no_wandb=no_wandb, notes=notes)
+
+
+def run_huggingface(model,base_trainer,training_args,
+                    metrics, task,no_wandb=False,notes=None):
+    if not no_wandb:
+        import wandb
+        wandb.init(project="flu",
+                   entity="mikeamerrill",
+                   notes=notes)
+        wandb.run.summary["task"] = task.get_name()
+
+    train_dataset = task.get_train_dataset()
+    eval_dataset = task.get_eval_dataset()
+
+
+    trainer_args = dict(
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            compute_metrics=metrics)
+
+    trainer = base_trainer(**trainer_args)
     trainer.train()
     trainer.evaluate()
+    train_metrics = trainer.predict(train_dataset, metric_key_prefix="").metrics
+    train_metrics = {"train/"+k[1:] : v for k,v in train_metrics.items()}
+    if wandb:
+        wandb.log(train_metrics)
