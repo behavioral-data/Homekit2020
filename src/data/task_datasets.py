@@ -2,7 +2,7 @@ from datetime import datetime
 import multiprocessing
 from functools import lru_cache, reduce
 from operator import and_ as bit_and
-
+import random
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
@@ -68,6 +68,7 @@ class MinuteLevelActivityReader(object):
             self.day_window_size = day_window_size
             self.max_missing_days_in_window = max_missing_days_in_window
             self.min_windows = min_windows
+            
 
             valid_participant_dates = dask_df.groupby("participant_id").apply(self.get_valid_dates, meta=("dates",object))
             
@@ -145,29 +146,42 @@ class MinuteLevelActivtyDataset(Dataset):
                        min_windows=1,
                        scaler = MinMaxScaler,
                        time_encoding=None,
-                       return_dict=False):
+                       return_dict=False,
+                       return_global_attention_mask = False,
+                       add_cls=False,
+                       shuffle=False):
         
         self.minute_level_activity_reader = minute_level_activity_reader
         self.minute_data = self.minute_level_activity_reader.minute_data
         self.day_window_size = self.minute_level_activity_reader.day_window_size 
 
         self.lab_results_reader = lab_results_reader
+        
         self.participant_dates = participant_dates
+        if shuffle:
+            random.shuffle(self.participant_dates)
+        
         self.time_encoding = time_encoding
-
         self.return_dict = return_dict
+        self.return_global_attention_mask = return_global_attention_mask
+        
+        self.size = (24*60*day_window_size+1+int(add_cls), 2*bool(time_encoding) + 8)
+        self.add_cls = add_cls
+
+        if self.add_cls:
+            self.cls_init = np.random.randn(1,self.size[-1]).astype(np.float32)   
         
     def get_user_data_in_time_range(self,participant_id,start,end):
         data = self.minute_data.loc[participant_id].loc[start:end]
         return data
     
-    def get_label(self,participant_id,date):
+    def get_label(self,participant_id,start_date,end_date):
         try:
             participant_results = self.lab_results_reader.results.loc[participant_id]
         except KeyError:
             return None
 
-        return participant_results["trigger_datetime"].date() == date.date()
+        return participant_results["trigger_datetime"].date() == end_date.date()
         
 
     def __len__(self):
@@ -180,7 +194,7 @@ class MinuteLevelActivtyDataset(Dataset):
         start_date = end_date - pd.Timedelta(self.day_window_size, unit = "days")
         minute_data = self.get_user_data_in_time_range(participant_id,start_date,end_date)
         
-        result = self.get_label(participant_id,end_date)
+        result = self.get_label(participant_id,start_date,end_date)
         if result:
             label = 1
         else:
@@ -189,10 +203,26 @@ class MinuteLevelActivtyDataset(Dataset):
         if self.time_encoding == "sincos":
             minute_data["sin_time"]  = sin_time(minute_data.index)
             minute_data["cos_time"]  = cos_time(minute_data.index)
-
+        
+        
         if self.return_dict:
-            return {"inputs_embeds":minute_data.values.astype(np.float32),
-                    "labels":label}
+            
+            item = {}
+            embeds = minute_data.values.astype(np.float32)        
+            
+            if self.add_cls:
+                embeds = np.concatenate([self.cls_init,embeds],axis=0)
+            
+            item["inputs_embeds"] = embeds
+            item["label"] = label
+
+            if self.return_global_attention_mask:
+                mask = np.zeros(embeds.shape[0])
+                mask[0] = 1
+                item["global_attention_mask"] = mask
+            
+            return item
+
         return minute_data.values, label
     
     def to_stacked_numpy(self):
@@ -208,14 +238,47 @@ class MinuteLevelActivtyDataset(Dataset):
         
         return np.stack(X), np.stack(y)
 
+
+class EarlyDetectionDataset(MinuteLevelActivtyDataset):
+    def __init__(self,*args,**kwargs):
+        super(EarlyDetectionDataset, self).__init__(*args, **kwargs)
+
 class MeanStepsDataset(MinuteLevelActivtyDataset):
     def __init__(self,*args,**kwargs):
         super(MeanStepsDataset, self).__init__(*args, **kwargs)
-        self.mean_steps =  self.minute_data["steps"].mean()
-    
-    def get_label(self,participant_id,date):
+        participant_ids = self.minute_data.index.get_level_values(level=0)
+        dates = self.minute_data.index.get_level_values(level=1).date
+        self.mean_steps = self.minute_data.groupby([participant_ids,dates])["steps"].sum().mean()
+
+    def get_label(self,participant_id,start_date,end_date):
         participant_data = self.minute_data.loc[participant_id]
-        return participant_data[participant_data.index.date == date.date()]["steps"].mean() > self.mean_steps        
+        return participant_data[participant_data.index.date == start_date.date()]["steps"].sum() > self.mean_steps        
+
+class AutoencodeDataset(MinuteLevelActivtyDataset):
+    def __init__(self,*args,**kwargs):
+        super(AutoencodeDataset, self).__init__(*args, **kwargs)
+
+    def get_label(self,participant_id,start_date,end_date):
+        return None
+
+    @lru_cache(maxsize=None)
+    def __getitem__(self,index):
+        # Could cache this later
+        raise NotImplementedError
+
+        # participant_id, end_date = self.participant_dates[index]
+        # start_date = end_date - pd.Timedelta(self.day_window_size, unit = "days")
+        # minute_data = self.get_user_data_in_time_range(participant_id,start_date,end_date)
+        
+
+        # if self.time_encoding == "sincos":
+        #     minute_data["sin_time"]  = sin_time(minute_data.index)
+        #     minute_data["cos_time"]  = cos_time(minute_data.index)
+
+        # if self.return_dict:
+        #     return {"inputs_embeds":minute_data.values.astype(np.float32),
+        #             "labels":label}
+        # return minute_data.values, label
 
 def sin_time(timestamps):
     return np.sin(2*np.pi*(timestamps.hour * 60 + timestamps.minute)/MIN_IN_DAY).astype(np.float32)
