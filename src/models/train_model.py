@@ -42,10 +42,11 @@ def train_neural_baseline(model_name,task_name,
                          notes=None,
                          dataset_args = {}):
 
-    # Annoyingly need to load all of this into RAM:
+    
 
     logger.info(f"Training {model_name} on {task_name}")
     dataset_args = loads(dataset_args)
+    dataset_args["eval_frac"] = val_split
     task = get_task_with_name(task_name)(dataset_args=dataset_args)
 
     train_X, train_y = task.get_train_dataset().to_stacked_numpy()
@@ -138,7 +139,7 @@ def train_bert(task_name,
     n_timesteps, n_features = infer_example.shape
 
     training_args = TrainingArguments(
-        output_dir='./results',          # output directory
+        output_dir='./results',          # output directorz
         num_train_epochs=n_epochs,              # total # of training epochs
         per_device_train_batch_size=train_batch_size,  # batch size per device during training
         per_device_eval_batch_size=eval_batch_size,   # batch size for evaluation
@@ -260,6 +261,7 @@ def run_huggingface(model,base_trainer,training_args,
                    entity="mikeamerrill",
                    notes=notes)
         wandb.run.summary["task"] = task.get_name()
+        wandb.run.summary["model"] = model.base_model_prefix
 
     train_dataset = task.get_train_dataset()
     eval_dataset = task.get_eval_dataset()
