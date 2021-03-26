@@ -123,7 +123,7 @@ class MinuteLevelActivityReader(object):
 class LabResultsReader(object):
     def __init__(self,min_date=None,
                       max_date=None,
-                      pos_only=True):
+                      pos_only=False):
         results = load_processed_table("lab_results_with_triggerdate").set_index("participant_id")
 
         if min_date:
@@ -180,9 +180,14 @@ class MinuteLevelActivtyDataset(Dataset):
             participant_results = self.lab_results_reader.results.loc[participant_id]
         except KeyError:
             return None
-
-        return participant_results["trigger_datetime"].date() == end_date.date()
         
+        # Indexing returns a series when there's only one result
+        if type(participant_results) == pd.Series:
+            participant_results = participant_results.to_frame().T
+        
+        on_date = participant_results["trigger_datetime"] == end_date.date()
+        is_pos = participant_results["result"] == "Detected"
+        return any(on_date & is_pos)
 
     def __len__(self):
         return len(self.participant_dates)
