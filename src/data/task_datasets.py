@@ -248,6 +248,23 @@ class EarlyDetectionDataset(MinuteLevelActivtyDataset):
     def __init__(self,*args,**kwargs):
         super(EarlyDetectionDataset, self).__init__(*args, **kwargs)
 
+class PredictTriggerDataset(MinuteLevelActivtyDataset):
+    def __init__(self,*args,**kwargs):
+        super(PredictTriggerDataset, self).__init__(*args, **kwargs)
+    
+    def get_label(self, participant_id, start_date, end_date):
+        try:
+            participant_results = self.lab_results_reader.results.loc[participant_id]
+        except KeyError:
+            return None
+        
+        # Indexing returns a series when there's only one result
+        if type(participant_results) == pd.Series:
+            participant_results = participant_results.to_frame().T
+        
+        on_date = participant_results["trigger_datetime"].dt.date == end_date.date()
+        return any(on_date)
+
 class MeanStepsDataset(MinuteLevelActivtyDataset):
     def __init__(self,*args,**kwargs):
         super(MeanStepsDataset, self).__init__(*args, **kwargs)

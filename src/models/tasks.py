@@ -28,11 +28,26 @@ class Task(object):
     def __str__(self):
         raise NotImplementedError
 
+class ClassificationMixin():
+    def __init__(self):
+        self.is_classification = True
+
+    def evaluate_results(self,logits,labels,threshold=0.5):
+        return classification_eval(logits,labels,threshold=threshold)
+
+    def get_huggingface_metrics(self,threshold=0.5):
+        def evaluator(pred):
+            labels = pred.label_ids
+            logits = pred.predictions
+            return self.evaluate_results(logits,labels,threshold=threshold)
+        return evaluator
 
 class MinuteLevelTask(Task):
     """ Is inhereited by anything that operatres over the minute
         level data"""
     def __init__(self,base_dataset,dataset_args={}):
+        super(MinuteLevelTask,self).__init__()
+        
         split_date = dataset_args.pop("split_date",None)
         eval_frac = dataset_args.pop("eval_frac",None)
 
@@ -70,12 +85,13 @@ class MinuteLevelTask(Task):
     def get_eval_dataset(self):
         return self.eval_dataset
     
-class GeqMeanSteps(MinuteLevelTask):
+class GeqMeanSteps(MinuteLevelTask, ClassificationMixin):
     """A dummy task to predict whether or not the total number of steps
        on the first day of a window is >= the mean across the whole dataset"""
     
     def __init__(self,dataset_args={}):
-        super().__init__(td.MeanStepsDataset,dataset_args=dataset_args)
+        MinuteLevelTask.__init__(self,td.MinuteLevelActivtyDataset,dataset_args=dataset_args)
+        ClassificationMixin.__init__(self)
         self.is_classification = True
     
     def evaluate_results(self,logits,labels,threshold=0.5):
@@ -104,15 +120,21 @@ class PredictFluPos(MinuteLevelTask):
     def get_name(self):
         return "PredictFluPos"
     
-    def evaluate_results(self,logits,labels,threshold=0.5):
-        return classification_eval(logits,labels,threshold=threshold)
 
-    def get_huggingface_metrics(self,threshold=0.5):
-        def evaluator(pred):
-            labels = pred.label_ids
-            logits = pred.predictions
-            return self.evaluate_results(logits,labels,threshold=threshold)
-        return evaluator
+class PredictTrigger(MinuteLevelTask,ClassificationMixin):
+    """Predict the whether a participant triggered the 
+       test on the last day of a range of data"""
+
+    def __init__(self,dataset_args={}):
+        MinuteLevelTask.__init__(self,td.PredictTriggerDataset,dataset_args=dataset_args)
+        ClassificationMixin.__init__(self)
+        # self.is_classification = True
+
+    def get_name(self):
+        return "PredictTrigger"
+
+
+
 
 class EarlyDetection(MinuteLevelTask):
     """Mimics the task used by Evidation Health"""
