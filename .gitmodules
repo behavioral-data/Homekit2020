@@ -1,0 +1,3 @@
+[submodule "SAnD"]
+	path = SAnD
+	url = https://github.com/behavioral-data/SAnD.git
