@@ -29,8 +29,8 @@ class MinuteLevelActivityReader(object):
                        split_date=None,
                        max_date=None,
                        participant_ids=None,
-                       scaler=MinMaxScaler,
                        day_window_size=15,
+                       scaler=MinMaxScaler,
                        max_missing_days_in_window=5,
                        min_windows=1):
         
@@ -141,13 +141,13 @@ class MinuteLevelActivtyDataset(Dataset):
     def __init__(self, minute_level_activity_reader,
                        lab_results_reader,
                        participant_dates,
-                       day_window_size=15,
                        max_missing_days_in_window=5,
                        min_windows=1,
                        scaler = MinMaxScaler,
                        time_encoding=None,
                        return_dict=False,
                        return_global_attention_mask = False,
+                       add_absolute_embedding = False,
                        add_cls=False,
                        shuffle=False):
         
@@ -162,10 +162,12 @@ class MinuteLevelActivtyDataset(Dataset):
             random.shuffle(self.participant_dates)
         
         self.time_encoding = time_encoding
+        self.add_absolute_embedding = add_absolute_embedding
+
         self.return_dict = return_dict
         self.return_global_attention_mask = return_global_attention_mask
         
-        self.size = (24*60*day_window_size+1+int(add_cls), 2*bool(time_encoding) + 8)
+        self.size = (24*60*self.day_window_size+1+int(add_cls), 2*bool(time_encoding) + 8, )
         self.add_cls = add_cls
 
         if self.add_cls:
@@ -185,7 +187,7 @@ class MinuteLevelActivtyDataset(Dataset):
         if type(participant_results) == pd.Series:
             participant_results = participant_results.to_frame().T
         
-        on_date = participant_results["trigger_datetime"] == end_date.date()
+        on_date = participant_results["trigger_datetime"].dt.date == end_date.date()
         is_pos = participant_results["result"] == "Detected"
         return any(on_date & is_pos)
 
@@ -209,6 +211,10 @@ class MinuteLevelActivtyDataset(Dataset):
             minute_data["sin_time"]  = sin_time(minute_data.index)
             minute_data["cos_time"]  = cos_time(minute_data.index)
         
+        # minute_data = minute_data.T
+
+        if self.add_absolute_embedding:
+            minute_data = minute_data + sinu_position_encoding(*self.size)
         
         if self.return_dict:
             
@@ -286,27 +292,49 @@ class AutoencodeDataset(MinuteLevelActivtyDataset):
     @lru_cache(maxsize=None)
     def __getitem__(self,index):
         # Could cache this later
-        raise NotImplementedError
-
-        # participant_id, end_date = self.participant_dates[index]
-        # start_date = end_date - pd.Timedelta(self.day_window_size, unit = "days")
-        # minute_data = self.get_user_data_in_time_range(participant_id,start_date,end_date)
+        participant_id, end_date = self.participant_dates[index]
+        start_date = end_date - pd.Timedelta(self.day_window_size, unit = "days")
+        minute_data = self.get_user_data_in_time_range(participant_id,start_date,end_date)
         
 
-        # if self.time_encoding == "sincos":
-        #     minute_data["sin_time"]  = sin_time(minute_data.index)
-        #     minute_data["cos_time"]  = cos_time(minute_data.index)
+        if self.time_encoding == "sincos":
+            minute_data["sin_time"]  = sin_time(minute_data.index)
+            minute_data["cos_time"]  = cos_time(minute_data.index)
 
-        # if self.return_dict:
-        #     return {"inputs_embeds":minute_data.values.astype(np.float32),
-        #             "labels":label}
-        # return minute_data.values, label
+        if self.return_dict:
+            return {"inputs_embeds":minute_data.values.astype(np.float32)}
+        
+        return minute_data.values.astype(np.float32)
+
+    def to_stacked_numpy(self):
+        if len(self)==0:
+            return np.array([]), np.array([])
+        X = []
+
+
+        for el_x in tqdm(self, desc = "Converting to np Array"): 
+            X.append(el_x)
+
+        return np.stack(X)
 
 def sin_time(timestamps):
     return np.sin(2*np.pi*(timestamps.hour * 60 + timestamps.minute)/MIN_IN_DAY).astype(np.float32)
 
 def cos_time(timestamps):
     return np.cos(2*np.pi*(timestamps.hour * 60 + timestamps.minute)/MIN_IN_DAY).astype(np.float32)
+
+def sinu_position_encoding(n_position, d_pos_vec):
+    '''Return the sinusoid position encoding table '''
+
+    # keep dim 0 for padding token position encoding zero vector
+    position_enc = np.array([
+        [pos / np.power(10000, 2*i/d_pos_vec) for i in range(d_pos_vec)]
+        if pos != 0 else np.zeros(d_pos_vec) for pos in range(n_position)])
+
+    position_enc[1:, 0::2] = np.sin(position_enc[1:, 0::2]) # dim 2i
+    position_enc[1:, 1::2] = np.cos(position_enc[1:, 1::2]) # dim 2i+1
+    
+    return position_enc
 
 if __name__ == "__main__":
     

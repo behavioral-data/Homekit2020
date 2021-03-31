@@ -6,7 +6,8 @@ warnings.filterwarnings("ignore")
 import click
 
 from src.models.commands import HuggingFaceCommand
-from src.models.tasks import get_task_with_name
+from src.models.autoencode import get_autoencoder_by_name, run_autoencoder
+from src.models.tasks import get_task_with_name, Autoencode
 from src.models.neural_baselines import create_neural_model
 from src.utils import get_logger
 
@@ -14,7 +15,7 @@ from transformers import (BertForSequenceClassification, Trainer,
                          TrainingArguments, BertConfig, 
                          EncoderDecoderConfig, EncoderDecoderModel,
                          LongformerForSequenceClassification,
-                         LongformerConfig)
+                         LongformerConfig, TransfoXLModel)
 
 from tensorflow.keras.callbacks import EarlyStopping
 import pandas as pd
@@ -27,7 +28,7 @@ logger = get_logger()
 @click.option("--n_epochs", default=10)
 @click.option("--pos_class_weight", default=100)
 @click.option("--neg_class_weight", default=1)
-@click.option("--val_split", default=0.15)
+@click.option("--eval_frac", default=0.15)
 @click.option("--no_early_stopping",is_flag=True)
 @click.option("--no_wandb",is_flag=True)
 @click.option("--notes", type=str, default=None, help="Notes to save to wandb")
@@ -37,7 +38,7 @@ def train_neural_baseline(model_name,task_name,
                          no_early_stopping=False,
                          pos_class_weight = 100,
                          neg_class_weight = 1,
-                         val_split = 0.15,
+                         eval_frac = 0.15,
                          no_wandb=False,
                          notes=None,
                          dataset_args = {}):
@@ -46,7 +47,7 @@ def train_neural_baseline(model_name,task_name,
 
     logger.info(f"Training {model_name} on {task_name}")
     dataset_args = loads(dataset_args)
-    dataset_args["eval_frac"] = val_split
+    dataset_args["eval_frac"] = eval_frac
     task = get_task_with_name(task_name)(dataset_args=dataset_args)
 
     train_X, train_y = task.get_train_dataset().to_stacked_numpy()
@@ -94,7 +95,7 @@ def train_neural_baseline(model_name,task_name,
     logger.info(f"Training {model_name}")
     model.fit(train_X, train_y, 
             class_weight = {1: pos_class_weight, 0: neg_class_weight}, 
-            epochs=n_epochs, validation_split=val_split, 
+            epochs=n_epochs, validation_split=eval_frac, 
             callbacks = callbacks, verbose=1)
     if len(eval_X) > 0:
         logger.info(f"Training complete. Running evaluation...")
@@ -103,6 +104,41 @@ def train_neural_baseline(model_name,task_name,
         logger.info("Eval results...")
         logger.info(results)
 
+
+@click.command()
+@click.argument("model_name")
+@click.option("--n_epochs", default=10)
+@click.option("--learning_rate", default=1e-3)
+@click.option('--batch_size', default=3)
+@click.option("--eval_frac", default=0.15)
+@click.option("--no_wandb",is_flag=True)
+@click.option("--notes", type=str, default=None, help="Notes to save to wandb")
+@click.option('--dataset_args', default={})
+def train_autoencoder(model_name,
+                         n_epochs=10,
+                         learning_rate=1e-3,
+                         eval_frac = 0.15,
+                         batch_size=3,
+                         no_wandb=False,
+                         notes=None,
+                         dataset_args = {}):
+    
+    logger.info(f"Training {model_name} to autoencode")
+    dataset_args = loads(dataset_args)
+    dataset_args["eval_frac"] = eval_frac
+    task = Autoencode(dataset_args=dataset_args)
+
+    # if not task.is_autoencoder:
+    #     raise ValueError(f"{task_name} is not an autoencoder task")
+    
+    base_model = get_autoencoder_by_name(model_name)
+    run_autoencoder(base_model,task,
+                    n_epochs=n_epochs,
+                    no_wandb=no_wandb,
+                    batch_size=batch_size,
+                    notes=notes,
+                    learning_rate=learning_rate)
+                
 
 @click.command(cls=HuggingFaceCommand)
 @click.argument("task_name")
@@ -125,12 +161,20 @@ def train_bert(task_name,
                 weight_decay=0.1,
                 no_wandb=False,
                 notes=None,
+                sinu_position_encoding = False,
                 dataset_args = {}):
 
     logger.info(f"Training BERT on {task_name}")
     dataset_args = loads(dataset_args)
     dataset_args["return_dict"] = True
     dataset_args["eval_frac"] = eval_frac
+    
+    
+    if sinu_position_encoding:
+        dataset_args["add_absolute_embedding"] = True
+        position_embedding_type = None
+    else:
+        position_embedding_type="absolute"
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args)
     
@@ -158,7 +202,8 @@ def train_bert(task_name,
         config = BertConfig(hidden_size=n_features,
                         num_attention_heads=num_attention_heads,
                         num_hidden_layers=num_hidden_layers,
-                        max_position_embeddings=n_timesteps)
+                        max_position_embeddings=n_timesteps,
+                        position_embedding_type=position_embedding_type)
         model = BertForSequenceClassification(config)
         model.cuda()
 
@@ -170,6 +215,7 @@ def train_bert(task_name,
                         num_attention_heads=num_attention_heads,
                         num_hidden_layers=num_hidden_layers,
                         max_position_embeddings=n_timesteps,
+                        position_embedding_type=position_embedding_type,
                         output_hidden_states=True)
         config  = EncoderDecoderConfig.from_encoder_decoder_configs(config,config)
         model = EncoderDecoderModel(config=config)
@@ -203,6 +249,7 @@ def train_longformer(task_name,
                     weight_decay=0.1,
                     no_wandb=False,
                     notes=None,
+                    sinu_position_encoding = False,
                     dataset_args = {}):
     
     logger.info(f"Training Longformer on {task_name}")

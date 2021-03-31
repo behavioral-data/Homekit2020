@@ -2,6 +2,7 @@ import sys
 
 import src.data.task_datasets as td
 from src.models.eval import classification_eval
+from src.data.utils import load_processed_table
 
 import pandas as pd
 
@@ -107,15 +108,16 @@ class GeqMeanSteps(MinuteLevelTask, ClassificationMixin):
             return self.evaluate_results(logits,labels,threshold=threshold)
         return evaluator
 
-class PredictFluPos(MinuteLevelTask):
+class PredictFluPos(MinuteLevelTask, ClassificationMixin):
     """Predict the whether a participant was positive
        given a rolling window of minute level activity data.
        We validate on data after split_date, but before
        max_date, if provided"""
 
     def __init__(self,dataset_args={}):
-        super().__init__(td.MinuteLevelActivtyDataset,dataset_args=dataset_args)
-        self.is_classification = True
+        MinuteLevelTask.__init__(self,td.MinuteLevelActivtyDataset,dataset_args=dataset_args)
+        ClassificationMixin.__init__(self)
+        
 
     def get_name(self):
         return "PredictFluPos"
@@ -133,8 +135,62 @@ class PredictTrigger(MinuteLevelTask,ClassificationMixin):
     def get_name(self):
         return "PredictTrigger"
 
+class PredictSurveyCol(Task,ClassificationMixin):
+    """Predict the whether a given column in the onehot
+       encoded surverys is true for a given day"""
+
+    def __init__(self,dataset_args={}):
+        Task.__init__(self)
+        ClassificationMixin.__init__(self)
+        
+        self.survey_col = dataset_args.pop("survey_col",None)
+        if self.survey_col is None:
+            raise ValueError("Must provide a column from 'daily_surveys_onehot.csv' as 'survey_col' in 'dataset_args'")
+        
+        split_date = dataset_args.pop("split_date",None)
+        eval_frac = dataset_args.pop("eval_frac",None)
+
+        if not split_date:
+            raise KeyError("Must provide a date for splitting train and ")
+        
+        min_date = dataset_args.pop("min_date",None)
+        max_date = dataset_args.pop("max_date",None)
+        day_window_size = dataset_args.pop("day_window_size",None)
+        max_missing_days_in_window = dataset_args.pop("max_missing_days_in_window",None)
+
+        lab_results_reader = td.LabResultsReader()
+        participant_ids = lab_results_reader.participant_ids
+
+        
+        minute_level_reader = td.MinuteLevelActivityReader(participant_ids=participant_ids,
+                                                           min_date = min_date,
+                                                           max_date = max_date,
+                                                           day_window_size=day_window_size,
+                                                           max_missing_days_in_window=max_missing_days_in_window)
+
+        train_participant_dates, eval_participant_dates = minute_level_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
+
+        survey_resutls = load_processed_table("lab_results_with_trigger_date")
+        # has_survey = survey_resutls[survey_resutls[]]
 
 
+        self.train_dataset = base_dataset(minute_level_reader, lab_results_reader,
+                        participant_dates = train_participant_dates,**dataset_args)
+        self.eval_dataset = base_dataset(minute_level_reader, lab_results_reader,
+                        participant_dates = eval_participant_dates,**dataset_args)
+
+
+    def get_name(self):
+        return f"PredictSurveyCol-{self.survey_col}"
+
+    def get_description(self):
+        return self.__doc__
+
+    def get_train_dataset(self):
+        return self.train_dataset
+
+    def get_eval_dataset(self):
+        return self.eval_dataset
 
 class EarlyDetection(MinuteLevelTask):
     """Mimics the task used by Evidation Health"""
@@ -158,7 +214,6 @@ class EarlyDetection(MinuteLevelTask):
         minute_level_reader = td.MinuteLevelActivityReader(participant_ids=participant_ids,
                                                             min_date = min_date,
                                                             max_date = max_date,
-                                                            day_window_size=day_window_size,
                                                             max_missing_days_in_window=max_missing_days_in_window)
 
         

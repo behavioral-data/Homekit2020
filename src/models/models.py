@@ -1,0 +1,3 @@
+from transformers import (BertForSequenceClassification
+
+class BertForSequenceClassification()

@@ -17,6 +17,7 @@ huggingface_options = [
      click.Option(('--weight_decay',), default = 0.1),
      click.Option(('--eval_frac',), default = None, type=float),
      click.Option(('--learning_rate',), default = 5e-5),
+     click.Option(('--sinu_position_encoding',), is_flag=True, default=False),
      click.Option(('--classification_threshold',), default = 0.5),
      # WandB Args
      click.Option(('--no_wandb',), is_flag=True),
