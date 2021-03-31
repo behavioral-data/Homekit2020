@@ -104,43 +104,6 @@ def train_neural_baseline(model_name,task_name,
         logger.info("Eval results...")
         logger.info(results)
 
-
-# @click.command()
-# @click.argument("model_name")
-# @click.option("--n_epochs", default=10)
-# @click.option("--learning_rate", default=1e-3)
-# @click.option('--batch_size', default=3)
-# @click.option("--eval_frac", default=0.15)
-# @click.option("--no_wandb",is_flag=True)
-# @click.option("--notes", type=str, default=None, help="Notes to save to wandb")
-# @click.option('--dataset_args', default={})
-# def train_autoencoder(model_name,
-#                          n_epochs=10,
-#                          learning_rate=1e-3,
-#                          eval_frac = 0.15,
-#                          batch_size=3,
-#                          no_wandb=False,
-#                          notes=None,
-#                          dataset_args = {}):
-    
-#     logger.info(f"Training {model_name} to autoencode")
-#     dataset_args = loads(dataset_args)
-#     dataset_args["eval_frac"] = eval_frac
-#     task = Autoencode(dataset_args=dataset_args)
-
-#     # if not task.is_autoencoder:
-#     #     raise ValueError(f"{task_name} is not an autoencoder task")
-    
-#     base_model = get_autoencoder_by_name(model_name)
-#     run_autoencoder(base_model,task,
-#                     n_epochs=n_epochs,
-#                     no_wandb=no_wandb,
-#                     batch_size=batch_size,
-#                     notes=notes,
-#                     learning_rate=learning_rate)
-
-
-
 @click.command(cls=HuggingFaceCommand)
 @click.argument("model_name")
 @click.argument("task_name")
@@ -183,6 +146,7 @@ def train_autoencoder(model_name,
     n_timesteps, n_features = infer_example.shape
 
     base_model = get_autoencoder_by_name(model_name)
+    #pylint: disable=unexpected-keyword-arg
     model = base_model(seq_len=n_timesteps, n_features=n_features).cuda()
 
     training_args = TrainingArguments(
