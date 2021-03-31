@@ -105,40 +105,107 @@ def train_neural_baseline(model_name,task_name,
         logger.info(results)
 
 
-@click.command()
-@click.argument("model_name")
-@click.option("--n_epochs", default=10)
-@click.option("--learning_rate", default=1e-3)
-@click.option('--batch_size', default=3)
-@click.option("--eval_frac", default=0.15)
-@click.option("--no_wandb",is_flag=True)
-@click.option("--notes", type=str, default=None, help="Notes to save to wandb")
-@click.option('--dataset_args', default={})
-def train_autoencoder(model_name,
-                         n_epochs=10,
-                         learning_rate=1e-3,
-                         eval_frac = 0.15,
-                         batch_size=3,
-                         no_wandb=False,
-                         notes=None,
-                         dataset_args = {}):
+# @click.command()
+# @click.argument("model_name")
+# @click.option("--n_epochs", default=10)
+# @click.option("--learning_rate", default=1e-3)
+# @click.option('--batch_size', default=3)
+# @click.option("--eval_frac", default=0.15)
+# @click.option("--no_wandb",is_flag=True)
+# @click.option("--notes", type=str, default=None, help="Notes to save to wandb")
+# @click.option('--dataset_args', default={})
+# def train_autoencoder(model_name,
+#                          n_epochs=10,
+#                          learning_rate=1e-3,
+#                          eval_frac = 0.15,
+#                          batch_size=3,
+#                          no_wandb=False,
+#                          notes=None,
+#                          dataset_args = {}):
     
-    logger.info(f"Training {model_name} to autoencode")
+#     logger.info(f"Training {model_name} to autoencode")
+#     dataset_args = loads(dataset_args)
+#     dataset_args["eval_frac"] = eval_frac
+#     task = Autoencode(dataset_args=dataset_args)
+
+#     # if not task.is_autoencoder:
+#     #     raise ValueError(f"{task_name} is not an autoencoder task")
+    
+#     base_model = get_autoencoder_by_name(model_name)
+#     run_autoencoder(base_model,task,
+#                     n_epochs=n_epochs,
+#                     no_wandb=no_wandb,
+#                     batch_size=batch_size,
+#                     notes=notes,
+#                     learning_rate=learning_rate)
+
+
+
+@click.command(cls=HuggingFaceCommand)
+@click.argument("model_name")
+@click.argument("task_name")
+def train_autoencoder(model_name,
+                task_name, 
+                n_epochs=10,
+                hidden_size=768,
+                num_attention_heads=4,
+                num_hidden_layers=4,
+                max_length = 24*60+1,
+                max_position_embeddings=2048, 
+                no_early_stopping=False,
+                pos_class_weight = 100,
+                neg_class_weight = 1,
+                train_batch_size = 4,
+                eval_batch_size = 16,
+                eval_frac = None,
+                learning_rate = 5e-5,
+                classification_threshold=0.5,
+                warmup_steps=500,
+                weight_decay=0.1,
+                no_wandb=False,
+                notes=None,
+                sinu_position_encoding = False,
+                dataset_args = {}):
+    
+    logger.info(f"Training {model_name}")
     dataset_args = loads(dataset_args)
     dataset_args["eval_frac"] = eval_frac
-    task = Autoencode(dataset_args=dataset_args)
+    dataset_args["return_dict"] = True
 
-    # if not task.is_autoencoder:
-    #     raise ValueError(f"{task_name} is not an autoencoder task")
+    task = get_task_with_name(task_name)(dataset_args=dataset_args)
     
+    if sinu_position_encoding:
+        dataset_args["add_absolute_embedding"] = True
+
+
+    train_dataset = task.get_train_dataset()
+    infer_example = train_dataset[0]["inputs_embeds"]
+    n_timesteps, n_features = infer_example.shape
+
     base_model = get_autoencoder_by_name(model_name)
-    run_autoencoder(base_model,task,
-                    n_epochs=n_epochs,
-                    no_wandb=no_wandb,
-                    batch_size=batch_size,
-                    notes=notes,
-                    learning_rate=learning_rate)
-                
+    model = base_model(seq_len=n_timesteps, n_features=n_features).cuda()
+
+    training_args = TrainingArguments(
+        output_dir='./results',          # output directorz
+        num_train_epochs=n_epochs,              # total # of training epochs
+        per_device_train_batch_size=train_batch_size,  # batch size per device during training
+        per_device_eval_batch_size=eval_batch_size,   # batch size for evaluation
+        warmup_steps=warmup_steps,                # number of warmup steps for learning rate scheduler
+        weight_decay=weight_decay,
+        learning_rate=learning_rate,               # strength of weight decay
+        logging_dir='./logs',
+        logging_steps=10,
+        do_eval=True,
+        dataloader_num_workers=0,
+        dataloader_pin_memory=True,
+        prediction_loss_only=False,
+        evaluation_strategy="epoch",
+        report_to=["wandb"]            # directory for storing logs
+    )
+    run_huggingface(model=model, base_trainer=Trainer,
+                   training_args=training_args,
+                   metrics = None, task=task,
+                   no_wandb=no_wandb, notes=notes)
 
 @click.command(cls=HuggingFaceCommand)
 @click.argument("task_name")
@@ -181,6 +248,7 @@ def train_bert(task_name,
     train_dataset = task.get_train_dataset()
     infer_example = train_dataset[0]["inputs_embeds"]
     n_timesteps, n_features = infer_example.shape
+
 
     training_args = TrainingArguments(
         output_dir='./results',          # output directorz

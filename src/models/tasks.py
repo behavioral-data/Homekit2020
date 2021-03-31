@@ -195,7 +195,7 @@ class PredictSurveyCol(Task,ClassificationMixin):
 class EarlyDetection(MinuteLevelTask):
     """Mimics the task used by Evidation Health"""
 
-    def __init__(self,dataset_args={}):
+    def __init__(self,base_dataset=td.EarlyDetectionDataset,dataset_args={}):
         eval_frac = dataset_args.pop("eval_frac",None)
 
         if not eval_frac:
@@ -242,10 +242,11 @@ class EarlyDetection(MinuteLevelTask):
         train_participant_dates = [x for x in new_valid_dates if x[0] in train_participants]
         eval_participant_dates = [x for x in new_valid_dates if x[0] in eval_participants]
 
-        self.train_dataset = td.EarlyDetectionDataset(minute_level_reader, lab_results_reader,
+        self.train_dataset = base_dataset(minute_level_reader, lab_results_reader,
                         participant_dates = train_participant_dates,**dataset_args)
-        self.eval_dataset = td.EarlyDetectionDataset(minute_level_reader, lab_results_reader,
+        self.eval_dataset = base_dataset(minute_level_reader, lab_results_reader,
                         participant_dates = eval_participant_dates,**dataset_args)
+        
         self.is_classification = True
     
     def get_name(self):
@@ -260,6 +261,31 @@ class EarlyDetection(MinuteLevelTask):
             logits = pred.predictions
             return self.evaluate_results(logits,labels,threshold=threshold)
         return evaluator
+
+class AutoencodeEarlyDetection(EarlyDetection):
+    """Autoencode minute level data"""
+
+    def __init__(self,dataset_args={}):
+        super().__init__(td.AutoencodeDataset,dataset_args=dataset_args)
+        self.is_autoencoder = True
+
+    def get_description(self):
+        return self.__doc__
+    
+    def get_train_dataset(self):
+        return self.train_dataset
+
+    def get_eval_dataset(self):
+        return self.eval_dataset
+    
+    def get_name(self):
+        return "Autoencode"
+    
+    def evaluate_results(self):
+        return None
+
+    def get_huggingface_metrics(self):
+        raise NotImplementedError
 
 class Autoencode(MinuteLevelTask):
     """Autoencode minute level data"""

@@ -302,16 +302,16 @@ class AutoencodeDataset(MinuteLevelActivtyDataset):
             minute_data["cos_time"]  = cos_time(minute_data.index)
 
         if self.return_dict:
-            return {"inputs_embeds":minute_data.values.astype(np.float32)}
+            return {"inputs_embeds":minute_data.values.astype(np.float32),
+                    "labels":minute_data.values.astype(np.float32)}
         
         return minute_data.values.astype(np.float32)
 
     def to_stacked_numpy(self):
         if len(self)==0:
             return np.array([]), np.array([])
+        
         X = []
-
-
         for el_x in tqdm(self, desc = "Converting to np Array"): 
             X.append(el_x)
 

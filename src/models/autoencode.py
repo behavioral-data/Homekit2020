@@ -74,15 +74,19 @@ class LSTMDecoder(nn.Module):
 
 
 class RecurrentAutoencoder(nn.Module):
-  def __init__(self, seq_len, n_features, embedding_dim=64):
-    super(RecurrentAutoencoder, self).__init__()
-    self.encoder = LSTMEncoder(seq_len, n_features, embedding_dim)
-    self.decoder = LSTMDecoder(seq_len, embedding_dim, n_features)
-    self.name = "RecurrentAutoencoder"
-  def forward(self, x):
-    x = self.encoder(x)
-    x = self.decoder(x)
-    return x
+    def __init__(self, seq_len, n_features, embedding_dim=64, return_loss=True):
+        super(RecurrentAutoencoder, self).__init__()
+        self.encoder = LSTMEncoder(seq_len, n_features, embedding_dim)
+        self.decoder = LSTMDecoder(seq_len, embedding_dim, n_features)
+        self.criterion = nn.MSELoss()
+        
+        self.name = "RecurrentAutoencoder"
+        self.base_model_prefix = self.name
+
+    def forward(self, inputs_embeds,labels):
+        pred = self.encoder(inputs_embeds)
+        pred = self.decoder(pred)
+        return self.criterion(pred,labels) , pred 
 
 class ConvAutoencoder(nn.Module):
     def __init__(self):
@@ -106,11 +110,12 @@ class ConvAutoencoder(nn.Module):
         )
 
         self.name = ConvAutoencoder
+        self.criterion = nn.MSELoss()
 
-    def forward(self, x):
-        x = self.encoder(x)
-        x = self.decoder(x)
-        return x
+    def forward(self, input_embeds,labels):
+        pred = self.encoder(input_embeds)
+        pred = self.decoder(pred)
+        return self.criterion(pred,labels) , pred 
 
 
 def run_autoencoder(base_model,
