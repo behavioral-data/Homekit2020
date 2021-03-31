@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from ..core import modules
+from src.SAnD.core import modules
 
 
 class EncoderLayerForSAnD(nn.Module):
@@ -44,6 +44,7 @@ class SAnD(nn.Module):
         self.encoder = EncoderLayerForSAnD(input_features, seq_len, n_heads, n_layers, d_model, dropout_rate)
         self.dense_interpolation = modules.DenseInterpolation(seq_len, factor)
         self.clf = modules.ClassificationModule(d_model, factor, n_class)
+        self.name = "SAnD"
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.encoder(x)
