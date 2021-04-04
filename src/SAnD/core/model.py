@@ -9,13 +9,13 @@ class EncoderLayerForSAnD(nn.Module):
         self.d_model = d_model
 
         self.input_embedding = nn.Conv1d(input_features, d_model, 1)
-        self.positional_encoding = modules.PositionalEncoding(d_model, seq_len)
+        self.positional_encoding = modules.PositionalEncoding(d_model, input_features)
         self.blocks = nn.ModuleList([
             modules.EncoderBlock(d_model, n_heads, dropout_rate) for _ in range(n_layers)
         ])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.transpose(1, 2)
+        # x = x.transpose(1, 2)
         x = self.input_embedding(x)
         x = x.transpose(1, 2)
 
@@ -38,16 +38,23 @@ class SAnD(nn.Module):
     """
     def __init__(
             self, input_features: int, seq_len: int, n_heads: int, factor: int,
-            n_class: int, n_layers: int, d_model: int = 128, dropout_rate: float = 0.2
+            n_class: int, n_layers: int, d_model: int = 128, dropout_rate: float = 0.2,
+            pos_class_weight = 1, neg_class_weight=1
     ) -> None:
         super(SAnD, self).__init__()
         self.encoder = EncoderLayerForSAnD(input_features, seq_len, n_heads, n_layers, d_model, dropout_rate)
         self.dense_interpolation = modules.DenseInterpolation(seq_len, factor)
         self.clf = modules.ClassificationModule(d_model, factor, n_class)
         self.name = "SAnD"
+        self.base_model_prefix = self.name
+        
+        loss_weights = torch.tensor([float(neg_class_weight),float(pos_class_weight)])
+        self.criterion = nn.CrossEntropyLoss(weight=loss_weights)
+        self.n_class = n_class
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.encoder(x)
+    def forward(self, inputs_embeds: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        x = self.encoder(inputs_embeds)
         x = self.dense_interpolation(x)
         x = self.clf(x)
-        return x
+        loss =  self.criterion(x.view(-1,self.n_class),labels.view(-1))
+        return loss, x
