@@ -1,0 +1,7 @@
+min_date: 2020-01-01
+max_date: 2020-05-01
+day_window_size: 4 
+max_missing_days_in_window: 0
+shuffle: 1
+add_absolute_embedding: 1
+eval_frac: 0.3
