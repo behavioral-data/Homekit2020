@@ -1,4 +1,15 @@
+import json
 import click
+from src.utils import read_yaml
+
+def validate_dataset_args(ctx, param, value):
+    try:
+        return read_yaml(value)
+    except FileNotFoundError:
+        try:
+            return json.loads(value)
+        except json.decoder.JSONDecodeError:
+            raise click.BadParameter('dataset_args needs to be either a json string or a path to a config .yaml')
 
 huggingface_options = [
      click.Option(('--n_epochs',), default = 10, help='Number of training epochs'),
@@ -19,12 +30,21 @@ huggingface_options = [
      click.Option(('--learning_rate',), default = 5e-5),
      click.Option(('--sinu_position_encoding',), is_flag=True, default=False),
      click.Option(('--classification_threshold',), default = 0.5),
-     # WandB Args
-     click.Option(('--no_wandb',), is_flag=True),
-     click.Option(('--notes',), type=str, default=None),
-     click.Option(('--dataset_args',), default=None),
 ]
-class HuggingFaceCommand(click.Command):
+
+universal_options = [
+    click.Option(('--no_wandb',), is_flag=True),
+    click.Option(('--notes',), type=str, default=None),
+    click.Option(('--dataset_args',), default=None,callback=validate_dataset_args),
+]
+
+class BaseCommand(click.Command):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.params = self.params + huggingface_options
+        self.params = self.params + universal_options
+
+class HuggingFaceCommand(BaseCommand):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.params = self.params + huggingface_options 
+
