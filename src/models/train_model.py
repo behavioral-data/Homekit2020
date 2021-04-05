@@ -1,11 +1,9 @@
-#pylint: disable=import-error
-from json import loads
 import warnings
 warnings.filterwarnings("ignore")
 
 import click
 
-from src.models.commands import HuggingFaceCommand
+from src.models.commands import HuggingFaceCommand, BaseCommand
 from src.models.autoencode import get_autoencoder_by_name, run_autoencoder
 from src.models.tasks import get_task_with_name, Autoencode
 from src.models.neural_baselines import create_neural_model
@@ -18,12 +16,12 @@ from transformers import (BertForSequenceClassification, Trainer,
                          LongformerForSequenceClassification,
                          LongformerConfig, TransfoXLModel)
 
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import EarlyStopping # type: ignore
 import pandas as pd
 
 logger = get_logger()
 
-@click.command()
+@click.command(cls=BaseCommand)
 @click.argument("model_name")
 @click.argument("task_name")
 @click.option("--n_epochs", default=10)
@@ -47,7 +45,6 @@ def train_neural_baseline(model_name,task_name,
     
 
     logger.info(f"Training {model_name} on {task_name}")
-    dataset_args = loads(dataset_args)
     dataset_args["eval_frac"] = eval_frac
     task = get_task_with_name(task_name)(dataset_args=dataset_args)
 
@@ -132,7 +129,6 @@ def train_autoencoder(model_name,
                 dataset_args = {}):
     
     logger.info(f"Training {model_name}")
-    dataset_args = loads(dataset_args)
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
 
@@ -200,7 +196,6 @@ def train_sand( task_name,
                 dataset_args = {}):
     
     logger.info(f"Training SAnD")
-    dataset_args = loads(dataset_args)
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
 
@@ -277,7 +272,6 @@ def train_bert(task_name,
                 dataset_args = {}):
 
     logger.info(f"Training BERT on {task_name}")
-    dataset_args = loads(dataset_args)
     dataset_args["return_dict"] = True
     dataset_args["eval_frac"] = eval_frac
     
@@ -366,7 +360,6 @@ def train_longformer(task_name,
                     dataset_args = {}):
     
     logger.info(f"Training Longformer on {task_name}")
-    dataset_args = loads(dataset_args)
     dataset_args["return_dict"] = True
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_global_attention_mask"] = True
