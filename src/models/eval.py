@@ -1,7 +1,11 @@
 import numpy as np
 import pandas as pd
+
 from scipy.special import softmax
-from sklearn.metrics import accuracy_score,precision_recall_fscore_support, roc_auc_score
+from scipy.stats import pearsonr, spearmanr
+
+from sklearn.metrics import (accuracy_score,precision_recall_fscore_support, roc_auc_score,
+                            mean_absolute_error)
 from functools import partial
 
 def classification_eval(logits, labels, threshold = 0.5):
@@ -35,3 +39,18 @@ def get_huggingface_classification_eval(threshold=0.5):
     
     return evaluator
 
+
+
+
+def autoencode_eval(pred, labels):
+    # Remove indices with pad tokens
+    results = {}
+
+    pred_flat = pred.flatten()
+    labels_flat = labels.flatten()
+
+    results["pearson"] = pearsonr(pred_flat,labels_flat)[0]
+    results["spearman"] = spearmanr(pred_flat,labels_flat)[0]
+    results["MAE"] = mean_absolute_error(pred_flat,labels_flat)
+
+    return results
