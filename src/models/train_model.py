@@ -167,9 +167,11 @@ def train_autoencoder(model_name,
         evaluation_strategy="epoch",
         report_to=["wandb"]            # directory for storing logs
     )
+    metrics = task.get_huggingface_metrics()
+
     run_huggingface(model=model, base_trainer=Trainer,
                    training_args=training_args,
-                   metrics = None, task=task,
+                   metrics = metrics, task=task,
                    no_wandb=no_wandb, notes=notes)
 
 

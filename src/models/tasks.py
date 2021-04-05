@@ -1,7 +1,7 @@
 import sys
 
 import src.data.task_datasets as td
-from src.models.eval import classification_eval
+from src.models.eval import classification_eval, autoencode_eval
 from src.data.utils import load_processed_table
 
 import pandas as pd
@@ -41,6 +41,20 @@ class ClassificationMixin():
             labels = pred.label_ids
             logits = pred.predictions
             return self.evaluate_results(logits,labels,threshold=threshold)
+        return evaluator
+
+class AutoencodeMixin():
+    def __init__(self):
+        self.is_autoencoder = True
+
+    def evaluate_results(self,preds,labels):
+        return autoencode_eval(preds,labels)
+
+    def get_huggingface_metrics(self):
+        def evaluator(predictions):
+            labels = predictions.label_ids
+            preds = predictions.predictions
+            return self.evaluate_results(preds,labels)
         return evaluator
 
 class MinuteLevelTask(Task):
@@ -173,7 +187,7 @@ class PredictSurveyCol(Task,ClassificationMixin):
         survey_resutls = load_processed_table("lab_results_with_trigger_date")
         # has_survey = survey_resutls[survey_resutls[]]
 
-
+    
         self.train_dataset = base_dataset(minute_level_reader, lab_results_reader,
                         participant_dates = train_participant_dates,**dataset_args)
         self.eval_dataset = base_dataset(minute_level_reader, lab_results_reader,
@@ -214,7 +228,8 @@ class EarlyDetection(MinuteLevelTask):
         minute_level_reader = td.MinuteLevelActivityReader(participant_ids=participant_ids,
                                                             min_date = min_date,
                                                             max_date = max_date,
-                                                            max_missing_days_in_window=max_missing_days_in_window)
+                                                            max_missing_days_in_window=max_missing_days_in_window,
+                                                            day_window_size=day_window_size)
 
         
         # Maybe there's a cleaner way to do this?
@@ -262,11 +277,12 @@ class EarlyDetection(MinuteLevelTask):
             return self.evaluate_results(logits,labels,threshold=threshold)
         return evaluator
 
-class AutoencodeEarlyDetection(EarlyDetection):
+class AutoencodeEarlyDetection(AutoencodeMixin, EarlyDetection):
     """Autoencode minute level data"""
 
     def __init__(self,dataset_args={}):
-        super().__init__(td.AutoencodeDataset,dataset_args=dataset_args)
+        EarlyDetection.__init__(self,td.AutoencodeDataset,dataset_args=dataset_args)
+        AutoencodeMixin.__init__(self)
         self.is_autoencoder = True
 
     def get_description(self):
@@ -281,17 +297,13 @@ class AutoencodeEarlyDetection(EarlyDetection):
     def get_name(self):
         return "Autoencode"
     
-    def evaluate_results(self):
-        return None
 
-    def get_huggingface_metrics(self):
-        raise NotImplementedError
-
-class Autoencode(MinuteLevelTask):
+class Autoencode(AutoencodeMixin, MinuteLevelTask):
     """Autoencode minute level data"""
 
     def __init__(self,dataset_args={}):
-        super().__init__(td.AutoencodeDataset,dataset_args=dataset_args)
+        MinuteLevelTask.__init__(self,td.AutoencodeDataset,dataset_args=dataset_args)
+        AutoencodeMixin.__init__(self)
         self.is_autoencoder = True
 
     def get_description(self):
@@ -306,8 +318,3 @@ class Autoencode(MinuteLevelTask):
     def get_name(self):
         return "Autoencode"
     
-    def evaluate_results(self):
-        return None
-
-    def get_huggingface_metrics(self):
-        raise NotImplementedError
