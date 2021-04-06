@@ -7,6 +7,8 @@ from src.models.commands import HuggingFaceCommand, BaseCommand
 from src.models.autoencode import get_autoencoder_by_name, run_autoencoder
 from src.models.tasks import get_task_with_name, Autoencode
 from src.models.neural_baselines import create_neural_model
+from src.models.models import CNNToTransformerEncoder
+from src.models.trainer import FluTrainer
 from src.SAnD.core.model import SAnD
 from src.utils import get_logger
 
@@ -173,6 +175,80 @@ def train_autoencoder(model_name,
 
 @click.command(cls=HuggingFaceCommand)
 @click.argument("task_name")
+def train_cnn_transformer( task_name, 
+                n_epochs=10,
+                hidden_size=768,
+                num_attention_heads=4,
+                num_hidden_layers=4,
+                max_length = 24*60+1,
+                max_position_embeddings=2048, 
+                no_early_stopping=False,
+                pos_class_weight = 1,
+                neg_class_weight = 1,
+                train_batch_size = 4,
+                eval_batch_size = 16,
+                eval_frac = None,
+                learning_rate = 5e-5,
+                classification_threshold=0.5,
+                warmup_steps=500,
+                weight_decay=0.1,
+                no_wandb=False,
+                notes=None,
+                sinu_position_encoding = False,
+                dataset_args = {}):
+    
+    logger.info(f"Training CNNTransformer")
+    dataset_args["eval_frac"] = eval_frac
+    dataset_args["return_dict"] = True
+
+    task = get_task_with_name(task_name)(dataset_args=dataset_args)
+    
+    if sinu_position_encoding:
+        dataset_args["add_absolute_embedding"] = True
+
+    train_dataset = task.get_train_dataset()
+    infer_example = train_dataset[0]["inputs_embeds"]
+    n_timesteps, n_features = infer_example.shape
+
+    model = CNNToTransformerEncoder(input_features=n_features,
+                                    n_timesteps=n_timesteps,
+                                    n_heads = num_attention_heads,
+                                    n_layers = num_hidden_layers,
+                                    n_class=2,
+                                    pos_class_weight=pos_class_weight,
+                                    neg_class_weight=neg_class_weight)
+                 
+
+    training_args = TrainingArguments(
+        output_dir='./results',          # output directorz
+        num_train_epochs=n_epochs,              # total # of training epochs
+        per_device_train_batch_size=train_batch_size,  # batch size per device during training
+        per_device_eval_batch_size=eval_batch_size,   # batch size for evaluation
+        warmup_steps=warmup_steps,                # number of warmup steps for learning rate scheduler
+        weight_decay=weight_decay,
+        learning_rate=learning_rate,               # strength of weight decay
+        logging_dir='./logs',
+        logging_steps=10,
+        do_eval=True,
+        dataloader_num_workers=0,
+        dataloader_pin_memory=True,
+        prediction_loss_only=False,
+        evaluation_strategy="epoch",
+        report_to=["wandb"]            # directory for storing logs
+    )
+
+    if task.is_classification:
+        metrics = task.get_huggingface_metrics(threshold=classification_threshold)
+    else:
+        metrics=None
+
+    run_huggingface(model=model, base_trainer=FluTrainer,
+                   training_args=training_args,
+                   metrics = metrics, task=task,
+                   no_wandb=no_wandb, notes=notes)
+
+@click.command(cls=HuggingFaceCommand)
+@click.argument("task_name")
 def train_sand( task_name, 
                 n_epochs=10,
                 hidden_size=768,
@@ -242,7 +318,7 @@ def train_sand( task_name,
     else:
         metrics=None
 
-    run_huggingface(model=model, base_trainer=Trainer,
+    run_huggingface(model=model, base_trainer=FluTrainer,
                    training_args=training_args,
                    metrics = metrics, task=task,
                    no_wandb=no_wandb, notes=notes)
@@ -329,7 +405,7 @@ def train_bert(task_name,
         model.config.decoder.is_decoder = True
         model.config.add_cross_attention = True
 
-    run_huggingface(model=model, base_trainer=Trainer,
+    run_huggingface(model=model, base_trainer=FluTrainer,
                    training_args=training_args,
                    metrics = metrics, task=task,
                    no_wandb=no_wandb, notes=notes)
@@ -400,7 +476,7 @@ def train_longformer(task_name,
     else:
         raise NotImplementedError
 
-    run_huggingface(model=model, base_trainer=Trainer,
+    run_huggingface(model=model, base_trainer=FluTrainer,
                    training_args=training_args,
                    metrics = metrics, task=task,
                    no_wandb=no_wandb, notes=notes)
@@ -425,7 +501,8 @@ def run_huggingface(model,base_trainer,training_args,
             args=training_args,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-            compute_metrics=metrics)
+            compute_metrics=metrics,
+            save_eval=True)
 
     trainer = base_trainer(**trainer_args)
     trainer.train()
