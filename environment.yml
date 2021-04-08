@@ -1,0 +1,34 @@
+name: seattleflustudy
+channels:
+  - conda-forge
+  - defaults
+  - pytorch
+dependencies:
+  - python=3.7
+  - pip
+  - click=7.1
+  - Sphinx
+  - coverage=5.5
+  - python-dotenv>=0.5.1
+  - pyarrow=3.0.0
+  - numpy=1.20
+  - transformers=4.3
+  - pandas=1.2
+  - scikit-learn=0.24
+  - scipy=1.6.0
+  - dask=2021.02.0
+  - pylint=2.7.2
+  - tensorflow-gpu
+  - ipython
+  - graphviz
+  - pathlib2
+  - pytorch=1.7.0 
+  - torchvision=0.8
+  - torchaudio=0.7 
+  - cudatoolkit=10.2
+  - jupyter
+  - pip:
+    - torchviz
+    - pyyaml==5.4.1
+variables:
+  USE_TORCH: 1
