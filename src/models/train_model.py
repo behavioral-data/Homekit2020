@@ -167,7 +167,7 @@ def train_autoencoder(model_name,
     )
     metrics = task.get_huggingface_metrics()
 
-    run_huggingface(model=model, base_trainer=Trainer,
+    run_huggingface(model=model, base_trainer=FluTrainer,
                    training_args=training_args,
                    metrics = metrics, task=task,
                    no_wandb=no_wandb, notes=notes)
@@ -510,4 +510,5 @@ def run_huggingface(model,base_trainer,training_args,
     train_metrics = trainer.predict(train_dataset, metric_key_prefix="").metrics
     train_metrics = {"train/"+k[1:] : v for k,v in train_metrics.items()}
     if wandb:
+        wandb.log({"model_img": [wandb.Image(numpy_array_or_pil, caption="Label")]})
         wandb.log(train_metrics)
