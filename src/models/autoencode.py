@@ -1,4 +1,6 @@
 from src.utils import get_logger
+from src.models.models import CNNEncoder
+
 logger = get_logger()
 
 import warnings
@@ -6,6 +8,7 @@ warnings.filterwarnings('ignore')
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 
@@ -89,33 +92,49 @@ class RecurrentAutoencoder(nn.Module):
         return self.criterion(pred,labels) , pred 
 
 class ConvAutoencoder(nn.Module):
-    def __init__(self):
-        raise NotImplementedError
+    def __init__(self,seq_len=None, n_features=None):
         super(ConvAutoencoder, self).__init__()
-        self.encoder = nn.Sequential(
-            nn.Conv1d(8, 16, 3, stride=3, padding=1),  # b, 16, 10, 10
-            nn.ReLU(True),
-            nn.MaxPool2d(2, stride=2),  # b, 16, 5, 5
-            nn.Conv1d(16, 8, 3, stride=2, padding=1),  # b, 8, 3, 3
-            nn.ReLU(True),
-            nn.MaxPool1d(2, stride=1)  # b, 8, 2, 2
-        )
+        # self.encoder = nn.Sequential(
+        #     nn.Conv1d(8, 16, 3, stride=3, padding=1),  # b, 16, 10, 10
+        #     nn.ReLU(True),
+        #     nn.MaxPool2d(2, stride=2),  # b, 16, 5, 5
+        #     nn.Conv1d(16, 8, 3, stride=2, padding=1),  # b, 8, 3, 3
+        #     nn.ReLU(True),
+        #     nn.MaxPool1d(2, stride=1)  # b, 8, 2, 2
+        # )
+        self.encoder = CNNEncoder(n_features,seq_len, kernel_sizes=[3,2],
+                                  out_channels=[16,8],stride_sizes=[3,2],
+                                  max_pool_stride_size= None, max_pool_kernel_size=None)
+        
         self.decoder = nn.Sequential(
             nn.ConvTranspose1d(8, 16, 3, stride=2),  # b, 16, 5, 5
             nn.ReLU(True),
-            nn.ConvTranspose1d(16, 8, 5, stride=3, padding=1),  # b, 8, 15, 15
+            nn.ConvTranspose1d(16, 8, 3, stride=3),  # b, 8, 15, 15
             nn.ReLU(True),
-            nn.ConvTranspose1d(8, 1, 2, stride=2, padding=1),  # b, 1, 28, 28
-            nn.Tanh()
+            # nn.ConvTranspose1d(8, 1, 2, stride=2),  # b, 1, 28, 28
+            # nn.ReLU(True),
+            # nn.Tanh()
         )
 
-        self.name = ConvAutoencoder
+        self.name = "ConvAutoencoder"
+        self.base_model_prefix = self.name
         self.criterion = nn.MSELoss()
 
-    def forward(self, input_embeds,labels):
-        pred = self.encoder(input_embeds)
-        pred = self.decoder(pred)
-        return self.criterion(pred,labels) , pred 
+    def forward(self, inputs_embeds,labels):
+        #Padding:
+        #Nasty hack, do better later
+        PAD_MULT = 12
+        seq_len = inputs_embeds.shape[1]
+        pad_to = ((seq_len // PAD_MULT) + 1) * PAD_MULT
+        pad_len = pad_to-seq_len
+
+        x = F.pad(inputs_embeds,(0,0,0,pad_len))
+        x = x.transpose(1,2)
+        x = self.encoder(x)
+        x = self.decoder(x)
+        x = x.transpose(1,2)
+        x = x[:,:seq_len,:]
+        return self.criterion(x,labels) , x 
 
 
 def run_autoencoder(base_model,
