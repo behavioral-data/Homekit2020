@@ -27,7 +27,13 @@ def write_jsonl(open_file, data, mode="a"):
         open_file.write(json.dumps(clean_datum))
         open_file.write("\n")
 
-
+def read_jsonl(path,line=None):
+    data = []
+    with open(path) as f:
+        for line in f:
+            data.append(json.loads(line))
+    return data
+    
 def get_logger():
     logger = logging.getLogger(__name__)
     logging.basicConfig(
