@@ -14,6 +14,7 @@ from transformers.trainer_pt_utils import (
     DistributedTensorGatherer,
     nested_concat,
 )
+from transformers.utils.dummy_pt_objects import get_polynomial_decay_schedule_with_warmup
 import wandb
 
 from src.utils import get_logger, check_for_wandb_run, write_jsonl
@@ -118,13 +119,10 @@ class FluTrainer(Trainer):
         preds = preds_gatherer.finalize() if not prediction_loss_only else None
         label_ids = labels_gatherer.finalize() if not prediction_loss_only else None
 
-        if self.save_eval and not prediction_loss_only:
-            eval_out_path = os.path.join(self.args.output_dir, "eval-preds-{}.jsonl".format(self.state.global_step))
-            
+        if self.save_eval:    
             self.write_results(preds=preds,
-                               label_ids=label_ids)
-
-
+                               label_ids=label_ids,
+                               description=description)
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
         else:
@@ -140,7 +138,7 @@ class FluTrainer(Trainer):
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
-    def write_results(self,preds,label_ids):
+    def write_results(self,preds,label_ids, description=None):
         results = []
         for pred, label in zip(preds,label_ids):
             result = {
@@ -160,7 +158,12 @@ class FluTrainer(Trainer):
         if not os.path.exists(eval_out_dir):
             os.mkdir(eval_out_dir)
         
-        eval_out_path  = os.path.join(eval_out_dir,"eval-preds-{}.jsonl".format(self.state.global_step))
+        if description=="Prediction":
+            prefix = "train"
+        else:
+            prefix="eval"
+
+        eval_out_path  = os.path.join(eval_out_dir,f"{prefix}-preds-{self.state.epoch}.jsonl")
         
         logger.info(f"Logging results to {eval_out_path}")
         with open(eval_out_path, "w") as result_file:
