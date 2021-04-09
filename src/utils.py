@@ -1,10 +1,13 @@
 import os
 import json 
 import logging
+from io import BytesIO
 
 import dotenv
 import yaml
 import numpy as np
+from PIL import Image
+from torchviz import make_dot
 
 def load_dotenv():
     project_dir = os.path.join(os.path.dirname(__file__), os.pardir)
@@ -49,3 +52,8 @@ def check_for_wandb_run():
     except ImportError:
         return None
     return wandb.run
+
+def render_network_plot(var,dir,filename="model",params=None):
+    graph = make_dot(var,params=None)
+    graph.format = "png"
+    return graph.render(filename=filename,directory=dir)
