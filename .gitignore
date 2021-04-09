@@ -95,3 +95,6 @@ dask-worker-space/dask-worker-space/*
 wandb/*
 results/*
 logs/*
+dask-worker-space/global.lock
+.gitignore
+dask-worker-space/purge.lock
