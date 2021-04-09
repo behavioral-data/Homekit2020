@@ -68,7 +68,7 @@ def find_processed_dataset(name):
 def load_processed_table(name,fmt="df"):
     dataset = find_processed_dataset(name)
     for column in dataset.columns:
-        if "datetime" in str(column):
+        if "date" in str(column):
             dataset[column] = pd.to_datetime(dataset[column])
     logger.info(f"Reading {name}...")
     if fmt=="df":
