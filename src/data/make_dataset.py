@@ -16,8 +16,9 @@ import os
 logger = get_logger()
 
 from src.data.utils import load_raw_table, load_processed_table, get_processed_dataset_path
+import src.data.constants as cons
 
-def process_minute_level(output_filepath, participant_ids=None, random_state=42):
+def process_minute_level(participant_ids=None, random_state=42):
     minute_level_df = load_raw_table("fitbit_minute_level_activity")
     if not participant_ids is None:
         minute_level_df = minute_level_df[minute_level_df["participant_id"].isin(participant_ids)]                                                     
@@ -68,6 +69,30 @@ def process_minute_level(output_filepath, participant_ids=None, random_state=42)
     paths = glob.glob(os.path.join(processed_fitbit_minute_level_activity_path,"*","*.parquet"))
     dd.io.parquet.create_metadata_file(paths)
 
+
+def process_day_level(participant_ids=None, random_state=42):
+    day_level_df = load_raw_table("fitbit_day_level_activity")
+    if not participant_ids is None:
+        day_level_df = day_level_df[day_level_df["participant_id"].isin(participant_ids)]  
+
+    day_level_df = day_level_df.drop(columns=["main_start_time"])
+    day_level_df["missing_hr"] = day_level_df["resting_heart_rate"].isnull().astype(int)
+    day_level_df.fillna(value = {'resting_heart_rate': 0}, inplace = True)
+
+    day_level_df["missing_sleep"] = day_level_df["total_asleep_minutes"].isnull().astype(int)
+    day_level_df.fillna(value = {k:0 for k in cons.DAILY_SLEEP_FEATURES}, inplace=True)    
+
+    day_level_df["missing_steps"] = day_level_df["activityCalories"].isnull().astype(int)
+    day_level_df.fillna(value = {k:0 for k in cons.DAILY_STEP_FEATURES}, inplace=True) 
+    
+    day_level_df = day_level_df.groupby("participant_id").apply(fill_missing_days)
+    del day_level_df["participant_id"]
+    day_level_df = day_level_df.reset_index()
+
+    processed_path = get_processed_dataset_path("fitbit_day_level_activity")
+    day_level_df.to_csv(processed_path)
+
+
 def fill_missing_minutes(user_df):
     min_date = user_df["date"].min()
     max_date = user_df["date"].max()
@@ -81,8 +106,25 @@ def fill_missing_minutes(user_df):
     user_df = user_df.fillna(0)
     return user_df
 
+def fill_missing_days(user_df):
+    min_date = user_df["date"].min()
+    max_date = user_df["date"].max()
+    user_df["missing_day"] = 0
 
-def process_surveys(output_filepath,return_result=False):
+    new_index = pd.DatetimeIndex(pd.date_range(start=min_date,end=max_date,freq="1D"),
+                                name = "date")
+                                
+    user_df = user_df.set_index("date").reindex(new_index)
+    user_df["missing_steps"] = user_df["missing_steps"].fillna(1)
+    user_df["missing_hr"] = user_df["missing_steps"].fillna(1)
+    user_df["missing_sleep"] = user_df["missing_sleep"].fillna(1)
+    user_df["missing_day"] = user_df["missing_sleep"].fillna(1)
+
+    user_df = user_df.fillna(0)
+    return user_df
+
+
+def process_surveys(return_result=False):
     # Ported from notebooks/melih_notebooks/EDA_survey.ipynb
     # Produces lab_results_with_trigger, baseline_screener_survey, daily_surveys_onehot
 
@@ -136,7 +178,7 @@ def process_surveys(output_filepath,return_result=False):
     if return_result:
         return df_daily_survey
 
-def lab_updates(output_filepath, return_result=False):
+def lab_updates(return_result=False):
     df_updates = load_raw_table("mtl_lab_order_updates")
 
     # From notebooks/melih_notebooks/EDA_mtl_lab.ipynb
@@ -151,7 +193,7 @@ def lab_updates(output_filepath, return_result=False):
     if return_result:
         return df_updates
 
-def lab_results(output_filepath, return_result=False):
+def lab_results(return_result=False):
     df_results = load_raw_table("mtl_lab_order_results")
 
     # From notebooks/melih_notebooks/EDA_mtl_lab.ipynb
@@ -164,10 +206,10 @@ def lab_results(output_filepath, return_result=False):
     if return_result:
         return df_results
 
-@click.command()
-@click.argument('input_filepath', type=click.Path(exists=True))
-@click.argument('output_filepath', type=click.Path())
-def main(input_filepath, output_filepath):
+# @click.command()
+# @click.argument('input_filepath', type=click.Path(exists=True))
+# @click.argument('output_filepath', type=click.Path())
+def main():
     """ Runs data processing scripts to turn raw data from (../raw) into
         cleaned data ready to be analyzed (saved in ../processed).
     """
@@ -175,14 +217,15 @@ def main(input_filepath, output_filepath):
     logger.info('making final data set from raw data')
 
     # Lab updates:
-    lab_updates(output_filepath)
-    lab_results(output_filepath)
+    lab_updates()
+    lab_results()
 
     # Surveys
-    process_surveys(output_filepath)
+    process_surveys()
 
     # Minute Level Activity
-    process_minute_level(output_filepath)
+    process_minute_level()
+    process_day_level()
 
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
