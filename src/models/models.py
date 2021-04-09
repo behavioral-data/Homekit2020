@@ -84,10 +84,10 @@ class CNNToTransformerEncoder(nn.Module):
         x = inputs_embeds.transpose(1, 2)
         x = self.input_embedding(x)
         x = x.transpose(1, 2)
-        # x = self.positional_encoding(x)
+        x = self.positional_encoding(x)
 
-        # for l in self.blocks:
-        #     x = l(x)
+        for l in self.blocks:
+            x = l(x)
         
         x = self.dense_interpolation(x)
         logits = self.clf(x)
