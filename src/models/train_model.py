@@ -1,4 +1,6 @@
 import warnings
+
+from torch import tensor
 warnings.filterwarnings("ignore")
 
 import click
@@ -10,7 +12,7 @@ from src.models.neural_baselines import create_neural_model
 from src.models.models import CNNToTransformerEncoder
 from src.models.trainer import FluTrainer
 from src.SAnD.core.model import SAnD
-from src.utils import get_logger
+from src.utils import get_logger, render_network_plot
 
 from transformers import (BertForSequenceClassification, Trainer, 
                          TrainingArguments, BertConfig, 
@@ -20,6 +22,8 @@ from transformers import (BertForSequenceClassification, Trainer,
 
 from tensorflow.keras.callbacks import EarlyStopping # type: ignore
 import pandas as pd
+from PIL import Image
+import torch
 
 logger = get_logger()
 
@@ -504,11 +508,18 @@ def run_huggingface(model,base_trainer,training_args,
             compute_metrics=metrics,
             save_eval=True)
 
-    trainer = base_trainer(**trainer_args)
+    trainer = base_trainer(**trainer_args)  
     trainer.train()
     trainer.evaluate()
     train_metrics = trainer.predict(train_dataset, metric_key_prefix="").metrics
     train_metrics = {"train/"+k[1:] : v for k,v in train_metrics.items()}
+    
     if wandb:
-        wandb.log({"model_img": [wandb.Image(numpy_array_or_pil, caption="Label")]})
+        x_dummy = torch.tensor(train_dataset[0]["inputs_embeds"]).unsqueeze(0).cuda()
+        y_dummy = torch.tensor(train_dataset[0]["label"]).unsqueeze(0).cuda()
+        pred_dummy = model(inputs_embeds=x_dummy, labels = y_dummy)[0]
+
+        params = dict(model.named_parameters())
+        model_img_path = render_network_plot(pred_dummy, wandb.run.dir,params=params )
+        wandb.log({"model_img": [wandb.Image(Image.open(model_img_path), caption="Model Graph")]})
         wandb.log(train_metrics)
