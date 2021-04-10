@@ -163,7 +163,7 @@ class MinuteLevelActivityReader(object):
         if self.scaler:
             scale_model = self.scaler()
             self.activity_data[self.activity_data.columns] = scale_model.fit_transform(self.activity_data)
-            
+
         self.activity_data = self.activity_data.sort_index()
 
     def get_valid_dates(self, partition):
@@ -218,7 +218,7 @@ class LabResultsReader(object):
         self.results = results
         self.participant_ids = self.results.index.unique().values
 
-class MinuteLevelActivtyDataset(Dataset):
+class ActivtyDataset(Dataset):
     def __init__(self, activity_reader,
                        lab_results_reader,
                        participant_dates,
@@ -336,11 +336,11 @@ class MinuteLevelActivtyDataset(Dataset):
         return np.stack(X), np.stack(y)
 
 
-class EarlyDetectionDataset(MinuteLevelActivtyDataset):
+class EarlyDetectionDataset(ActivtyDataset):
     def __init__(self,*args,**kwargs):
         super(EarlyDetectionDataset, self).__init__(*args, **kwargs)
 
-class PredictTriggerDataset(MinuteLevelActivtyDataset):
+class PredictTriggerDataset(ActivtyDataset):
     def __init__(self,*args,**kwargs):
         super(PredictTriggerDataset, self).__init__(*args, **kwargs)
     
@@ -357,7 +357,7 @@ class PredictTriggerDataset(MinuteLevelActivtyDataset):
         on_date = participant_results["trigger_datetime"].dt.date == end_date.date()
         return any(on_date)
 
-class MeanStepsDataset(MinuteLevelActivtyDataset):
+class MeanStepsDataset(ActivtyDataset):
     def __init__(self,*args,**kwargs):
         super(MeanStepsDataset, self).__init__(*args, **kwargs)
         participant_ids = self.activity_data.index.get_level_values(level=0)
@@ -368,7 +368,7 @@ class MeanStepsDataset(MinuteLevelActivtyDataset):
         participant_data = self.activity_data.loc[participant_id]
         return participant_data[participant_data.index.date == start_date.date()]["steps"].sum() > self.mean_steps        
 
-class AutoencodeDataset(MinuteLevelActivtyDataset):
+class AutoencodeDataset(ActivtyDataset):
     def __init__(self,*args,**kwargs):
         super(AutoencodeDataset, self).__init__(*args, **kwargs)
 
@@ -428,6 +428,6 @@ if __name__ == "__main__":
     participant_ids = lab_results_reader.participant_ids
     minute_level_reader = MinuteLevelActivityReader(participant_ids=participant_ids)
 
-    dataset = MinuteLevelActivtyDataset(minute_level_reader, lab_results_reader,
+    dataset = ActivtyDataset(minute_level_reader, lab_results_reader,
                                         participant_dates = minute_level_reader.participant_dates)
 

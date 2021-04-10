@@ -111,7 +111,7 @@ class GeqMeanSteps(ActivityTask, ClassificationMixin):
        on the first day of a window is >= the mean across the whole dataset"""
     
     def __init__(self,dataset_args={}):
-        ActivityTask.__init__(self,td.MinuteLevelActivtyDataset,dataset_args=dataset_args)
+        ActivityTask.__init__(self,td.ActivtyDataset,dataset_args=dataset_args)
         ClassificationMixin.__init__(self)
         self.is_classification = True
     
@@ -136,7 +136,7 @@ class PredictFluPos(ActivityTask, ClassificationMixin):
 
     def __init__(self,dataset_args={}, activity_level = "minute"):
 
-        ActivityTask.__init__(self,td.MinuteLevelActivtyDataset,dataset_args=dataset_args,
+        ActivityTask.__init__(self,td.ActivtyDataset,dataset_args=dataset_args,
                                  activity_level=activity_level)
         ClassificationMixin.__init__(self)
         
