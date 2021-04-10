@@ -35,9 +35,6 @@ logger = get_logger()
 @click.option("--neg_class_weight", default=1)
 @click.option("--eval_frac", default=0.15)
 @click.option("--no_early_stopping",is_flag=True)
-@click.option("--no_wandb",is_flag=True)
-@click.option("--notes", type=str, default=None, help="Notes to save to wandb")
-@click.option('--dataset_args', default={})
 def train_neural_baseline(model_name,task_name,
                          n_epochs=10,
                          no_early_stopping=False,
@@ -46,13 +43,14 @@ def train_neural_baseline(model_name,task_name,
                          eval_frac = 0.15,
                          no_wandb=False,
                          notes=None,
-                         dataset_args = {}):
+                         dataset_args = {},
+                         activity_level="minute"):
 
     
 
     logger.info(f"Training {model_name} on {task_name}")
     dataset_args["eval_frac"] = eval_frac
-    task = get_task_with_name(task_name)(dataset_args=dataset_args)
+    task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level)
 
     train_X, train_y = task.get_train_dataset().to_stacked_numpy()
     eval_X, eval_y  = task.get_eval_dataset().to_stacked_numpy()
@@ -132,13 +130,14 @@ def train_autoencoder(model_name,
                 no_wandb=False,
                 notes=None,
                 sinu_position_encoding = False,
-                dataset_args = {}):
+                dataset_args = {},
+                activity_level="minute"):
     
     logger.info(f"Training {model_name}")
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
 
-    task = get_task_with_name(task_name)(dataset_args=dataset_args)
+    task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level)
     
     if sinu_position_encoding:
         dataset_args["add_absolute_embedding"] = True
@@ -199,13 +198,15 @@ def train_cnn_transformer( task_name,
                 no_wandb=False,
                 notes=None,
                 sinu_position_encoding = False,
-                dataset_args = {}):
+                dataset_args = {},
+                activity_level="minute"):
     
     logger.info(f"Training CNNTransformer")
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
 
-    task = get_task_with_name(task_name)(dataset_args=dataset_args)
+    task = get_task_with_name(task_name)(dataset_args=dataset_args,
+                                        activity_level=activity_level)
     
     if sinu_position_encoding:
         dataset_args["add_absolute_embedding"] = True
@@ -273,13 +274,15 @@ def train_sand( task_name,
                 no_wandb=False,
                 notes=None,
                 sinu_position_encoding = False,
-                dataset_args = {}):
+                dataset_args = {},
+                activity_level="minute"):
     
     logger.info(f"Training SAnD")
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
 
-    task = get_task_with_name(task_name)(dataset_args=dataset_args)
+    task = get_task_with_name(task_name)(dataset_args=dataset_args, 
+                                         activity_level=activity_level)
     
     if sinu_position_encoding:
         dataset_args["add_absolute_embedding"] = True
@@ -349,7 +352,8 @@ def train_bert(task_name,
                 no_wandb=False,
                 notes=None,
                 sinu_position_encoding = False,
-                dataset_args = {}):
+                dataset_args = {},
+                activity_level="minute"):
 
     logger.info(f"Training BERT on {task_name}")
     dataset_args["return_dict"] = True
@@ -362,7 +366,8 @@ def train_bert(task_name,
     else:
         position_embedding_type="absolute"
 
-    task = get_task_with_name(task_name)(dataset_args=dataset_args)
+    task = get_task_with_name(task_name)(dataset_args=dataset_args,
+                                         activity_level=activity_level)
     
     train_dataset = task.get_train_dataset()
     infer_example = train_dataset[0]["inputs_embeds"]
@@ -437,14 +442,16 @@ def train_longformer(task_name,
                     no_wandb=False,
                     notes=None,
                     sinu_position_encoding = False,
-                    dataset_args = {}):
+                    dataset_args = {},
+                    activity_level="minute"):
     
     logger.info(f"Training Longformer on {task_name}")
     dataset_args["return_dict"] = True
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_global_attention_mask"] = True
 
-    task = get_task_with_name(task_name)(dataset_args=dataset_args)
+    task = get_task_with_name(task_name)(dataset_args=dataset_args,
+                                         activity_level=activity_level)
     
     train_dataset = task.get_train_dataset()
     infer_example = train_dataset[0]["inputs_embeds"]

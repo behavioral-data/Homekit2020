@@ -24,6 +24,85 @@ from tqdm import tqdm
 
 MIN_IN_DAY = 24*60
 
+
+class DayLevelActivityReader(object):
+    def __init__(self, min_date=None,
+                       split_date=None,
+                       max_date=None,
+                       participant_ids=None,
+                       day_window_size=15,
+                       scaler=MinMaxScaler,
+                       max_missing_days_in_window=5,
+                       min_windows=1):
+        
+        self.scaler = scaler
+        self.day_window_size = day_window_size
+        self.max_missing_days_in_window = max_missing_days_in_window
+        self.min_windows = min_windows
+        self.obs_per_day = 1
+    
+        df = load_processed_table("fitbit_day_level_activity")
+
+        date_filters = []
+        if min_date: 
+            min_datetime = pd.to_datetime(min_date)
+            date_filters.append(df["date"] >= min_datetime)
+        
+        if max_date:
+            max_datetime = pd.to_datetime(max_date)
+            date_filters.append(df["date"] < max_datetime)
+
+        filters = reduce(bit_and,date_filters)
+        if not len(filters) == 0:
+            df = df[filters]
+
+        valid_participant_dates = df.groupby("participant_id").apply(self.get_valid_dates)
+        self.daily_data = df.set_index(["participant_id","date"])
+
+        self.participant_dates = list(valid_participant_dates.dropna().apply(pd.Series).stack().droplevel(-1).items())
+        
+        if self.scaler:
+            scale_model = self.scaler()
+            self.daily_data[self.daily_data.columns] = scale_model.fit_transform(self.daily_data)
+        
+        self.activity_data = self.daily_data.sort_index()
+
+
+    def get_valid_dates(self, partition):
+        dates_with_data = pd.DatetimeIndex(partition[~partition["missing_hr"].astype(bool)]["date"].dt.date.unique())
+        min_days_with_data = self.day_window_size - self.max_missing_days_in_window
+    
+        if len(dates_with_data) < min_days_with_data:
+            return 
+        min_date = dates_with_data.min()
+        max_date = dates_with_data.max()
+
+        all_possible_start_dates = pd.date_range(min_date,max_date-pd.Timedelta(days=self.day_window_size))
+        all_possible_end_dates = all_possible_start_dates + pd.Timedelta(days=self.day_window_size)
+
+        min_days_with_data = self.day_window_size - self.max_missing_days_in_window
+
+        mask = []
+        for a,b in zip(all_possible_start_dates, all_possible_end_dates):
+            has_enough_data = len(dates_with_data[(dates_with_data >= a) & (dates_with_data < b) ] )>= min_days_with_data
+            mask.append(has_enough_data)
+
+        return all_possible_end_dates[mask].rename("dates")
+
+    def split_participant_dates(self,date=None,eval_frac=None):
+        """If random, split a fraction equal to random for eval,
+            else, split participant dates to be before and after a given date"""
+
+        if eval_frac:
+            train,eval = train_test_split(self.participant_dates,test_size=eval_frac)
+            return train,eval
+        elif date:
+            before = [x for x in self.participant_dates if x[1] <= pd.to_datetime(date) ]
+            after = [x for x in self.participant_dates if x[1] > pd.to_datetime(date) ]
+            return before, after
+        else:
+            raise ValueError("If splitting, must either provide a date or fraction")
+
 class MinuteLevelActivityReader(object):
     def __init__(self, min_date=None,
                        split_date=None,
@@ -38,7 +117,8 @@ class MinuteLevelActivityReader(object):
         self.day_window_size = day_window_size
         self.max_missing_days_in_window = max_missing_days_in_window
         self.min_windows = min_windows
-        
+        self.obs_per_day = 24*60
+
         n_cores = multiprocessing.cpu_count()
         pbar = ProgressBar()
         pbar.register()
@@ -72,18 +152,19 @@ class MinuteLevelActivityReader(object):
 
             valid_participant_dates = dask_df.groupby("participant_id").apply(self.get_valid_dates, meta=("dates",object))
             
-            self.minute_data = dask_df
+            self.activity_data = dask_df
         
             logger.info("Using Dask to pre-process data:")
-            valid_participant_dates, self.minute_data = dask.compute(valid_participant_dates,self.minute_data)
+            valid_participant_dates, self.activity_data = dask.compute(valid_participant_dates,self.activity_data)
             
-            self.minute_data = self.minute_data.set_index(["participant_id","timestamp"]).drop(columns=["date"])
+            self.activity_data = self.activity_data.set_index(["participant_id","timestamp"]).drop(columns=["date"])
             self.participant_dates = list(valid_participant_dates.dropna().apply(pd.Series).stack().droplevel(-1).items())
         
         if self.scaler:
             scale_model = self.scaler()
-            self.minute_data[self.minute_data.columns] = scale_model.fit_transform(self.minute_data)
-        self.minute_data = self.minute_data.sort_index()
+            self.activity_data[self.activity_data.columns] = scale_model.fit_transform(self.activity_data)
+            
+        self.activity_data = self.activity_data.sort_index()
 
     def get_valid_dates(self, partition):
         dates_with_data = pd.DatetimeIndex(partition[~partition["missing_heartrate"]]["timestamp"].dt.date.unique())
@@ -138,7 +219,7 @@ class LabResultsReader(object):
         self.participant_ids = self.results.index.unique().values
 
 class MinuteLevelActivtyDataset(Dataset):
-    def __init__(self, minute_level_activity_reader,
+    def __init__(self, activity_reader,
                        lab_results_reader,
                        participant_dates,
                        max_missing_days_in_window=5,
@@ -151,9 +232,9 @@ class MinuteLevelActivtyDataset(Dataset):
                        add_cls=False,
                        shuffle=False):
         
-        self.minute_level_activity_reader = minute_level_activity_reader
-        self.minute_data = self.minute_level_activity_reader.minute_data
-        self.day_window_size = self.minute_level_activity_reader.day_window_size 
+        self.activity_reader = activity_reader
+        self.activity_data = self.activity_reader.activity_data
+        self.day_window_size = self.activity_reader.day_window_size 
 
         self.lab_results_reader = lab_results_reader
         
@@ -167,14 +248,19 @@ class MinuteLevelActivtyDataset(Dataset):
         self.return_dict = return_dict
         self.return_global_attention_mask = return_global_attention_mask
         
-        self.size = (24*60*self.day_window_size+1+int(add_cls), 2*bool(time_encoding) + 8, )
+        n_features = self.activity_reader.activity_data.shape[-1] + 2*bool(time_encoding)
+        
+        obs_per_day = self.activity_reader.obs_per_day
+        n_timesteps = (obs_per_day*self.day_window_size + 1 + int(add_cls))
+        self.size = (n_timesteps, n_features)
+
         self.add_cls = add_cls
 
         if self.add_cls:
             self.cls_init = np.random.randn(1,self.size[-1]).astype(np.float32)   
         
     def get_user_data_in_time_range(self,participant_id,start,end):
-        data = self.minute_data.loc[participant_id].loc[start:end]
+        data = self.activity_data.loc[participant_id].loc[start:end]
         return data
     
     def get_label(self,participant_id,start_date,end_date):
@@ -199,7 +285,7 @@ class MinuteLevelActivtyDataset(Dataset):
         # Could cache this later
         participant_id, end_date = self.participant_dates[index]
         start_date = end_date - pd.Timedelta(self.day_window_size, unit = "days")
-        minute_data = self.get_user_data_in_time_range(participant_id,start_date,end_date)
+        activity_data = self.get_user_data_in_time_range(participant_id,start_date,end_date)
         
         result = self.get_label(participant_id,start_date,end_date)
         if result:
@@ -208,18 +294,18 @@ class MinuteLevelActivtyDataset(Dataset):
             label = 0
         
         if self.time_encoding == "sincos":
-            minute_data["sin_time"]  = sin_time(minute_data.index)
-            minute_data["cos_time"]  = cos_time(minute_data.index)
+            activity_data["sin_time"]  = sin_time(activity_data.index)
+            activity_data["cos_time"]  = cos_time(activity_data.index)
         
-        # minute_data = minute_data.T
+        # activity_data = activity_data.T
 
         if self.add_absolute_embedding:
-            minute_data = minute_data + sinu_position_encoding(*self.size)
+            activity_data = activity_data + sinu_position_encoding(*self.size)
         
         if self.return_dict:
             
             item = {}
-            embeds = minute_data.values.astype(np.float32)        
+            embeds = activity_data.values.astype(np.float32)        
             
             if self.add_cls:
                 embeds = np.concatenate([self.cls_init,embeds],axis=0)
@@ -234,7 +320,7 @@ class MinuteLevelActivtyDataset(Dataset):
             
             return item
 
-        return minute_data.values, label
+        return activity_data.values, label
     
     def to_stacked_numpy(self):
         
@@ -274,12 +360,12 @@ class PredictTriggerDataset(MinuteLevelActivtyDataset):
 class MeanStepsDataset(MinuteLevelActivtyDataset):
     def __init__(self,*args,**kwargs):
         super(MeanStepsDataset, self).__init__(*args, **kwargs)
-        participant_ids = self.minute_data.index.get_level_values(level=0)
-        dates = self.minute_data.index.get_level_values(level=1).date
-        self.mean_steps = self.minute_data.groupby([participant_ids,dates])["steps"].sum().mean()
+        participant_ids = self.activity_data.index.get_level_values(level=0)
+        dates = self.activity_data.index.get_level_values(level=1).date
+        self.mean_steps = self.activity_data.groupby([participant_ids,dates])["steps"].sum().mean()
 
     def get_label(self,participant_id,start_date,end_date):
-        participant_data = self.minute_data.loc[participant_id]
+        participant_data = self.activity_data.loc[participant_id]
         return participant_data[participant_data.index.date == start_date.date()]["steps"].sum() > self.mean_steps        
 
 class AutoencodeDataset(MinuteLevelActivtyDataset):
@@ -294,18 +380,18 @@ class AutoencodeDataset(MinuteLevelActivtyDataset):
         # Could cache this later
         participant_id, end_date = self.participant_dates[index]
         start_date = end_date - pd.Timedelta(self.day_window_size, unit = "days")
-        minute_data = self.get_user_data_in_time_range(participant_id,start_date,end_date)
+        activity_data = self.get_user_data_in_time_range(participant_id,start_date,end_date)
         
 
         if self.time_encoding == "sincos":
-            minute_data["sin_time"]  = sin_time(minute_data.index)
-            minute_data["cos_time"]  = cos_time(minute_data.index)
+            activity_data["sin_time"]  = sin_time(activity_data.index)
+            activity_data["cos_time"]  = cos_time(activity_data.index)
 
         if self.return_dict:
-            return {"inputs_embeds":minute_data.values.astype(np.float32),
-                    "labels":minute_data.values.astype(np.float32)}
+            return {"inputs_embeds":activity_data.values.astype(np.float32),
+                    "labels":activity_data.values.astype(np.float32)}
         
-        return minute_data.values.astype(np.float32)
+        return activity_data.values.astype(np.float32)
 
     def to_stacked_numpy(self):
         if len(self)==0:

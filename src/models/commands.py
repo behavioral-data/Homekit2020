@@ -1,4 +1,5 @@
 import json
+from random import choice
 import click
 from src.utils import read_yaml
 
@@ -36,6 +37,7 @@ universal_options = [
     click.Option(('--no_wandb',), is_flag=True),
     click.Option(('--notes',), type=str, default=None),
     click.Option(('--dataset_args',), default=None,callback=validate_dataset_args),
+    click.Option(('--activity_level',),type=click.Choice(["day","minute"]), default="minute")
 ]
 
 class BaseCommand(click.Command):

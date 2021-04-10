@@ -57,11 +57,12 @@ class AutoencodeMixin():
             return self.evaluate_results(preds,labels)
         return evaluator
 
-class MinuteLevelTask(Task):
+class ActivityTask(Task):
     """ Is inhereited by anything that operatres over the minute
         level data"""
-    def __init__(self,base_dataset,dataset_args={}):
-        super(MinuteLevelTask,self).__init__()
+    def __init__(self,base_dataset,dataset_args={},
+                     activity_level = "minute"):
+        super(ActivityTask,self).__init__()
         
         split_date = dataset_args.pop("split_date",None)
         eval_frac = dataset_args.pop("eval_frac",None)
@@ -77,7 +78,12 @@ class MinuteLevelTask(Task):
         lab_results_reader = td.LabResultsReader()
         participant_ids = lab_results_reader.participant_ids
 
-        minute_level_reader = td.MinuteLevelActivityReader(participant_ids=participant_ids,
+        if activity_level == "minute":
+            base_activity_reader = td.MinuteLevelActivityReader
+        else:
+            base_activity_reader = td.DayLevelActivityReader
+
+        minute_level_reader = base_activity_reader(participant_ids=participant_ids,
                                                            min_date = min_date,
                                                            max_date = max_date,
                                                            day_window_size=day_window_size,
@@ -100,12 +106,12 @@ class MinuteLevelTask(Task):
     def get_eval_dataset(self):
         return self.eval_dataset
     
-class GeqMeanSteps(MinuteLevelTask, ClassificationMixin):
+class GeqMeanSteps(ActivityTask, ClassificationMixin):
     """A dummy task to predict whether or not the total number of steps
        on the first day of a window is >= the mean across the whole dataset"""
     
     def __init__(self,dataset_args={}):
-        MinuteLevelTask.__init__(self,td.MinuteLevelActivtyDataset,dataset_args=dataset_args)
+        ActivityTask.__init__(self,td.MinuteLevelActivtyDataset,dataset_args=dataset_args)
         ClassificationMixin.__init__(self)
         self.is_classification = True
     
@@ -122,14 +128,16 @@ class GeqMeanSteps(MinuteLevelTask, ClassificationMixin):
             return self.evaluate_results(logits,labels,threshold=threshold)
         return evaluator
 
-class PredictFluPos(MinuteLevelTask, ClassificationMixin):
+class PredictFluPos(ActivityTask, ClassificationMixin):
     """Predict the whether a participant was positive
        given a rolling window of minute level activity data.
        We validate on data after split_date, but before
        max_date, if provided"""
 
-    def __init__(self,dataset_args={}):
-        MinuteLevelTask.__init__(self,td.MinuteLevelActivtyDataset,dataset_args=dataset_args)
+    def __init__(self,dataset_args={}, activity_level = "minute"):
+
+        ActivityTask.__init__(self,td.MinuteLevelActivtyDataset,dataset_args=dataset_args,
+                                 activity_level=activity_level)
         ClassificationMixin.__init__(self)
         
 
@@ -137,12 +145,13 @@ class PredictFluPos(MinuteLevelTask, ClassificationMixin):
         return "PredictFluPos"
     
 
-class PredictTrigger(MinuteLevelTask,ClassificationMixin):
+class PredictTrigger(ActivityTask,ClassificationMixin):
     """Predict the whether a participant triggered the 
        test on the last day of a range of data"""
 
-    def __init__(self,dataset_args={}):
-        MinuteLevelTask.__init__(self,td.PredictTriggerDataset,dataset_args=dataset_args)
+    def __init__(self,dataset_args={}, activity_level="minute"):
+        ActivityTask.__init__(self,td.PredictTriggerDataset,dataset_args=dataset_args,
+                               activity_level = "minute")
         ClassificationMixin.__init__(self)
         # self.is_classification = True
 
@@ -206,10 +215,11 @@ class PredictSurveyCol(Task,ClassificationMixin):
     def get_eval_dataset(self):
         return self.eval_dataset
 
-class EarlyDetection(MinuteLevelTask):
+class EarlyDetection(ActivityTask):
     """Mimics the task used by Evidation Health"""
 
-    def __init__(self,base_dataset=td.EarlyDetectionDataset,dataset_args={}):
+    def __init__(self,base_dataset=td.EarlyDetectionDataset,dataset_args={},
+                      activity_level = "minute"):
         eval_frac = dataset_args.pop("eval_frac",None)
 
         if not eval_frac:
@@ -225,7 +235,12 @@ class EarlyDetection(MinuteLevelTask):
         lab_results_reader = td.LabResultsReader(pos_only=True)
         participant_ids = lab_results_reader.participant_ids
 
-        minute_level_reader = td.MinuteLevelActivityReader(participant_ids=participant_ids,
+        if activity_level == "minute":
+            base_activity_reader = td.MinuteLevelActivityReader
+        else:
+            base_activity_reader = td.DayLevelActivityReader
+            
+        minute_level_reader = base_activity_reader(participant_ids=participant_ids,
                                                             min_date = min_date,
                                                             max_date = max_date,
                                                             max_missing_days_in_window=max_missing_days_in_window,
@@ -298,11 +313,11 @@ class AutoencodeEarlyDetection(AutoencodeMixin, EarlyDetection):
         return "Autoencode"
     
 
-class Autoencode(AutoencodeMixin, MinuteLevelTask):
+class Autoencode(AutoencodeMixin, ActivityTask):
     """Autoencode minute level data"""
 
     def __init__(self,dataset_args={}):
-        MinuteLevelTask.__init__(self,td.AutoencodeDataset,dataset_args=dataset_args)
+        ActivityTask.__init__(self,td.AutoencodeDataset,dataset_args=dataset_args)
         AutoencodeMixin.__init__(self)
         self.is_autoencoder = True
 
