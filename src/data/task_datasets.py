@@ -251,17 +251,22 @@ class ActivtyDataset(Dataset):
         n_features = self.activity_reader.activity_data.shape[-1] + 2*bool(time_encoding)
         
         obs_per_day = self.activity_reader.obs_per_day
-        n_timesteps = (obs_per_day*self.day_window_size + 1 + int(add_cls))
+        n_timesteps = (obs_per_day*self.day_window_size + int(add_cls))
         self.size = (n_timesteps, n_features)
 
         self.add_cls = add_cls
 
         if self.add_cls:
             self.cls_init = np.random.randn(1,self.size[-1]).astype(np.float32)   
-        
+   
+    def get_user_data_in_date_range(self,participant_id, start, end):
+        eod = end + pd.to_timedelta("1D") - pd.to_timedelta("1ms")
+        return self.get_user_data_in_time_range(participant_id,start,eod)
+
     def get_user_data_in_time_range(self,participant_id,start,end):
-        data = self.activity_data.loc[participant_id].loc[start:end]
-        return data
+        participant_data = self.activity_data.loc[participant_id]
+        time_mask = (participant_data.index>=start) &  (participant_data.index<=end)
+        return participant_data[time_mask]
     
     def get_label(self,participant_id,start_date,end_date):
         try:
@@ -284,8 +289,8 @@ class ActivtyDataset(Dataset):
     def __getitem__(self,index):
         # Could cache this later
         participant_id, end_date = self.participant_dates[index]
-        start_date = end_date - pd.Timedelta(self.day_window_size, unit = "days")
-        activity_data = self.get_user_data_in_time_range(participant_id,start_date,end_date)
+        start_date = end_date - pd.Timedelta(self.day_window_size -1, unit = "days")
+        activity_data = self.get_user_data_in_date_range(participant_id,start_date,end_date)
         
         result = self.get_label(participant_id,start_date,end_date)
         if result:
@@ -380,7 +385,7 @@ class AutoencodeDataset(ActivtyDataset):
         # Could cache this later
         participant_id, end_date = self.participant_dates[index]
         start_date = end_date - pd.Timedelta(self.day_window_size, unit = "days")
-        activity_data = self.get_user_data_in_time_range(participant_id,start_date,end_date)
+        activity_data = self.get_user_data_in_date_range(participant_id,start_date,end_date)
         
 
         if self.time_encoding == "sincos":
