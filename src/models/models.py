@@ -65,6 +65,10 @@ class CNNToTransformerEncoder(nn.Module):
 
         self.input_embedding = CNNEncoder(input_features, n_timesteps=n_timesteps, kernel_sizes=kernel_sizes,
                                 out_channels=out_channels, stride_sizes=stride_sizes)
+        
+        if self.input_embedding.final_output_length < 1:
+            raise ValueError("CNN final output dim is <1 ")                                
+            
         self.positional_encoding = modules.PositionalEncoding(self.d_model, max_positional_embeddings)
         self.blocks = nn.ModuleList([
             modules.EncoderBlock(self.d_model, n_heads, dropout_rate) for _ in range(n_layers)
