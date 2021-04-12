@@ -10,6 +10,7 @@ from distributed import Client
 import dask
 from dask.diagnostics import ProgressBar
 import dask.dataframe as dd
+import xgboost as xgb
 dask.config.set({"distributed.comm.timeouts.connect": "60"})
 
 from sklearn.preprocessing import MinMaxScaler
@@ -327,7 +328,7 @@ class ActivtyDataset(Dataset):
 
         return activity_data.values, label
     
-    def to_stacked_numpy(self):
+    def to_stacked_numpy(self,flatten = False):
         
         if len(self)==0:
             return np.array([]), np.array([])
@@ -335,11 +336,17 @@ class ActivtyDataset(Dataset):
         y = []
 
         for el_x, el_y in tqdm(self, desc = "Converting to np Array"): 
+            if flatten:
+                el_x = el_x.flatten()
+    
             X.append(el_x)
             y.append(el_y)
         
         return np.stack(X), np.stack(y)
 
+    def to_dmatrix(self,flatten=True):
+        X,y = self.to_stacked_numpy(flatten=flatten)
+        return xgb.DMatrix(X,label=y)
 
 class EarlyDetectionDataset(ActivtyDataset):
     def __init__(self,*args,**kwargs):

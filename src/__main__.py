@@ -9,7 +9,7 @@ import click
 
 from src.models.train_model import (train_neural_baseline, train_bert, train_longformer, 
                                     train_autoencoder, train_sand, train_cnn_transformer)
-from src.models.baselines import select_random
+from src.models.baselines import select_random, train_xgboost
 from src.utils import get_logger
 logger = get_logger()
 
@@ -25,7 +25,7 @@ cli.add_command(train_sand)
 cli.add_command(train_cnn_transformer)
 
 cli.add_command(select_random)
-
+cli.add_command(train_xgboost)
 
 
 if __name__ == "__main__":
