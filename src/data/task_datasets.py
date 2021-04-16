@@ -176,14 +176,14 @@ class MinuteLevelActivityReader(object):
         min_date = dates_with_data.min()
         max_date = dates_with_data.max()
 
-        all_possible_start_dates = pd.date_range(min_date,max_date-pd.Timedelta(days=self.day_window_size))
-        all_possible_end_dates = all_possible_start_dates + pd.Timedelta(days=self.day_window_size)
+        all_possible_start_dates = pd.date_range(min_date,max_date-pd.Timedelta(days=self.day_window_size-1))
+        all_possible_end_dates = all_possible_start_dates + pd.Timedelta(days=self.day_window_size-1)
 
         min_days_with_data = self.day_window_size - self.max_missing_days_in_window
 
         mask = []
         for a,b in zip(all_possible_start_dates, all_possible_end_dates):
-            has_enough_data = len(dates_with_data[(dates_with_data >= a) & (dates_with_data < b) ] )>= min_days_with_data
+            has_enough_data = len(dates_with_data[(dates_with_data >= a) & (dates_with_data <= b) ] )>= min_days_with_data
             mask.append(has_enough_data)
 
         return all_possible_end_dates[mask].rename("dates")
@@ -346,7 +346,19 @@ class ActivtyDataset(Dataset):
 
     def to_dmatrix(self,flatten=True):
         X,y = self.to_stacked_numpy(flatten=flatten)
-        return xgb.DMatrix(X,label=y)
+        feature_names = self.get_feature_names()
+        n_days = int(X.shape[-1] / len(feature_names))
+        day_names = []
+        for i in range(n_days):
+            for name in feature_names:
+                day_names.append(f"T-minus-{n_days-i-1}-{name}")
+        return xgb.DMatrix(X,label=y, feature_names=day_names)
+
+    def get_feature_names(self):
+        names =list(self.activity_data.columns.values)
+        if self.time_encoding == "sincos":
+            names = names + ["sin_time","cos_time"]
+        return names
 
 class EarlyDetectionDataset(ActivtyDataset):
     def __init__(self,*args,**kwargs):

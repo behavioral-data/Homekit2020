@@ -94,8 +94,10 @@ def process_day_level(participant_ids=None, random_state=42):
 
 
 def fill_missing_minutes(user_df):
-    min_date = user_df["date"].min()
-    max_date = user_df["date"].max()
+    # This works because the data was pre-cleaned so that the
+    # last day ends just before midnight
+    min_date = user_df["timestamp"].min()
+    max_date = user_df["timestamp"].max()
     new_index = pd.DatetimeIndex(pd.date_range(start=min_date,end=max_date,freq="1min"),
                                 name = "timestamp")
     user_df = user_df.set_index("timestamp").reindex(new_index)
