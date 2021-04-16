@@ -2,6 +2,9 @@ import click
 import numpy as np
 from json import loads
 import xgboost as xgb
+from matplotlib import pyplot as plt
+from xgboost import callback
+import wandb
 
 from src.models.tasks import get_task_with_name
 from src.utils import get_logger
@@ -51,10 +54,26 @@ def train_xgboost(task_name, dataset_args ={},
 
     train = task.get_train_dataset().to_dmatrix()
     eval = task.get_eval_dataset().to_dmatrix()
-
+    
     param = {'max_depth': 2, 'eta': 1, 'objective': 'binary:logistic'}
     param['nthread'] = 4
     param['eval_metric'] = 'auc'
     evallist = [(eval, 'eval'), (train, 'train')]
-    bst = xgb.train(param, train, 10, evallist)
+    
+    callbacks = []
+    if not no_wandb:
+        wandb.init(project="flu",
+                   entity="mikeamerrill",
+                   notes=notes)
+        wandb.run.summary["task"] = task.get_name()
+        wandb.run.summary["model"] = "XGBoost"
+        callbacks.append(wandb.xgboost.wandb_callback())
+    
+    bst = xgb.train(param, train, 10, evallist, callbacks=[])
+    
+    if not no_wandb:
+        xgb.plot_importance(bst)
+        plt.tight_layout()
+        wandb.log({"feature_importance": wandb.Image(plt)})
+
     
