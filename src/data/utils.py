@@ -17,9 +17,10 @@ load_dotenv()
 logger = get_logger()
 
 DATASET_VERSION="2020-07-15"
-RAW_DATA_PATH = os.path.join("data","raw","audere","data-export",DATASET_VERSION)
-PROCESSED_DATA_PATH = os.path.join("data","processed")
-DEBUG_DATA_PATH = os.path.join("data","debug")
+MAIN_PATH = "~/seattleflustudy"
+RAW_DATA_PATH = os.path.join(MAIN_PATH,"data","raw","audere","data-export",DATASET_VERSION)
+PROCESSED_DATA_PATH = os.path.join(MAIN_PATH,"data","processed")
+DEBUG_DATA_PATH = os.path.join(MAIN_PATH,"data","debug")
 
 def get_raw_dataset_path(name):
     if name in constants.MTL_NAMES:
