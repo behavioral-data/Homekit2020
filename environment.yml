@@ -28,6 +28,8 @@ dependencies:
   - torchaudio=0.7 
   - cudatoolkit=10.2
   - jupyter
+  - plotly
+  - matplotlib
   - pip:
     - torchviz
     - pyyaml==5.4.1
