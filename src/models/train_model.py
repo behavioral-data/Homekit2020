@@ -204,12 +204,14 @@ def train_cnn_transformer( task_name,
     logger.info(f"Training CNNTransformer")
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
+    
+    if sinu_position_encoding:
+        dataset_args["add_absolute_embedding"] = True
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args,
                                         activity_level=activity_level)
     
-    if sinu_position_encoding:
-        dataset_args["add_absolute_embedding"] = True
+    
 
     train_dataset = task.get_train_dataset()
     infer_example = train_dataset[0]["inputs_embeds"]
