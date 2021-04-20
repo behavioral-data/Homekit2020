@@ -24,8 +24,6 @@ from src.data.utils import get_dask_df, load_processed_table
 from tqdm import tqdm
 
 MIN_IN_DAY = 24*60
-
-
 class DayLevelActivityReader(object):
     def __init__(self, min_date=None,
                        split_date=None,
@@ -36,6 +34,12 @@ class DayLevelActivityReader(object):
                        max_missing_days_in_window=5,
                        min_windows=1):
         
+        self.min_date = min_date
+        self.split_date = split_date
+        self.max_missing_days_in_window = max_missing_days_in_window
+        self.scaler = scaler
+        self.min_windows = min_windows
+
         self.scaler = scaler
         self.day_window_size = day_window_size
         self.max_missing_days_in_window = max_missing_days_in_window
@@ -112,8 +116,12 @@ class MinuteLevelActivityReader(object):
                        day_window_size=15,
                        scaler=MinMaxScaler,
                        max_missing_days_in_window=5,
-                       min_windows=1):
+                       min_windows=1,
+                       **_):
         
+        self.min_date = min_date
+        self.max_date = max_date
+        self.min_windows = min_windows
         self.scaler = scaler
         self.day_window_size = day_window_size
         self.max_missing_days_in_window = max_missing_days_in_window
@@ -157,14 +165,16 @@ class MinuteLevelActivityReader(object):
         
             logger.info("Using Dask to pre-process data:")
             valid_participant_dates, self.activity_data = dask.compute(valid_participant_dates,self.activity_data)
-            
+            logger.info("Setting index...")
             self.activity_data = self.activity_data.set_index(["participant_id","timestamp"]).drop(columns=["date"])
             self.participant_dates = list(valid_participant_dates.dropna().apply(pd.Series).stack().droplevel(-1).items())
         
         if self.scaler:
+            logger.info("Scaling Data...")
             scale_model = self.scaler()
             self.activity_data[self.activity_data.columns] = scale_model.fit_transform(self.activity_data)
-
+        
+        logger.info("Sorting Index...")
         self.activity_data = self.activity_data.sort_index()
 
     def get_valid_dates(self, partition):
@@ -231,7 +241,8 @@ class ActivtyDataset(Dataset):
                        return_global_attention_mask = False,
                        add_absolute_embedding = False,
                        add_cls=False,
-                       shuffle=False):
+                       shuffle=False,
+                       **_):
         
         self.activity_reader = activity_reader
         self.activity_data = self.activity_reader.activity_data
@@ -265,9 +276,9 @@ class ActivtyDataset(Dataset):
         return self.get_user_data_in_time_range(participant_id,start,eod)
 
     def get_user_data_in_time_range(self,participant_id,start,end):
-        participant_data = self.activity_data.loc[participant_id]
-        time_mask = (participant_data.index>=start) &  (participant_data.index<=end)
-        return participant_data[time_mask]
+        participant_data = self.activity_data.loc[participant_id]        
+        data = participant_data.loc[start:end]
+        return data
     
     def get_label(self,participant_id,start_date,end_date):
         try:
@@ -289,6 +300,7 @@ class ActivtyDataset(Dataset):
     @lru_cache(maxsize=None)
     def __getitem__(self,index):
         # Could cache this later
+    
         participant_id, end_date = self.participant_dates[index]
         start_date = end_date - pd.Timedelta(self.day_window_size -1, unit = "days")
         activity_data = self.get_user_data_in_date_range(participant_id,start_date,end_date)
