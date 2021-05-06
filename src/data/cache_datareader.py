@@ -32,7 +32,11 @@ def validate_reader(dataset_args,data_reader):
     return dont_match
 
 def load_cached_activity_reader(name, dataset_args=None,
-                                fail_if_mismatched=False):
+                                fail_if_mismatched=False,
+                                activity_level="minute"):
+    if not activity_level == "minute":
+        raise NotImplementedError("Can only cache minute level activities")
+        
     cache_path = get_cached_datareader_path(name)
     reader = pickle.load(open(cache_path, "rb" ) )
     if dataset_args:

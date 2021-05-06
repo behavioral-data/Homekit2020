@@ -74,7 +74,9 @@ class ActivityTask(Task):
     """ Is inhereited by anything that operatres over the minute
         level data"""
     def __init__(self,base_dataset,dataset_args={},
-                     activity_level = "minute"):
+                     activity_level = "minute",
+                     look_for_cached_datareader=False):
+        
         super(ActivityTask,self).__init__()
         
         split_date = dataset_args.pop("split_date",None)
@@ -96,7 +98,7 @@ class ActivityTask(Task):
         else:
             base_activity_reader = td.DayLevelActivityReader
 
-        if dataset_args.get("is_cached"):
+        if dataset_args.get("is_cached") and look_for_cached_datareader:
             activity_reader = load_cached_activity_reader(self.get_name(),
                                                           dataset_args=dataset_args,
                                                           fail_if_mismatched=True)
@@ -128,8 +130,8 @@ class GeqMeanSteps(ActivityTask, ClassificationMixin):
     """A dummy task to predict whether or not the total number of steps
        on the first day of a window is >= the mean across the whole dataset"""
     
-    def __init__(self,dataset_args={}):
-        ActivityTask.__init__(self,td.ActivtyDataset,dataset_args=dataset_args)
+    def __init__(self,dataset_args={}, **kwargs):
+        ActivityTask.__init__(self,td.ActivtyDataset,dataset_args=dataset_args, **kwargs)
         ClassificationMixin.__init__(self)
         self.is_classification = True
     
@@ -152,10 +154,11 @@ class PredictFluPos(ActivityTask, ClassificationMixin):
        We validate on data after split_date, but before
        max_date, if provided"""
 
-    def __init__(self,dataset_args={}, activity_level = "minute"):
+    def __init__(self,dataset_args={}, activity_level = "minute",
+                **kwargs):
 
         ActivityTask.__init__(self,td.ActivtyDataset,dataset_args=dataset_args,
-                                 activity_level=activity_level)
+                                 activity_level=activity_level,**kwargs)
         ClassificationMixin.__init__(self)
         
 
@@ -167,9 +170,9 @@ class PredictTrigger(ActivityTask,ClassificationMixin):
     """Predict the whether a participant triggered the 
        test on the last day of a range of data"""
 
-    def __init__(self,dataset_args={}, activity_level="minute"):
+    def __init__(self,dataset_args={}, activity_level="minute", **kwargs):
         ActivityTask.__init__(self,td.PredictTriggerDataset,dataset_args=dataset_args,
-                               activity_level = "minute")
+                               activity_level = activity_level, **kwargs)
         ClassificationMixin.__init__(self)
         # self.is_classification = True
 
@@ -238,7 +241,7 @@ class SingleWindowActivityTask(Task):
        (e.g.) predicting a user's BMI."""
     
     def __init__(self,base_dataset,dataset_args={}, activity_level="minute",
-                window_selection="first"):
+                window_selection="first",look_for_cached_datareader=False, **kwargs):
         Task.__init__(self)
         eval_frac = dataset_args.pop("eval_frac",None)
         split_date = dataset_args.pop("split_date",None)
@@ -256,7 +259,7 @@ class SingleWindowActivityTask(Task):
         else:
             base_activity_reader = td.DayLevelActivityReader
 
-        if dataset_args.get("is_cached"):
+        if dataset_args.get("is_cached") and look_for_cached_datareader:
             activity_reader = load_cached_activity_reader(self.get_name(),
                                                           dataset_args=dataset_args,
                                                           fail_if_mismatched=True)
@@ -289,12 +292,13 @@ class SingleWindowActivityTask(Task):
         return list(candidates.items())
 
 class ClassifyObese(SingleWindowActivityTask, ClassificationMixin):
-    def __init__(self, dataset_args, activity_level, window_selection="first"):
+    def __init__(self, dataset_args, activity_level, window_selection="first",**kwargs):
         dataset_args["labeler"] = self.get_labeler()
         SingleWindowActivityTask.__init__(self, td.CustomLabler, 
                          dataset_args=dataset_args, 
                          activity_level=activity_level, 
-                         window_selection=window_selection)
+                         window_selection=window_selection,
+                         **kwargs)
         ClassificationMixin.__init__(self)      
 
     def get_labeler(self):
@@ -312,7 +316,7 @@ class EarlyDetection(ActivityTask):
     """Mimics the task used by Evidation Health"""
 
     def __init__(self,base_dataset=td.EarlyDetectionDataset,dataset_args={},
-                      activity_level = "minute"):
+                      activity_level = "minute", look_for_cached_datareader=False):
         eval_frac = dataset_args.pop("eval_frac",None)
 
         if not eval_frac:
@@ -333,7 +337,7 @@ class EarlyDetection(ActivityTask):
         else:
             base_activity_reader = td.DayLevelActivityReader
             
-        if dataset_args.get("is_cached"):
+        if dataset_args.get("is_cached") and look_for_cached_datareader:
             logger.info("Loading cached data reader...")
             activity_reader = load_cached_activity_reader(self.get_name())
         else:
