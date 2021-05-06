@@ -202,7 +202,8 @@ def train_cnn_transformer( task_name,
                 activity_level="minute"):
     
     logger.info(f"Training CNNTransformer")
-    dataset_args["eval_frac"] = eval_frac
+    if not eval_frac is None:
+        dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
     
     if sinu_position_encoding:
