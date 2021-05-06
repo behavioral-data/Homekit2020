@@ -1,6 +1,7 @@
-min_date: 2020-01-01 
-max_date: 2020-05-01
-split_date: 2020-02-15
 day_window_size: 4
+is_cached: true
+max_date: 2020-05-01
 max_missing_days_in_window: 2
+min_date: 2020-01-01
+split_date: 2020-03-01
 shuffle: 1
