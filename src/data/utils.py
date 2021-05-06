@@ -2,8 +2,9 @@ import os
 
 import pyarrow.parquet as pq
 import pandas as pd
+from torch.utils import data
 
-from src.utils import load_dotenv, get_logger
+from src.utils import get_logger
 import src.data.constants as constants
 
 import multiprocessing.popen_spawn_posix
@@ -13,14 +14,15 @@ dask.config.set({"distributed.comm.timeouts.connect": "60"})
 
 import dask.dataframe as dd
 
-load_dotenv()
+from dotenv import dotenv_values
+
+config = dotenv_values(".env")
 logger = get_logger()
 
 DATASET_VERSION="2020-07-15"
-MAIN_PATH = "~/seattleflustudy"
-RAW_DATA_PATH = os.path.join(MAIN_PATH,"data","raw","audere","data-export",DATASET_VERSION)
-PROCESSED_DATA_PATH = os.path.join(MAIN_PATH,"data","processed")
-DEBUG_DATA_PATH = os.path.join(MAIN_PATH,"data","debug")
+RAW_DATA_PATH = os.path.join(config["MAIN_PATH"],"data","raw","audere","data-export",DATASET_VERSION)
+PROCESSED_DATA_PATH = os.path.join(config["MAIN_PATH"],"data","processed")
+DEBUG_DATA_PATH = os.path.join(config["MAIN_PATH"],"data","debug")
 
 def get_raw_dataset_path(name):
     if name in constants.MTL_NAMES:
@@ -58,6 +60,15 @@ def get_processed_dataset_path(name):
         return os.path.join(data_path,name) 
     else:
         raise ValueError(f"Looked for {name} in {data_path}, not found!")
+
+def get_cached_datareader_path(name):
+    if os.environ.get("DEBUG_DATA"): 
+        logger.warning("DEBUG_DATA is set, only loading subset of data")
+        data_path = DEBUG_DATA_PATH
+    else:
+        data_path = PROCESSED_DATA_PATH
+    print(data_path)
+    return os.path.join(data_path,"cached_datareaders",name+".pickle")
         
 def find_processed_dataset(name):
     path = get_processed_dataset_path(name)
@@ -70,7 +81,10 @@ def load_processed_table(name,fmt="df"):
     dataset = find_processed_dataset(name)
     for column in dataset.columns:
         if "date" in str(column):
-            dataset[column] = pd.to_datetime(dataset[column])
+            try:
+                dataset[column] = pd.to_datetime(dataset[column])
+            except (TypeError, pd.errors.OutOfBoundsDatetime):
+                continue
     logger.info(f"Reading {name}...")
     if fmt=="df":
         return dataset
