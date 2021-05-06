@@ -404,6 +404,13 @@ class MeanStepsDataset(ActivtyDataset):
         participant_data = self.activity_data.loc[participant_id]
         return participant_data[participant_data.index.date == start_date.date()]["steps"].sum() > self.mean_steps        
 
+class CustomLabler(ActivtyDataset):
+    def __init__(self,*args,**kwargs):
+        self.labeler = kwargs.pop("labeler")
+        super(CustomLabler, self).__init__(*args, **kwargs)
+    def get_label(self, participant_id, start_date, end_date):
+        return self.labeler(participant_id,start_date,end_date)
+
 class AutoencodeDataset(ActivtyDataset):
     def __init__(self,*args,**kwargs):
         super(AutoencodeDataset, self).__init__(*args, **kwargs)
