@@ -246,6 +246,7 @@ class ActivtyDataset(Dataset):
         
         self.activity_reader = activity_reader
         self.activity_data = self.activity_reader.activity_data
+        self.activity_data = self.activity_data.sort_index()
         self.day_window_size = self.activity_reader.day_window_size 
 
         self.lab_results_reader = lab_results_reader
@@ -272,14 +273,17 @@ class ActivtyDataset(Dataset):
             self.cls_init = np.random.randn(1,self.size[-1]).astype(np.float32)   
    
     def get_user_data_in_date_range(self,participant_id, start, end):
-        eod = end + pd.to_timedelta("1D") - pd.to_timedelta("1ms")
+        eod = end + pd.to_timedelta("1D") - pd.to_timedelta("1min")
         return self.get_user_data_in_time_range(participant_id,start,eod)
 
     def get_user_data_in_time_range(self,participant_id,start,end):
-        participant_data = self.activity_data.loc[participant_id]        
-        data = participant_data.loc[start:end]
-        return data
-    
+        assert self.activity_data.index.is_unique
+        assert self.activity_data.index.is_monotonic
+
+        start_ix = self.activity_data.index.get_loc((participant_id,start))
+        end_ix = self.activity_data.index.get_loc((participant_id,end)) + 1
+        return self.activity_data.iloc[start_ix:end_ix]
+
     def get_label(self,participant_id,start_date,end_date):
         try:
             participant_results = self.lab_results_reader.results.loc[participant_id]
