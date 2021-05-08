@@ -121,8 +121,8 @@ class ClassificationModule(nn.Module):
 
         self.fc = nn.Linear(int(d_model * factor), num_class)
 
-        nn.init.normal_(self.fc.weight, std=0.02)
-        nn.init.normal_(self.fc.bias, 0)
+        # nn.init.normal_(self.fc.weight, std=0.02)
+        # nn.init.normal_(self.fc.bias, 0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x.contiguous().view(-1, int(self.factor * self.d_model))
