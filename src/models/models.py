@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
+
 import numpy as np
 
-
 from src.SAnD.core import modules
+from src.models.losses import build_loss_fn
 
 
 def conv_l_out(l_in,kernel_size,stride,padding=0, dilation=1):
@@ -17,6 +18,7 @@ def get_final_conv_l_out(l_in,kernel_sizes,stride_sizes,
         if max_pool_kernel_size and max_pool_kernel_size:
             l_out = conv_l_out(l_out, max_pool_kernel_size,max_pool_stride_size)
     return int(l_out)
+
 
 class CNNEncoder(nn.Module):
     def __init__(self, input_features, n_timesteps,
@@ -57,8 +59,10 @@ class CNNEncoder(nn.Module):
 
 class CNNToTransformerEncoder(nn.Module):
     def __init__(self, input_features, n_heads, n_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
-                stride_sizes=[2,2,2], dropout_rate=0.2, pos_class_weight=1, neg_class_weight=1, n_class=2, 
-                max_positional_embeddings = 1440*5, factor=64) -> None:
+                stride_sizes=[2,2,2], dropout_rate=0.2, n_class=2, 
+                max_positional_embeddings = 1440*5, factor=64,
+                **model_specific_kwargs) -> None:
+
         super(CNNToTransformerEncoder, self).__init__()
         
         self.d_model = out_channels[-1]
@@ -77,9 +81,7 @@ class CNNToTransformerEncoder(nn.Module):
         self.dense_interpolation = modules.DenseInterpolation(self.input_embedding.final_output_length, factor)
         self.clf = modules.ClassificationModule(self.d_model, factor, n_class)
         
-
-        loss_weights = torch.tensor([float(neg_class_weight),float(pos_class_weight)])
-        self.criterion = nn.CrossEntropyLoss(weight=loss_weights)
+        self.criterion = build_loss_fn(model_specific_kwargs)
 
         self.name = "CNNToTransformerEncoder"
         self.base_model_prefix = self.name
