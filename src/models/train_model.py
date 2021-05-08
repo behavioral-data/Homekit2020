@@ -5,7 +5,7 @@ warnings.filterwarnings("ignore")
 
 import click
 
-from src.models.commands import HuggingFaceCommand, BaseCommand
+from src.models.commands import HuggingFaceCommand, BaseCommand, CNNTransformer
 from src.models.autoencode import get_autoencoder_by_name, run_autoencoder
 from src.models.tasks import get_task_with_name, Autoencode
 from src.models.neural_baselines import create_neural_model
@@ -44,13 +44,15 @@ def train_neural_baseline(model_name,task_name,
                          no_wandb=False,
                          notes=None,
                          dataset_args = {},
-                         activity_level="minute"):
+                         activity_level="minute",
+                         look_for_cached_datareader=False):
 
     
 
     logger.info(f"Training {model_name} on {task_name}")
     dataset_args["eval_frac"] = eval_frac
-    task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level)
+    task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level,
+                                        look_for_cached_datareader=look_for_cached_datareader)
 
     train_X, train_y = task.get_train_dataset().to_stacked_numpy()
     eval_X, eval_y  = task.get_eval_dataset().to_stacked_numpy()
@@ -131,13 +133,15 @@ def train_autoencoder(model_name,
                 notes=None,
                 sinu_position_encoding = False,
                 dataset_args = {},
-                activity_level="minute"):
+                activity_level="minute",
+                look_for_cached_datareader=False):
     
     logger.info(f"Training {model_name}")
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
 
-    task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level)
+    task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level,
+                                        look_for_cached_datareader=look_for_cached_datareader)
     
     if sinu_position_encoding:
         dataset_args["add_absolute_embedding"] = True
@@ -162,7 +166,7 @@ def train_autoencoder(model_name,
         logging_dir='./logs',
         logging_steps=10,
         do_eval=True,
-        dataloader_num_workers=0,
+        dataloader_num_workers=16,
         dataloader_pin_memory=True,
         prediction_loss_only=False,
         evaluation_strategy="epoch",
@@ -176,7 +180,7 @@ def train_autoencoder(model_name,
                    no_wandb=no_wandb, notes=notes)
 
 
-@click.command(cls=HuggingFaceCommand)
+@click.command(cls=CNNTransformer)
 @click.argument("task_name")
 def train_cnn_transformer( task_name, 
                 n_epochs=10,
@@ -186,8 +190,6 @@ def train_cnn_transformer( task_name,
                 max_length = 24*60+1,
                 max_position_embeddings=2048, 
                 no_early_stopping=False,
-                pos_class_weight = 1,
-                neg_class_weight = 1,
                 train_batch_size = 4,
                 eval_batch_size = 16,
                 eval_frac = None,
@@ -199,7 +201,9 @@ def train_cnn_transformer( task_name,
                 notes=None,
                 sinu_position_encoding = False,
                 dataset_args = {},
-                activity_level="minute"):
+                activity_level="minute",
+                look_for_cached_datareader=False,
+                **model_specific_kwargs):
     
     logger.info(f"Training CNNTransformer")
     if not eval_frac is None:
@@ -210,7 +214,8 @@ def train_cnn_transformer( task_name,
         dataset_args["add_absolute_embedding"] = True
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args,
-                                        activity_level=activity_level)
+                                        activity_level=activity_level,
+                                        look_for_cached_datareader=look_for_cached_datareader)
     
     
 
@@ -223,8 +228,7 @@ def train_cnn_transformer( task_name,
                                     n_heads = num_attention_heads,
                                     n_layers = num_hidden_layers,
                                     n_class=2,
-                                    pos_class_weight=pos_class_weight,
-                                    neg_class_weight=neg_class_weight)
+                                    **model_specific_kwargs)
                  
 
     training_args = TrainingArguments(
@@ -238,7 +242,7 @@ def train_cnn_transformer( task_name,
         logging_dir='./logs',
         logging_steps=10,
         do_eval=True,
-        dataloader_num_workers=0,
+        dataloader_num_workers=8,
         dataloader_pin_memory=True,
         prediction_loss_only=False,
         evaluation_strategy="epoch",
@@ -278,14 +282,16 @@ def train_sand( task_name,
                 notes=None,
                 sinu_position_encoding = False,
                 dataset_args = {},
-                activity_level="minute"):
+                activity_level="minute",
+                look_for_cached_datareader=False):
     
     logger.info(f"Training SAnD")
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args, 
-                                         activity_level=activity_level)
+                                         activity_level=activity_level,
+                                         look_for_cached_datareader=look_for_cached_datareader)
     
     if sinu_position_encoding:
         dataset_args["add_absolute_embedding"] = True
@@ -316,7 +322,7 @@ def train_sand( task_name,
         logging_dir='./logs',
         logging_steps=10,
         do_eval=True,
-        dataloader_num_workers=0,
+        dataloader_num_workers=16,
         dataloader_pin_memory=True,
         prediction_loss_only=False,
         evaluation_strategy="epoch",
@@ -356,7 +362,8 @@ def train_bert(task_name,
                 notes=None,
                 sinu_position_encoding = False,
                 dataset_args = {},
-                activity_level="minute"):
+                activity_level="minute",
+                look_for_cached_datareader=False):
 
     logger.info(f"Training BERT on {task_name}")
     dataset_args["return_dict"] = True
@@ -370,7 +377,8 @@ def train_bert(task_name,
         position_embedding_type="absolute"
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args,
-                                         activity_level=activity_level)
+                                         activity_level=activity_level,
+                                         look_for_cached_datareader=look_for_cached_datareader)
     
     train_dataset = task.get_train_dataset()
     infer_example = train_dataset[0]["inputs_embeds"]
@@ -446,7 +454,8 @@ def train_longformer(task_name,
                     notes=None,
                     sinu_position_encoding = False,
                     dataset_args = {},
-                    activity_level="minute"):
+                    activity_level="minute",
+                    look_for_cached_datareader=False):
     
     logger.info(f"Training Longformer on {task_name}")
     dataset_args["return_dict"] = True
@@ -454,7 +463,8 @@ def train_longformer(task_name,
     dataset_args["return_global_attention_mask"] = True
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args,
-                                         activity_level=activity_level)
+                                         activity_level=activity_level,
+                                         look_for_cached_datareader=look_for_cached_datareader)
     
     train_dataset = task.get_train_dataset()
     infer_example = train_dataset[0]["inputs_embeds"]
