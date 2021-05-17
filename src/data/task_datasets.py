@@ -13,17 +13,44 @@ import dask.dataframe as dd
 import xgboost as xgb
 dask.config.set({"distributed.comm.timeouts.connect": "60"})
 
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import train_test_split
 
-from src.utils import get_logger
+from src.utils import get_logger, read_yaml
 logger = get_logger()
 
 from src.data.utils import get_dask_df, load_processed_table
-
+from src.models.features import get_feature_with_name
 from tqdm import tqdm
 
 MIN_IN_DAY = 24*60
+
+def feature_generator_from_config_path(feature_config_path,return_meta=True):
+    feature_config = read_yaml(feature_config_path)
+    print(feature_config["feature_names"])
+    feature_fns = [(name,get_feature_with_name(name)) for name in feature_config["feature_names"]]
+
+    meta = {}
+    def gen_features(partiton):
+        result = {}
+        for name, fn in feature_fns:
+            result[name] = float(fn(partiton))
+            meta[name] = float
+        return pd.Series(result)
+    
+    if return_meta:
+        return gen_features, meta
+    else:
+        return gen_features
+
+def calculate_daily_features_with_dask(feature_config_path):
+    # Could almost certainly be improved with: https://docs.dask.org/en/latest/dataframe-groupby.html#aggregate
+    
+    feature_gen, meta  = feature_generator_from_config_path(feature_config_path)
+    dask_df = get_dask_df("processed_fitbit_minute_level_activity")
+    return dask_df.groupby(["participant_id","date"]).apply(feature_gen, result_type='expand', 
+                                                            meta=meta).compute()
+
 class DayLevelActivityReader(object):
     def __init__(self, min_date=None,
                        split_date=None,
@@ -32,7 +59,8 @@ class DayLevelActivityReader(object):
                        day_window_size=15,
                        scaler=MinMaxScaler,
                        max_missing_days_in_window=5,
-                       min_windows=1):
+                       min_windows=1,
+                       add_features_path=None):
         
         self.min_date = min_date
         self.split_date = split_date
@@ -40,10 +68,8 @@ class DayLevelActivityReader(object):
         self.scaler = scaler
         self.min_windows = min_windows
 
-        self.scaler = scaler
         self.day_window_size = day_window_size
         self.max_missing_days_in_window = max_missing_days_in_window
-        self.min_windows = min_windows
         self.obs_per_day = 1
     
         df = load_processed_table("fitbit_day_level_activity")
@@ -66,6 +92,12 @@ class DayLevelActivityReader(object):
 
         self.participant_dates = list(valid_participant_dates.dropna().apply(pd.Series).stack().droplevel(-1).items())
         
+        if add_features_path:
+            features = pd.read_csv(add_features_path)
+            features["date"] = pd.to_datetime(features["date"])
+            features = features.set_index(["participant_id","date"])
+            self.daily_data = self.daily_data.join(features,how="left")
+
         if self.scaler:
             scale_model = self.scaler()
             self.daily_data[self.daily_data.columns] = scale_model.fit_transform(self.daily_data)
@@ -114,7 +146,7 @@ class MinuteLevelActivityReader(object):
                        max_date=None,
                        participant_ids=None,
                        day_window_size=15,
-                       scaler=MinMaxScaler,
+                       scaler=StandardScaler,
                        max_missing_days_in_window=5,
                        min_windows=1,
                        **_):
@@ -280,9 +312,12 @@ class ActivtyDataset(Dataset):
         assert self.activity_data.index.is_unique
         assert self.activity_data.index.is_monotonic
 
-        start_ix = self.activity_data.index.get_loc((participant_id,start))
-        end_ix = self.activity_data.index.get_loc((participant_id,end)) + 1
-        return self.activity_data.iloc[start_ix:end_ix]
+        if isinstance(self.activity_reader,DayLevelActivityReader):
+            return self.activity_data.loc[(participant_id,start):(participant_id,end)]
+        else:
+            start_ix = self.activity_data.index.get_loc((participant_id,start))
+            end_ix = self.activity_data.index.get_loc((participant_id,end)) + 1
+            return self.activity_data.iloc[start_ix:end_ix]
 
     def get_label(self,participant_id,start_date,end_date):
         try:

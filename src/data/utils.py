@@ -38,6 +38,14 @@ def find_raw_dataset(name):
     path = get_raw_dataset_path(name)
     return pq.ParquetDataset(path)
 
+def get_features_path(name):
+    if os.environ.get("DEBUG_DATA"): 
+        logger.warning("DEBUG_DATA is set, only loading subset of data")
+        data_path = DEBUG_DATA_PATH
+    else:
+        data_path = PROCESSED_DATA_PATH
+    return os.path.join(data_path,"features",name+".csv")
+
 def load_raw_table(name,fmt="df"):
     dataset = find_raw_dataset(name)
     logger.info(f"Reading {name}...")

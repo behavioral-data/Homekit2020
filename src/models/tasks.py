@@ -3,7 +3,7 @@ import datetime
 
 import src.data.task_datasets as td
 from src.models.eval import classification_eval, autoencode_eval
-from src.data.utils import load_processed_table
+from src.data.utils import get_features_path, load_processed_table
 from src.data.cache_datareader import load_cached_activity_reader
 from src.utils import get_logger
 logger = get_logger()
@@ -103,11 +103,14 @@ class ActivityTask(Task):
                                                           dataset_args=dataset_args,
                                                           fail_if_mismatched=True)
         else:
+            add_features_path = dataset_args.pop("add_features_path",None)
             activity_reader = base_activity_reader(participant_ids=participant_ids,
                                                            min_date = min_date,
                                                            max_date = max_date,
                                                            day_window_size=day_window_size,
-                                                           max_missing_days_in_window=max_missing_days_in_window)
+                                                           max_missing_days_in_window=max_missing_days_in_window,
+                                                           add_features_path=add_features_path)
+
 
         train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
     
@@ -264,11 +267,14 @@ class SingleWindowActivityTask(Task):
                                                           dataset_args=dataset_args,
                                                           fail_if_mismatched=True)
         else:
+            add_features_path = dataset_args.pop("add_features_path",None)
             activity_reader = base_activity_reader(participant_ids=participant_ids,
                                                            min_date = min_date,
                                                            max_date = max_date,
                                                            day_window_size=day_window_size,
-                                                           max_missing_days_in_window=max_missing_days_in_window)
+                                                           max_missing_days_in_window=max_missing_days_in_window,
+                                                           add_features_path=add_features_path)
+
 
         train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
         if window_selection == "first":
@@ -341,11 +347,13 @@ class EarlyDetection(ActivityTask):
             logger.info("Loading cached data reader...")
             activity_reader = load_cached_activity_reader(self.get_name())
         else:
+            add_features_path = dataset_args.pop("add_features_path",None)
             activity_reader = base_activity_reader(participant_ids=participant_ids,
                                                            min_date = min_date,
                                                            max_date = max_date,
                                                            day_window_size=day_window_size,
-                                                           max_missing_days_in_window=max_missing_days_in_window)
+                                                           max_missing_days_in_window=max_missing_days_in_window,
+                                                           add_features_path=add_features_path)
 
 
         pos_dates = lab_results_reader.results
