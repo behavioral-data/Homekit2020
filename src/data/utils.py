@@ -1,7 +1,9 @@
 import os
+import glob 
 
 import pyarrow.parquet as pq
 import pandas as pd
+import pyarrow as pa
 from torch.utils import data
 
 from src.utils import get_logger
@@ -98,6 +100,16 @@ def load_processed_table(name,fmt="df"):
         return dataset
     else:
         raise ValueError("Unsupported fmt") 
+
+def write_pandas_to_parquet(df,path,write_metadata=True,
+                            partition_cols=[]):
+    table = pa.Table.from_pandas(df, preserve_index=False)
+    
+    pq.write_to_dataset(table, root_path=path,
+                    partition_cols=partition_cols)
+    if write_metadata:
+        paths = glob.glob(os.path.join(path,"*","*.parquet"))
+        dd.io.parquet.create_metadata_file(paths)
 
 # @dask.delayed
 def get_dask_df(name,min_date=None,max_date=None,index=None):

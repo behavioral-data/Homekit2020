@@ -45,12 +45,14 @@ def train_neural_baseline(model_name,task_name,
                          notes=None,
                          dataset_args = {},
                          activity_level="minute",
-                         look_for_cached_datareader=False):
+                         look_for_cached_datareader=False,
+                         data_location=None):
 
     
 
     logger.info(f"Training {model_name} on {task_name}")
     dataset_args["eval_frac"] = eval_frac
+    dataset_args["data_location"] = data_location
     task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level,
                                         look_for_cached_datareader=look_for_cached_datareader)
 
@@ -134,11 +136,14 @@ def train_autoencoder(model_name,
                 sinu_position_encoding = False,
                 dataset_args = {},
                 activity_level="minute",
-                look_for_cached_datareader=False):
+                look_for_cached_datareader=False,
+                data_location=None,
+                no_eval_during_training=False):
     
     logger.info(f"Training {model_name}")
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
+    dataset_args["data_location"] = data_location
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level,
                                         look_for_cached_datareader=look_for_cached_datareader)
@@ -165,7 +170,7 @@ def train_autoencoder(model_name,
         learning_rate=learning_rate,               # strength of weight decay
         logging_dir='./logs',
         logging_steps=10,
-        do_eval=True,
+        do_eval=not no_eval_during_training,
         dataloader_num_workers=16,
         dataloader_pin_memory=True,
         prediction_loss_only=False,
@@ -203,12 +208,15 @@ def train_cnn_transformer( task_name,
                 dataset_args = {},
                 activity_level="minute",
                 look_for_cached_datareader=False,
+                data_location=None,
+                no_eval_during_training=False,
                 **model_specific_kwargs):
     
     logger.info(f"Training CNNTransformer")
     if not eval_frac is None:
         dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
+    dataset_args["data_location"] = data_location
     
     if sinu_position_encoding:
         dataset_args["add_absolute_embedding"] = True
@@ -241,8 +249,8 @@ def train_cnn_transformer( task_name,
         learning_rate=learning_rate,               # strength of weight decay
         logging_dir='./logs',
         logging_steps=10,
-        do_eval=True,
-        dataloader_num_workers=8,
+        do_eval=not no_eval_during_training,
+        dataloader_num_workers=0,
         dataloader_pin_memory=True,
         prediction_loss_only=False,
         evaluation_strategy="epoch",
@@ -283,11 +291,14 @@ def train_sand( task_name,
                 sinu_position_encoding = False,
                 dataset_args = {},
                 activity_level="minute",
-                look_for_cached_datareader=False):
+                look_for_cached_datareader=False,
+                data_location=None,
+                no_eval_during_training=False):
     
     logger.info(f"Training SAnD")
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
+    dataset_args["data_location"] = data_location
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args, 
                                          activity_level=activity_level,
@@ -321,7 +332,7 @@ def train_sand( task_name,
         learning_rate=learning_rate,               # strength of weight decay
         logging_dir='./logs',
         logging_steps=10,
-        do_eval=True,
+        do_eval=not no_eval_during_training,
         dataloader_num_workers=16,
         dataloader_pin_memory=True,
         prediction_loss_only=False,
@@ -363,11 +374,14 @@ def train_bert(task_name,
                 sinu_position_encoding = False,
                 dataset_args = {},
                 activity_level="minute",
-                look_for_cached_datareader=False):
+                look_for_cached_datareader=False,
+                no_eval_during_training=False,
+                data_location=None):
 
     logger.info(f"Training BERT on {task_name}")
     dataset_args["return_dict"] = True
     dataset_args["eval_frac"] = eval_frac
+    dataset_args["data_location"] = data_location
     
     
     if sinu_position_encoding:
@@ -395,7 +409,7 @@ def train_bert(task_name,
         learning_rate=learning_rate,               # strength of weight decay
         logging_dir='./logs',
         logging_steps=10,
-        do_eval=True,
+        do_eval=not no_eval_during_training,
         prediction_loss_only=False,
         evaluation_strategy="epoch",
         report_to=["wandb"]            # directory for storing logs
@@ -455,12 +469,15 @@ def train_longformer(task_name,
                     sinu_position_encoding = False,
                     dataset_args = {},
                     activity_level="minute",
-                    look_for_cached_datareader=False):
+                    look_for_cached_datareader=False,
+                    no_eval_during_training=False,
+                    data_location=None):
     
     logger.info(f"Training Longformer on {task_name}")
     dataset_args["return_dict"] = True
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_global_attention_mask"] = True
+    dataset_args["data_location"] = data_location
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args,
                                          activity_level=activity_level,
@@ -480,7 +497,7 @@ def train_longformer(task_name,
         learning_rate=learning_rate,               # strength of weight decay
         logging_dir='./logs',
         logging_steps=10,
-        do_eval=True,
+        do_eval=not no_eval_during_training,
         prediction_loss_only=False,
         evaluation_strategy="epoch",
         report_to=["wandb"]            # directory for storing logs

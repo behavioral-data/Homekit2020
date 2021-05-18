@@ -149,6 +149,7 @@ class MinuteLevelActivityReader(object):
                        scaler=StandardScaler,
                        max_missing_days_in_window=5,
                        min_windows=1,
+                       data_location=None,
                        **_):
         
         self.min_date = min_date
@@ -167,7 +168,10 @@ class MinuteLevelActivityReader(object):
         #pylint:disable=unused-variable 
         with Client(n_workers=min(n_cores,16), threads_per_worker=1) as client:
 
-            dask_df = get_dask_df("processed_fitbit_minute_level_activity")
+            if data_location:
+                dask_df = dd.read_parquet(data_location)
+            else:
+                dask_df = get_dask_df("processed_fitbit_minute_level_activity")
         
             if not participant_ids is None:
                 dask_df = dask_df[dask_df["participant_id"].isin(participant_ids)] 
