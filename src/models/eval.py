@@ -1,12 +1,15 @@
 import numpy as np
 import pandas as pd
+import wandb
 
 from scipy.special import softmax
 from scipy.stats import pearsonr, spearmanr
 
 from sklearn.metrics import (accuracy_score,precision_recall_fscore_support, roc_auc_score,
                             mean_absolute_error)
+
 from functools import partial
+from src.utils import check_for_wandb_run
 
 def classification_eval(logits, labels, threshold = 0.5):
 
@@ -22,11 +25,14 @@ def classification_eval(logits, labels, threshold = 0.5):
     support = pd.Series(labels).value_counts().to_dict()
     results["classification_support"] = support
 
-    accuracy =  accuracy_score(labels, classes)
+    accuracy = accuracy_score(labels, classes)
     results["classification_accuracy"] = accuracy
 
     results["roc_auc"] = roc_auc_score(labels,input_probs[:,-1])
 
+    if check_for_wandb_run():
+        results["roc"] = wandb.plot.roc_curve(labels, input_probs,
+                                            labels=["Negative","Positive"], classes_to_plot=[1])
     return results
 
 def get_huggingface_classification_eval(threshold=0.5):
@@ -38,7 +44,6 @@ def get_huggingface_classification_eval(threshold=0.5):
         return classification_eval(logits,labels,threshold=threshold)
     
     return evaluator
-
 
 
 
