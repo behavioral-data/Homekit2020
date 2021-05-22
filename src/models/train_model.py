@@ -238,7 +238,6 @@ def train_cnn_transformer( task_name,
                                     n_class=2,
                                     **model_specific_kwargs)
                  
-
     training_args = TrainingArguments(
         output_dir='./results',          # output directorz
         num_train_epochs=n_epochs,              # total # of training epochs
@@ -253,7 +252,7 @@ def train_cnn_transformer( task_name,
         dataloader_num_workers=0,
         dataloader_pin_memory=True,
         prediction_loss_only=False,
-        evaluation_strategy="epoch",
+        evaluation_strategy="no" if no_eval_during_training else "epoch",
         report_to=["wandb"]            # directory for storing logs
     )
 
@@ -532,6 +531,8 @@ def run_huggingface(model,base_trainer,training_args,
                    notes=notes)
         wandb.run.summary["task"] = task.get_name()
         wandb.run.summary["model"] = model.base_model_prefix
+        training_args.output_dir = wandb.run.dir
+
 
     train_dataset = task.get_train_dataset()
     eval_dataset = task.get_eval_dataset()
@@ -547,8 +548,12 @@ def run_huggingface(model,base_trainer,training_args,
 
     trainer = base_trainer(**trainer_args)  
     trainer.train()
-    trainer.evaluate()
+    # trainer.evaluate()
+    eval_metrics = trainer.predict(eval_dataset, metric_key_prefix="").metrics
+    eval_metrics = {"eval/"+k[1:] : v for k,v in eval_metrics.items()}
+
     train_metrics = trainer.predict(train_dataset, metric_key_prefix="").metrics
+    train_metrics.pop("_roc")
     train_metrics = {"train/"+k[1:] : v for k,v in train_metrics.items()}
     
     if wandb:
@@ -559,4 +564,6 @@ def run_huggingface(model,base_trainer,training_args,
         params = dict(model.named_parameters())
         model_img_path = render_network_plot(pred_dummy, wandb.run.dir,params=params )
         wandb.log({"model_img": [wandb.Image(Image.open(model_img_path), caption="Model Graph")]})
+        wandb.log(eval_metrics)
         wandb.log(train_metrics)
+    
