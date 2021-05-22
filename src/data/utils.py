@@ -3,6 +3,7 @@ import glob
 
 import pyarrow.parquet as pq
 import pandas as pd
+
 import pyarrow as pa
 from torch.utils import data
 
@@ -90,10 +91,10 @@ def find_processed_dataset(name):
 def load_processed_table(name,fmt="df"):
     dataset = find_processed_dataset(name)
     for column in dataset.columns:
-        if "date" in str(column):
+        if "date" in str(column) or "time" in str(column):
             try:
                 dataset[column] = pd.to_datetime(dataset[column])
-            except (TypeError, pd.errors.OutOfBoundsDatetime):
+            except (ValueError, TypeError, pd.errors.OutOfBoundsDatetime):
                 continue
     logger.info(f"Reading {name}...")
     if fmt=="df":
@@ -112,8 +113,9 @@ def write_pandas_to_parquet(df,path,write_metadata=True,
         dd.io.parquet.create_metadata_file(paths)
 
 # @dask.delayed
-def get_dask_df(name,min_date=None,max_date=None,index=None):
-    path = get_processed_dataset_path(name)
+def get_dask_df(name,path= None,min_date=None,max_date=None,index=None):
+    if not path:
+        path = get_processed_dataset_path(name)
     filters = []
     # if min_date:
     #     filters.append(("date",">=",min_date))
