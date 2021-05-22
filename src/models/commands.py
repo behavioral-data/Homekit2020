@@ -31,7 +31,7 @@ huggingface_options = [
         click.Option(('--learning_rate',), default = 5e-5),
         click.Option(('--sinu_position_encoding',), is_flag=True, default=False),
         click.Option(('--classification_threshold',), default = 0.5),
-        click.Option(('--no_eval_during_training',), default = False),
+        click.Option(('--no_eval_during_training',), is_flag=True, default = False),
 ]
 
 universal_options = [
@@ -46,7 +46,7 @@ universal_options = [
 loss_options = [
     click.Option(("--loss_fn",), type=str, default="CrossEntropyLoss"),
     click.Option(("--focal_alpha",),default=0.25),
-    click.Option(("--focal_gamma",),default=2)
+    click.Option(("--focal_gamma",),default=2.0)
 ]
 
 class BaseCommand(click.Command):
