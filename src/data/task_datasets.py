@@ -167,12 +167,9 @@ class MinuteLevelActivityReader(object):
         
         #pylint:disable=unused-variable 
         with Client(n_workers=min(n_cores,16), threads_per_worker=1) as client:
-
-            if data_location:
-                dask_df = dd.read_parquet(data_location)
-            else:
-                dask_df = get_dask_df("processed_fitbit_minute_level_activity")
-        
+            dask_df = get_dask_df("processed_fitbit_minute_level_activity",
+                                    path = data_location)
+    
             if not participant_ids is None:
                 dask_df = dask_df[dask_df["participant_id"].isin(participant_ids)] 
 
