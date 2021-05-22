@@ -89,6 +89,7 @@ class ActivityTask(Task):
         max_date = dataset_args.get("max_date",None)
         day_window_size = dataset_args.get("day_window_size",None)
         max_missing_days_in_window = dataset_args.get("max_missing_days_in_window",None)
+        data_location = dataset_args.get("data_location",None)
 
         lab_results_reader = td.LabResultsReader()
         participant_ids = lab_results_reader.participant_ids
@@ -109,7 +110,8 @@ class ActivityTask(Task):
                                                            max_date = max_date,
                                                            day_window_size=day_window_size,
                                                            max_missing_days_in_window=max_missing_days_in_window,
-                                                           add_features_path=add_features_path)
+                                                           add_features_path=add_features_path,
+                                                           data_location = data_location)
 
 
         train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
@@ -182,55 +184,34 @@ class PredictTrigger(ActivityTask,ClassificationMixin):
     def get_name(self):
         return "PredictTrigger"
 
-class PredictSurveyCol(Task,ClassificationMixin):
-    """Predict the whether a given column in the onehot
-       encoded surverys is true for a given day"""
-
-    def __init__(self,dataset_args={}):
-        Task.__init__(self)
-        ClassificationMixin.__init__(self)
-        
-        self.survey_col = dataset_args.pop("survey_col",None)
-        if self.survey_col is None:
-            raise ValueError("Must provide a column from 'daily_surveys_onehot.csv' as 'survey_col' in 'dataset_args'")
-        
-        split_date = dataset_args.pop("split_date",None)
-        eval_frac = dataset_args.pop("eval_frac",None)
-
-        if not split_date:
-            raise KeyError("Must provide a date for splitting train and ")
-        
-        min_date = dataset_args.pop("min_date",None)
-        max_date = dataset_args.pop("max_date",None)
-        day_window_size = dataset_args.pop("day_window_size",None)
-        max_missing_days_in_window = dataset_args.pop("max_missing_days_in_window",None)
-        data_location = dataset_args.pop("data_location",None)
-
-        lab_results_reader = td.LabResultsReader()
-        participant_ids = lab_results_reader.participant_ids
-
-        
-        minute_level_reader = td.MinuteLevelActivityReader(participant_ids=participant_ids,
-                                                           min_date = min_date,
-                                                           max_date = max_date,
-                                                           day_window_size=day_window_size,
-                                                           max_missing_days_in_window=max_missing_days_in_window,
-                                                           data_location=data_location)
-
-        train_participant_dates, eval_participant_dates = minute_level_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
-
-        survey_resutls = load_processed_table("lab_results_with_trigger_date")
-        # has_survey = survey_resutls[survey_resutls[]]
-
+class PredictSurveyClause(ActivityTask,ClassificationMixin):
+    """Predict the whether a clause in the onehot
+       encoded surveys is true for a given day. 
+       
+       For a sense of what kind of logical clauses are
+       supported, check out:
     
-        self.train_dataset = base_dataset(minute_level_reader, lab_results_reader,
-                        participant_dates = train_participant_dates,**dataset_args)
-        self.eval_dataset = base_dataset(minute_level_reader, lab_results_reader,
-                        participant_dates = eval_participant_dates,**dataset_args)
+       https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.query.html"""
 
+    def __init__(self,dataset_args={},activity_level="minute", **kwargs):
+        self.clause = dataset_args.pop("clause")
+        self.survey_responses = load_processed_table("daily_surveys_onehot").set_index("participant_id")
+
+        dataset_args["labeler"] = self.get_labeler()
+        ActivityTask.__init__(self, td.CustomLabler, dataset_args=dataset_args,
+                             activity_level=activity_level, **kwargs)
+        ClassificationMixin.__init__(self)
+    
+    def get_labeler(self):
+        def labeler(participant_id,start_date,end_date):
+            participant_data = self.survey_responses.loc[participant_id]
+            on_date = participant_data[participant_data["timestamp"].dt.date == end_date]
+            meets_clause = on_date.query(self.clause)
+            return len(meets_clause) > 0
+        return labeler
 
     def get_name(self):
-        return f"PredictSurveyCol-{self.survey_col}"
+        return f"PredictSurveyCol-{self.clause}"
 
     def get_description(self):
         return self.__doc__
