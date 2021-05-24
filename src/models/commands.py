@@ -21,7 +21,7 @@ huggingface_options = [
         click.Option(('--max_position_embeddings',), default = 2048),
         # Training Args:
         click.Option(('--pos_class_weight',), default = 1),
-        click.Option(('--neg_class_weight',), default = 4),
+        click.Option(('--neg_class_weight',), default = 1),
         click.Option(('--train_batch_size',), default = 20),
         click.Option(('--eval_batch_size',), default = 60),
         click.Option(('--no_early_stopping',), is_flag=True),
