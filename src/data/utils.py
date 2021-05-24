@@ -3,7 +3,7 @@ import glob
 
 import pyarrow.parquet as pq
 import pandas as pd
-
+from scipy.special import softmax
 import pyarrow as pa
 from torch.utils import data
 
@@ -127,3 +127,9 @@ def get_dask_df(name,path= None,min_date=None,max_date=None,index=None):
     else: 
         df = dd.read_parquet(path,index=index)
     return df
+
+def load_results(path):
+    results = pd.read_json(path,lines=True)
+    logits = pd.DataFrame(results["logits"].tolist(), columns=["pos_logit","neg_logit"])
+    softmax_results = softmax(logits,axis=1)["neg_logit"].rename("pos_prob")
+    return pd.concat([results["label"],logits,softmax_results],axis=1)
