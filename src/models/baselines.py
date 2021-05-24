@@ -9,6 +9,8 @@ import wandb
 from src.models.tasks import get_task_with_name
 from src.utils import get_logger
 from src.models.commands import BaseCommand
+from src.models.eval import classification_eval
+
 logger = get_logger()
 
 @click.command()
@@ -75,21 +77,30 @@ def train_xgboost(task_name, dataset_args ={},
     param['nthread'] = 4
     param['eval_metric'] = 'auc'
     evallist = [(eval, 'eval'), (train, 'train')]
-    
     callbacks = []
     if not no_wandb:
         wandb.init(project="flu",
                    entity="mikeamerrill",
                    notes=notes)
         wandb.run.summary["task"] = task.get_name()
-        wandb.run.summary["model"] = "XGBoost"
+
+        if add_features_path:
+            model_name = "XGBoost-ExpertFeatures"
+        else:
+            model_name = "XGBoost"
+        wandb.run.summary["model"] = model_name
         callbacks.append(xgb_wandb_callback())
     
     bst = xgb.train(param, train, 10, evallist, callbacks=callbacks)
-    
+    eval_pred = bst.predict(eval)
+    eval_logits = np.stack([1-eval_pred,eval_pred],axis=1)
+    results = classification_eval(eval_logits,eval.get_label())
+
+
     if not no_wandb:
         xgb.plot_importance(bst)
         plt.tight_layout()
         wandb.log({"feature_importance": wandb.Image(plt)})
+        wandb.log(results)
 
     
