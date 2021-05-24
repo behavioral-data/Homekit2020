@@ -204,7 +204,12 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
     
     def get_labeler(self):
         def labeler(participant_id,start_date,end_date):
-            participant_data = self.survey_responses.loc[participant_id]
+            try:
+                participant_data = self.survey_responses.loc[participant_id]
+            except KeyError:
+                return 0
+            if isinstance(participant_data, pd.Series):
+                participant_data = pd.DataFrame(participant_data).T
             on_date = participant_data[participant_data["timestamp"].dt.date == end_date]
             meets_clause = on_date.query(self.clause)
             return len(meets_clause) > 0
