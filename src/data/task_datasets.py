@@ -60,7 +60,8 @@ class DayLevelActivityReader(object):
                        scaler=MinMaxScaler,
                        max_missing_days_in_window=5,
                        min_windows=1,
-                       add_features_path=None):
+                       add_features_path=None,
+                       data_location=None):
         
         self.min_date = min_date
         self.split_date = split_date
@@ -71,10 +72,15 @@ class DayLevelActivityReader(object):
         self.day_window_size = day_window_size
         self.max_missing_days_in_window = max_missing_days_in_window
         self.obs_per_day = 1
-    
+
+        if data_location:
+            raise NotImplementedError("Haven't done this yet...")
+
         df = load_processed_table("fitbit_day_level_activity")
 
         date_filters = []
+        filters = []
+
         if min_date: 
             min_datetime = pd.to_datetime(min_date)
             date_filters.append(df["date"] >= min_datetime)
@@ -82,8 +88,10 @@ class DayLevelActivityReader(object):
         if max_date:
             max_datetime = pd.to_datetime(max_date)
             date_filters.append(df["date"] < max_datetime)
-
-        filters = reduce(bit_and,date_filters)
+        
+        if date_filters:
+            filters = reduce(bit_and,date_filters)
+            
         if not len(filters) == 0:
             df = df[filters]
 
@@ -174,7 +182,8 @@ class MinuteLevelActivityReader(object):
                 dask_df = dask_df[dask_df["participant_id"].isin(participant_ids)] 
 
             date_filters = []
-            
+            filters = []
+
             if min_date: 
                 min_datetime = pd.to_datetime(min_date)
                 date_filters.append(dask_df["timestamp"] >= min_datetime)
@@ -182,7 +191,9 @@ class MinuteLevelActivityReader(object):
             if max_date:
                 max_datetime = pd.to_datetime(max_date)
                 date_filters.append(dask_df["timestamp"] < max_datetime)
-            filters = reduce(bit_and,date_filters)
+            
+            if date_filters:
+                filters = reduce(bit_and,date_filters)
 
             if not len(filters) == 0:
                 dask_df = dask_df[filters]
