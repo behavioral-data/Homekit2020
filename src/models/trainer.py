@@ -3,12 +3,14 @@ import collections
 from typing import List, Optional, Union
 import os
 from numpy import e
+import time
 
 import torch
 from torch.utils.data import DataLoader
+from torch.utils.data.dataset import Dataset
 
 from transformers import Trainer
-from transformers.trainer_utils import PredictionOutput, EvalPrediction
+from transformers.trainer_utils import PredictionOutput, EvalPrediction, speed_metrics
 from transformers.file_utils import  is_torch_tpu_available
 from transformers.trainer_pt_utils import (
     DistributedTensorGatherer,
@@ -158,7 +160,7 @@ class FluTrainer(Trainer):
         if not os.path.exists(eval_out_dir):
             os.mkdir(eval_out_dir)
         
-        if description=="Prediction":
+        if description=="Train":
             prefix = "train"
         else:
             prefix="eval"
@@ -168,3 +170,49 @@ class FluTrainer(Trainer):
         logger.info(f"Logging results to {eval_out_path}")
         with open(eval_out_path, "w") as result_file:
             write_jsonl(result_file, results)
+    
+    def predict(
+        self, test_dataset: Dataset, ignore_keys: Optional[List[str]] = None, metric_key_prefix: str = "eval",
+        description="Prediction"
+    ) -> PredictionOutput:
+        """
+        Run prediction and returns predictions and potential metrics.
+
+        Depending on the dataset and your use case, your test dataset may contain labels. In that case, this method
+        will also return metrics, like in :obj:`evaluate()`.
+
+        Args:
+            test_dataset (:obj:`Dataset`):
+                Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
+                ``model.forward()`` method are automatically removed. Has to implement the method :obj:`__len__`
+            ignore_keys (:obj:`Lst[str]`, `optional`):
+                A list of keys in the output of your model (if it is a dictionary) that should be ignored when
+                gathering predictions.
+            metric_key_prefix (:obj:`str`, `optional`, defaults to :obj:`"eval"`):
+                An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
+                "eval_bleu" if the prefix is "eval" (default)
+
+        .. note::
+
+            If your predictions or labels have different sequence length (for instance because you're doing dynamic
+            padding in a token classification task) the predictions will be padded (on the right) to allow for
+            concatenation into one array. The padding index is -100.
+
+        Returns: `NamedTuple` A namedtuple with the following keys:
+
+            - predictions (:obj:`np.ndarray`): The predictions on :obj:`test_dataset`.
+            - label_ids (:obj:`np.ndarray`, `optional`): The labels (if the dataset contained some).
+            - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset
+              contained labels).
+        """
+        if test_dataset is not None and not isinstance(test_dataset, collections.abc.Sized):
+            raise ValueError("test_dataset must implement __len__")
+
+        test_dataloader = self.get_test_dataloader(test_dataset)
+        start_time = time.time()
+
+        output = self.prediction_loop(
+            test_dataloader, description=description, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
+        )
+        output.metrics.update(speed_metrics(metric_key_prefix, start_time, len(test_dataset)))
+        return output

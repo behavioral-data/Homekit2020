@@ -552,7 +552,8 @@ def run_huggingface(model,base_trainer,training_args,
     eval_metrics = trainer.predict(eval_dataset, metric_key_prefix="").metrics
     eval_metrics = {"eval/"+k[1:] : v for k,v in eval_metrics.items()}
 
-    train_metrics = trainer.predict(train_dataset, metric_key_prefix="").metrics
+    train_metrics = trainer.predict(train_dataset, metric_key_prefix="",
+                                    description="Train").metrics
     train_metrics.pop("_roc")
     train_metrics = {"train/"+k[1:] : v for k,v in train_metrics.items()}
     
