@@ -55,11 +55,13 @@ def train_xgboost(task_name, dataset_args ={},
                 notes=None,
                 activity_level="day",
                 look_for_cached_datareader = False,
-                add_features_path=None):
+                add_features_path=None,
+                data_location=None):
 
     """ Baseline for classification tasks that uses daily aggregated features"""
     logger.info(f"Training XGBoost on {task_name}")
     dataset_args["add_features_path"] = add_features_path
+    # dataset_args["data_location"] = data_location
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args,
                                          activity_level="day")
