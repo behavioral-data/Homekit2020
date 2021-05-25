@@ -233,9 +233,9 @@ def train_cnn_transformer( task_name,
 
     model = CNNToTransformerEncoder(input_features=n_features,
                                     n_timesteps=n_timesteps,
-                                    n_heads = num_attention_heads,
-                                    n_layers = num_hidden_layers,
-                                    n_class=2,
+                                    num_attention_heads = num_attention_heads,
+                                    num_hidden_layers = num_hidden_layers,
+                                    num_labels=2,
                                     **model_specific_kwargs)
                  
     training_args = TrainingArguments(
@@ -532,19 +532,19 @@ def run_huggingface(model,base_trainer,training_args,
         wandb.run.summary["task"] = task.get_name()
         wandb.run.summary["model"] = model.base_model_prefix
         training_args.output_dir = wandb.run.dir
-
+        wandb.log({"run_dir":wandb.run.dir})
 
     train_dataset = task.get_train_dataset()
     eval_dataset = task.get_eval_dataset()
 
-
+    training_args.save_total_limit=3
     trainer_args = dict(
             model=model,
             args=training_args,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             compute_metrics=metrics,
-            save_eval=True)
+            save_eval=True,)
 
     trainer = base_trainer(**trainer_args)  
     trainer.train()

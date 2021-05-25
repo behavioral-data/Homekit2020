@@ -58,8 +58,8 @@ class CNNEncoder(nn.Module):
 
 
 class CNNToTransformerEncoder(nn.Module):
-    def __init__(self, input_features, n_heads, n_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
-                stride_sizes=[2,2,2], dropout_rate=0.2, n_class=2, 
+    def __init__(self, input_features, num_attention_heads, num_hidden_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
+                stride_sizes=[2,2,2], dropout_rate=0.2, num_labels=2, 
                 max_positional_embeddings = 1440*5, factor=64,
                 **model_specific_kwargs) -> None:
 
@@ -75,11 +75,11 @@ class CNNToTransformerEncoder(nn.Module):
             
         self.positional_encoding = modules.PositionalEncoding(self.d_model, max_positional_embeddings)
         self.blocks = nn.ModuleList([
-            modules.EncoderBlock(self.d_model, n_heads, dropout_rate) for _ in range(n_layers)
+            modules.EncoderBlock(self.d_model, num_attention_heads, dropout_rate) for _ in range(num_hidden_layers)
         ])
         
         self.dense_interpolation = modules.DenseInterpolation(self.input_embedding.final_output_length, factor)
-        self.clf = modules.ClassificationModule(self.d_model, factor, n_class)
+        self.clf = modules.ClassificationModule(self.d_model, factor, num_labels)
         
         self.criterion = build_loss_fn(model_specific_kwargs)
 
