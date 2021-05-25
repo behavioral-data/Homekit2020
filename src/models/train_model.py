@@ -1,4 +1,5 @@
 import warnings
+import os
 
 from torch import tensor
 warnings.filterwarnings("ignore")
@@ -13,6 +14,7 @@ from src.models.models import CNNToTransformerEncoder
 from src.models.trainer import FluTrainer
 from src.SAnD.core.model import SAnD
 from src.utils import get_logger, render_network_plot
+from src.data.utils import write_dict_to_json
 
 from transformers import (BertForSequenceClassification, Trainer, 
                          TrainingArguments, BertConfig, 
@@ -248,6 +250,7 @@ def train_cnn_transformer( task_name,
         learning_rate=learning_rate,               # strength of weight decay
         logging_dir='./logs',
         logging_steps=10,
+        save_steps=10,
         do_eval=not no_eval_during_training,
         dataloader_num_workers=0,
         dataloader_pin_memory=True,
@@ -536,6 +539,10 @@ def run_huggingface(model,base_trainer,training_args,
 
     train_dataset = task.get_train_dataset()
     eval_dataset = task.get_eval_dataset()
+
+    if model.config:
+        write_dict_to_json(model.config.to_dict(),
+                           os.path.join(training_args.output_dir,"model_config.json"))
 
     training_args.save_total_limit=3
     trainer_args = dict(

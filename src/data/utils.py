@@ -1,5 +1,6 @@
 import os
 import glob 
+import json
 
 import pyarrow.parquet as pq
 import pandas as pd
@@ -133,3 +134,7 @@ def load_results(path):
     logits = pd.DataFrame(results["logits"].tolist(), columns=["pos_logit","neg_logit"])
     softmax_results = softmax(logits,axis=1)["neg_logit"].rename("pos_prob")
     return pd.concat([results["label"],logits,softmax_results],axis=1)
+
+def write_dict_to_json(data,path):
+    with open(path, 'w') as outfile:
+        json.dump(data, outfile)

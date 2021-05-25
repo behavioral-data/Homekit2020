@@ -1,10 +1,19 @@
+from copy import copy
+
 import torch
 import torch.nn as nn
 
 import numpy as np
+from transformers import PretrainedConfig
 
 from src.SAnD.core import modules
 from src.models.losses import build_loss_fn
+
+class Config(object):
+    def __init__(self,data) -> None:
+        self.data = data
+    def to_dict(self):
+        return self.data
 
 
 def conv_l_out(l_in,kernel_size,stride,padding=0, dilation=1):
@@ -19,6 +28,15 @@ def get_final_conv_l_out(l_in,kernel_sizes,stride_sizes,
             l_out = conv_l_out(l_out, max_pool_kernel_size,max_pool_stride_size)
     return int(l_out)
 
+def get_config_from_locals(locals,model_type=None):
+    locals = copy(locals)
+    locals.pop("self",None)
+    name = getattr(locals.pop("__class__",None),"__name__",None)
+    locals["model_base_class"] = name
+
+    model_specific_kwargs = locals.pop("model_specific_kwargs",{})
+    locals.update(model_specific_kwargs)
+    return Config(locals)
 
 class CNNEncoder(nn.Module):
     def __init__(self, input_features, n_timesteps,
@@ -62,6 +80,7 @@ class CNNToTransformerEncoder(nn.Module):
                 stride_sizes=[2,2,2], dropout_rate=0.2, num_labels=2, 
                 max_positional_embeddings = 1440*5, factor=64,
                 **model_specific_kwargs) -> None:
+        self.config = get_config_from_locals(locals())
 
         super(CNNToTransformerEncoder, self).__init__()
         
