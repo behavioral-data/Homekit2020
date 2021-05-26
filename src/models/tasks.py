@@ -82,8 +82,9 @@ class ActivityTask(Task):
         split_date = dataset_args.pop("split_date",None)
         eval_frac = dataset_args.pop("eval_frac",None)
 
-        if not split_date:
-            raise KeyError("Must provide a date for splitting train and ")
+        if not split_date or not eval_frac:
+            raise KeyError("Must provide some strategy for splitting train\
+                           and test. Either 'split_date' or 'eval_frac'")
         
         min_date = dataset_args.get("min_date",None)
         max_date = dataset_args.get("max_date",None)
