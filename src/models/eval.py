@@ -33,6 +33,8 @@ def classification_eval(logits, labels, threshold = 0.5):
     if check_for_wandb_run():
         results["roc"] = wandb.plot.roc_curve(labels, input_probs,
                                             labels=["Negative","Positive"], classes_to_plot=[1])
+        results["pr"] = wandb.plot.pr_curve(labels, input_probs,
+                                            labels=["Negative","Positive"], classes_to_plot=[1])
     return results
 
 def get_huggingface_classification_eval(threshold=0.5):
