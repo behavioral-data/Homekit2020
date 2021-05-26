@@ -35,6 +35,8 @@ huggingface_options = [
 ]
 
 universal_options = [
+    click.Option(("--model_path",), type=click.Path(file_okay=False,exists=True),
+                  help = "path containing a checkpoint-X directory and a model_config.json"),
     click.Option(('--no_wandb',), is_flag=True),
     click.Option(('--notes',), type=str, default=None),
     click.Option(('--dataset_args',), default=None,callback=validate_dataset_args),
@@ -48,7 +50,6 @@ loss_options = [
     click.Option(("--focal_alpha",),default=0.25),
     click.Option(("--focal_gamma",),default=2.0)
 ]
-
 class BaseCommand(click.Command):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -138,3 +138,8 @@ def load_results(path):
 def write_dict_to_json(data,path):
     with open(path, 'w') as outfile:
         json.dump(data, outfile)
+    
+
+def load_json(path):
+    with open(path, 'r') as infile:
+        return json.load(infile)

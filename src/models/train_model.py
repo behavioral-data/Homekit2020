@@ -15,6 +15,7 @@ from src.models.trainer import FluTrainer
 from src.SAnD.core.model import SAnD
 from src.utils import get_logger, render_network_plot
 from src.data.utils import write_dict_to_json
+from src.models.load_model import load_model_from_checkpoint
 
 from transformers import (BertForSequenceClassification, Trainer, 
                          TrainingArguments, BertConfig, 
@@ -38,6 +39,7 @@ logger = get_logger()
 @click.option("--eval_frac", default=0.15)
 @click.option("--no_early_stopping",is_flag=True)
 def train_neural_baseline(model_name,task_name,
+                         model_path=None,
                          n_epochs=10,
                          no_early_stopping=False,
                          pos_class_weight = 100,
@@ -50,7 +52,8 @@ def train_neural_baseline(model_name,task_name,
                          look_for_cached_datareader=False,
                          data_location=None):
 
-    
+    if model_path:
+        raise NotImplementedError()
 
     logger.info(f"Training {model_name} on {task_name}")
     dataset_args["eval_frac"] = eval_frac
@@ -119,6 +122,7 @@ def train_autoencoder(model_name,
                 task_name, 
                 n_epochs=10,
                 hidden_size=768,
+                model_path=None,
                 num_attention_heads=4,
                 num_hidden_layers=4,
                 max_length = 24*60+1,
@@ -142,6 +146,9 @@ def train_autoencoder(model_name,
                 data_location=None,
                 no_eval_during_training=False):
     
+    if model_path:
+        raise NotImplementedError()
+
     logger.info(f"Training {model_name}")
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
@@ -195,6 +202,7 @@ def train_cnn_transformer( task_name,
                 num_attention_heads=4,
                 num_hidden_layers=4,
                 max_length = 24*60+1,
+                model_path=None,
                 max_position_embeddings=2048, 
                 no_early_stopping=False,
                 train_batch_size = 4,
@@ -228,18 +236,20 @@ def train_cnn_transformer( task_name,
                                         look_for_cached_datareader=look_for_cached_datareader)
     
     
+    if not model_path:
+        train_dataset = task.get_train_dataset()
+        infer_example = train_dataset[0]["inputs_embeds"]
+        n_timesteps, n_features = infer_example.shape
 
-    train_dataset = task.get_train_dataset()
-    infer_example = train_dataset[0]["inputs_embeds"]
-    n_timesteps, n_features = infer_example.shape
-
-    model = CNNToTransformerEncoder(input_features=n_features,
-                                    n_timesteps=n_timesteps,
-                                    num_attention_heads = num_attention_heads,
-                                    num_hidden_layers = num_hidden_layers,
-                                    num_labels=2,
-                                    **model_specific_kwargs)
-                 
+        model = CNNToTransformerEncoder(input_features=n_features,
+                                        n_timesteps=n_timesteps,
+                                        num_attention_heads = num_attention_heads,
+                                        num_hidden_layers = num_hidden_layers,
+                                        num_labels=2,
+                                        **model_specific_kwargs)
+    else:
+        model = load_model_from_checkpoint(model_path)
+        
     training_args = TrainingArguments(
         output_dir='./results',          # output directorz
         num_train_epochs=n_epochs,              # total # of training epochs
@@ -250,7 +260,6 @@ def train_cnn_transformer( task_name,
         learning_rate=learning_rate,               # strength of weight decay
         logging_dir='./logs',
         logging_steps=10,
-        save_steps=10,
         do_eval=not no_eval_during_training,
         dataloader_num_workers=0,
         dataloader_pin_memory=True,
@@ -277,6 +286,7 @@ def train_sand( task_name,
                 num_attention_heads=4,
                 num_hidden_layers=4,
                 max_length = 24*60+1,
+                model_path=None,
                 max_position_embeddings=2048, 
                 no_early_stopping=False,
                 pos_class_weight = 1,
@@ -297,6 +307,9 @@ def train_sand( task_name,
                 data_location=None,
                 no_eval_during_training=False):
     
+    if model_path:
+        raise NotImplementedError()
+
     logger.info(f"Training SAnD")
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
@@ -361,6 +374,7 @@ def train_bert(task_name,
                 num_hidden_layers=4,
                 max_length = 24*60+1,
                 max_position_embeddings=2048, 
+                model_path=None,
                 no_early_stopping=False,
                 pos_class_weight = 100,
                 neg_class_weight = 1,
@@ -379,6 +393,9 @@ def train_bert(task_name,
                 look_for_cached_datareader=False,
                 no_eval_during_training=False,
                 data_location=None):
+    
+    if model_path:
+        raise NotImplementedError()
 
     logger.info(f"Training BERT on {task_name}")
     dataset_args["return_dict"] = True
@@ -459,6 +476,7 @@ def train_longformer(task_name,
                     no_early_stopping=False,
                     pos_class_weight = 100,
                     neg_class_weight = 1,
+                    model_path = None,
                     train_batch_size = 4,
                     eval_batch_size = 16,
                     eval_frac = None,
@@ -475,6 +493,9 @@ def train_longformer(task_name,
                     no_eval_during_training=False,
                     data_location=None):
     
+    if model_path:
+        raise NotImplementedError()
+
     logger.info(f"Training Longformer on {task_name}")
     dataset_args["return_dict"] = True
     dataset_args["eval_frac"] = eval_frac
