@@ -33,5 +33,7 @@ dependencies:
   - pip:
     - torchviz
     - pyyaml==5.4.1
+    - wandb
+    - xgboost
 variables:
   USE_TORCH: 1
