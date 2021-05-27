@@ -82,7 +82,7 @@ class ActivityTask(Task):
         split_date = dataset_args.pop("split_date",None)
         eval_frac = dataset_args.pop("eval_frac",None)
 
-        if not split_date or not eval_frac:
+        if not split_date and not eval_frac:
             raise KeyError("Must provide some strategy for splitting train\
                            and test. Either 'split_date' or 'eval_frac'")
         
