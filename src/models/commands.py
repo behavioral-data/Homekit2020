@@ -41,7 +41,7 @@ universal_options = [
     click.Option(('--notes',), type=str, default=None),
     click.Option(('--dataset_args',), default=None,callback=validate_dataset_args),
     click.Option(('--activity_level',),type=click.Choice(["day","minute"]), default="minute"),
-    click.Option(('--data_location',), default=None,type=click.Path(file_okay=False)),
+    click.Option(('--data_location',), default=None,type=click.Path(exists=True)),
     click.Option(('--look_for_cached_datareader',), is_flag=True, default=False),
 ]
 
