@@ -73,10 +73,7 @@ class DayLevelActivityReader(object):
         self.max_missing_days_in_window = max_missing_days_in_window
         self.obs_per_day = 1
 
-        if data_location:
-            raise NotImplementedError("Haven't done this yet...")
-
-        df = load_processed_table("fitbit_day_level_activity")
+        df = load_processed_table("fitbit_day_level_activity", path=data_location)
 
         date_filters = []
         filters = []

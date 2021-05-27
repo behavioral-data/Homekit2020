@@ -82,15 +82,16 @@ def get_cached_datareader_path(name):
     print(data_path)
     return os.path.join(data_path,"cached_datareaders",name+".pickle")
         
-def find_processed_dataset(name):
-    path = get_processed_dataset_path(name)
+def find_processed_dataset(name,path=None):
+    if path is None:
+        path = get_processed_dataset_path(name)
     if ".csv" in path:
         return pd.read_csv(path)
     elif ".jsonl" in path:
         return pd.read_json(path,lines=True)
 
-def load_processed_table(name,fmt="df"):
-    dataset = find_processed_dataset(name)
+def load_processed_table(name,fmt="df",path=None):
+    dataset = find_processed_dataset(name,path=path)
     for column in dataset.columns:
         if "date" in str(column) or "time" in str(column):
             try:
