@@ -64,4 +64,7 @@ class HuggingFaceCommand(BaseCommand):
 class CNNTransformer(HuggingFaceCommand):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.params = self.params + loss_options
+        cnn_transformer_params = [
+            click.Option(("--reset_cls_params",),is_flag=True, help="Reset the parameters in a the classifcation layer after loading pretrained model")
+        ]
+        self.params = self.params + loss_options + cnn_transformer_params
