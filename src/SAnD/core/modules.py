@@ -129,6 +129,8 @@ class ClassificationModule(nn.Module):
         x = self.fc(x)
         return x
 
+    def reset_parameters(self):
+        self.fc.reset_parameters()
 
 class RegressionModule(nn.Module):
     def __init__(self, d_model: int, factor: int, output_size: int) -> None:
