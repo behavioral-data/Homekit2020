@@ -1,3 +1,4 @@
+from re import L
 import warnings
 import os
 
@@ -220,6 +221,7 @@ def train_cnn_transformer( task_name,
                 look_for_cached_datareader=False,
                 data_location=None,
                 no_eval_during_training=False,
+                reset_cls_params=False,
                 **model_specific_kwargs):
     
     logger.info(f"Training CNNTransformer")
@@ -249,7 +251,9 @@ def train_cnn_transformer( task_name,
                                         **model_specific_kwargs)
     else:
         model = load_model_from_checkpoint(model_path)
-        
+        if reset_cls_params and hasattr(model,"clf"):
+            model.clf.reset_parameters()
+
     training_args = TrainingArguments(
         output_dir='./results',          # output directorz
         num_train_epochs=n_epochs,              # total # of training epochs
@@ -561,7 +565,7 @@ def run_huggingface(model,base_trainer,training_args,
     train_dataset = task.get_train_dataset()
     eval_dataset = task.get_eval_dataset()
 
-    if model.config:
+    if hasattr(model,"config"):
         write_dict_to_json(model.config.to_dict(),
                            os.path.join(training_args.output_dir,"model_config.json"))
 
