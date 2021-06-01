@@ -11,8 +11,7 @@ from torch.utils import data
 from src.utils import get_logger
 import src.data.constants as constants
 
-import multiprocessing.popen_spawn_posix
-
+import wandb
 import dask
 dask.config.set({"distributed.comm.timeouts.connect": "60"})
 
@@ -114,15 +113,20 @@ def write_pandas_to_parquet(df,path,write_metadata=True,
         paths = glob.glob(os.path.join(path,"*","*.parquet"))
         dd.io.parquet.create_metadata_file(paths)
 
-# @dask.delayed
+def download_wandb_table(run_id,table_name="roc_table",
+                 entity="mikeamerrill", project="flu"):
+    api = wandb.Api()
+    artifact = api.artifact(f'{entity}/{project}/run-{run_id}-{table_name}:latest')
+    dir = artifact.download() 
+    filenames = list(glob.glob(os.path.join(dir,"**/*.json"),recursive=True))
+    data = load_json(filenames[0])
+    return pd.DataFrame(data["data"],columns=data["columns"])
+
+
 def get_dask_df(name,path= None,min_date=None,max_date=None,index=None):
     if not path:
         path = get_processed_dataset_path(name)
     filters = []
-    # if min_date:
-    #     filters.append(("date",">=",min_date))
-    # if max_date:
-    #     filters.append(("date","<",max_date))
         
     if filters:
         df = dd.read_parquet(path,filters=filters)
