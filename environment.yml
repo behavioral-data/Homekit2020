@@ -30,10 +30,13 @@ dependencies:
   - jupyter
   - plotly
   - matplotlib
+  - pytorch-lightning>=0.10.0
+  - torchmetrics
   - pip:
     - torchviz
     - pyyaml==5.4.1
     - wandb
     - xgboost
+    - tensorboard
 variables:
   USE_TORCH: 1
