@@ -1,6 +1,12 @@
+from os import rename
 import numpy as np
 import pandas as pd
 import wandb
+from wandb.viz import CustomChart
+from wandb.data_types import Table
+
+import torch
+from torchmetrics import Metric
 
 from scipy.special import softmax
 from scipy.stats import pearsonr, spearmanr
@@ -11,7 +17,7 @@ from sklearn.metrics import (accuracy_score,precision_recall_fscore_support, roc
 from functools import partial
 from src.utils import check_for_wandb_run
 
-def classification_eval(logits, labels, threshold = 0.5):
+def classification_eval(logits, labels, threshold = 0.5, prefix=None):
 
     # Remove indices with pad tokens
     input_probs = softmax(logits, axis=1)
@@ -28,13 +34,22 @@ def classification_eval(logits, labels, threshold = 0.5):
     accuracy = accuracy_score(labels, classes)
     results["classification_accuracy"] = accuracy
 
-    results["roc_auc"] = roc_auc_score(labels,input_probs[:,-1])
+    try:
+        results["roc_auc"] = roc_auc_score(labels,input_probs[:,-1])
+    except ValueError:
+        results["roc_auc"] = np.nan
 
     if check_for_wandb_run():
         results["roc"] = wandb.plot.roc_curve(labels, input_probs,
                                             labels=["Negative","Positive"], classes_to_plot=[1])
         results["pr"] = wandb.plot.pr_curve(labels, input_probs,
                                             labels=["Negative","Positive"], classes_to_plot=[1])
+    if prefix:
+        renamed = {}
+        for k,v in results.items():
+            renamed[prefix+k] = v
+        return renamed
+
     return results
 
 def get_huggingface_classification_eval(threshold=0.5):

@@ -59,6 +59,7 @@ def train_xgboost(task_name, dataset_args ={},
                 look_for_cached_datareader = False,
                 add_features_path=None,
                 data_location=None,
+                limit_train_frac=None,
                 **_):
 
     """ Baseline for classification tasks that uses daily aggregated features"""
@@ -73,6 +74,9 @@ def train_xgboost(task_name, dataset_args ={},
         raise ValueError(f"{task_name} is not an classification task")
 
     train = task.get_train_dataset().to_dmatrix()
+    if limit_train_frac:
+        inds = list(range(int(len(task.get_train_dataset())*limit_train_frac)))
+        train = train.slice(inds)
     eval = task.get_eval_dataset().to_dmatrix()
     
     param = {'max_depth': 2, 'eta': 1, 'objective': 'binary:logistic'}

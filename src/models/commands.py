@@ -12,7 +12,7 @@ def validate_dataset_args(ctx, param, value):
         except json.decoder.JSONDecodeError:
             raise click.BadParameter('dataset_args needs to be either a json string or a path to a config .yaml')
 
-huggingface_options = [
+nerual_options = [
         click.Option(('--n_epochs',), default = 10, help='Number of training epochs'),
         click.Option(('--hidden_size',), default = 768),
         click.Option(('--num_attention_heads',), default = 4),
@@ -42,6 +42,7 @@ universal_options = [
     click.Option(('--dataset_args',), default=None,callback=validate_dataset_args),
     click.Option(('--activity_level',),type=click.Choice(["day","minute"]), default="minute"),
     click.Option(('--data_location',), default=None,type=click.Path(exists=True)),
+    click.Option(('--limit_train_frac',), default=None,type=float,help="Truncate the training data so <limit_train_frac>"),
     click.Option(('--look_for_cached_datareader',), is_flag=True, default=False),
 ]
 
@@ -55,16 +56,17 @@ class BaseCommand(click.Command):
         super().__init__(*args, **kwargs)
         self.params = self.params + universal_options
 
-class HuggingFaceCommand(BaseCommand):
+class NeuralCommand(BaseCommand):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.params = self.params + huggingface_options 
+        self.params = self.params + nerual_options 
 
     
-class CNNTransformer(HuggingFaceCommand):
+class CNNTransformer(NeuralCommand):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         cnn_transformer_params = [
-            click.Option(("--reset_cls_params",),is_flag=True, help="Reset the parameters in a the classifcation layer after loading pretrained model")
+            click.Option(("--reset_cls_params",),is_flag=True, help="Reset the parameters in a the classifcation layer after loading pretrained model"),
+            click.Option(("--use_pl",),is_flag=True, help="Run the job with pytorch lightning rather than huggingface")
         ]
         self.params = self.params + loss_options + cnn_transformer_params
