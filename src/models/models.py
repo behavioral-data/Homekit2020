@@ -1,13 +1,25 @@
 from copy import copy
+from typing import Union, Dict
 
 import torch
 import torch.nn as nn
+from torch import Tensor
+from torch.utils.data import DataLoader
+
+import pytorch_lightning as pl
 
 import numpy as np
+import torchmetrics
 from transformers import PretrainedConfig
+import wandb
+from wandb.plot.roc_curve import roc_curve
+from wandb.data_types import Table
+
 
 from src.SAnD.core import modules
 from src.models.losses import build_loss_fn
+from src.models.eval import classification_eval, WandBROCCurve
+from src.utils import check_for_wandb_run
 
 class Config(object):
     def __init__(self,data) -> None:
@@ -50,7 +62,7 @@ class CNNEncoder(nn.Module):
 
         super(CNNEncoder,self).__init__()
         self.input_features = input_features
-        
+
         layers = []
         for i in range(n_layers):
             if i == 0:
@@ -75,16 +87,18 @@ class CNNEncoder(nn.Module):
         return x
 
 
-class CNNToTransformerEncoder(nn.Module):
+class CNNToTransformerEncoder(pl.LightningModule):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
-                stride_sizes=[2,2,2], dropout_rate=0.2, num_labels=2, 
-                max_positional_embeddings = 1440*5, factor=64,
+                stride_sizes=[2,2,2], dropout_rate=0.2, num_labels=2, learning_rate=1e-3, warmup_steps=100,
+                max_positional_embeddings = 1440*5, factor=64, inital_batch_size=100,
                 **model_specific_kwargs) -> None:
         self.config = get_config_from_locals(locals())
 
         super(CNNToTransformerEncoder, self).__init__()
         
         self.d_model = out_channels[-1]
+        self.learning_rate = learning_rate
+        self.warmup_steps = warmup_steps
 
         self.input_embedding = CNNEncoder(input_features, n_timesteps=n_timesteps, kernel_sizes=kernel_sizes,
                                 out_channels=out_channels, stride_sizes=stride_sizes)
@@ -104,6 +118,17 @@ class CNNToTransformerEncoder(nn.Module):
 
         self.name = "CNNToTransformerEncoder"
         self.base_model_prefix = self.name
+        
+        self.train_probs = []
+        self.train_labels = []
+        
+        self.eval_probs = []
+        self.eval_labels =[]
+
+        self.batch_size = inital_batch_size
+        self.train_dataset = None
+        self.eval_dataset=None
+
 
     def forward(self, inputs_embeds,labels):
         x = inputs_embeds.transpose(1, 2)
@@ -118,4 +143,95 @@ class CNNToTransformerEncoder(nn.Module):
         logits = self.clf(x)
         loss =  self.criterion(logits,labels)
         return loss, logits
+    
+    def set_train_dataset(self,dataset):
+        self.train_dataset = dataset
+    
+    def set_eval_dataset(self,dataset):
+        self.eval_dataset = dataset
 
+    def train_dataloader(self):
+        return DataLoader(self.train_dataset, batch_size=self.batch_size)
+    
+    def val_dataloader(self):
+        return DataLoader(self.eval_dataset, batch_size=3*self.batch_size)
+
+    def training_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
+        x = batch["inputs_embeds"]
+        y = batch["label"]
+        loss,logits = self.forward(x,y)
+        
+    
+        self.log("train/loss", loss.item(),on_step=True)
+
+        probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
+        self.train_probs.append(probs)
+        self.train_labels.append(y)
+        return {"loss":loss, "preds": logits, "labels":y}
+
+    def on_train_epoch_start(self):
+        self.train_probs = []
+        self.train_labels = []
+    
+    def on_train_end(self):
+        train_preds = torch.cat(self.train_probs, dim=0)
+        train_labels = torch.cat(self.train_labels, dim=0)
+        train_auc = torchmetrics.functional.auroc(train_preds,train_labels,pos_label=1)
+    
+        eval_preds = torch.cat(self.eval_probs, dim=0)
+        eval_labels = torch.cat(self.eval_labels, dim=0)
+        
+        fpr, tpr, _ = torchmetrics.functional.roc(eval_preds, eval_labels, pos_label=1)
+        eval_auc = torchmetrics.functional.auroc(eval_preds,eval_labels,pos_label=1)
+
+        if check_for_wandb_run():
+            labels = ["Positive"] * len(fpr)
+            table = Table(columns= ["class","fpr","tpr"], data=list(zip(labels,fpr,tpr)))
+            plot = wandb.plot_table(
+                "wandb/area-under-curve/v0",
+                table,
+                {"x": "fpr", "y": "tpr", "class": "class"},
+                {
+                    "title": "ROC",
+                    "x-axis-title": "False positive rate",
+                    "y-axis-title": "True positive rate",
+                },
+
+            )
+            wandb.log({"eval/roc":plot,
+                      "train/roc_auc":train_auc,
+                      "eval/roc_auc":eval_auc})
+        super().on_train_end()
+   
+    def on_validation_epoch_start(self):
+        self.eval_probs = []
+        self.eval_labels = []
+    
+    def validation_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
+        x = batch["inputs_embeds"]
+        y = batch["label"]
+        loss,logits = self.forward(x,y)
+
+        self.log("eval/loss", loss.item(),on_step=True)
+        
+        probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
+        self.eval_probs.append(probs)
+        self.eval_labels.append(y)
+
+        return {"loss":loss, "preds": logits, "labels":y}
+    
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        return optimizer
+
+    def optimizer_step(
+        self, epoch, batch_idx, optimizer, optimizer_idx, optimizer_closure,
+        on_tpu=False, using_native_amp=False, using_lbfgs=False,
+    ):
+        if self.trainer.global_step < self.warmup_steps:
+            lr_scale = min(1., float(self.trainer.global_step + 1) / self.warmup_steps)
+            for pg in optimizer.param_groups:
+                pg['lr'] = lr_scale * self.learning_rate
+
+        # update params
+        optimizer.step(closure=optimizer_closure)

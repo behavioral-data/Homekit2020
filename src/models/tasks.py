@@ -1,6 +1,9 @@
 import sys
 import datetime
 
+from torch.utils.data import DataLoader
+from transformers.data.data_collator import default_data_collator
+
 import src.data.task_datasets as td
 from src.models.eval import classification_eval, autoencode_eval
 from src.data.utils import get_features_path, load_processed_table
@@ -41,7 +44,21 @@ class Task(object):
 
     def get_eval_dataset(self):
         return self.eval_dataset
+    
+    def get_train_dataloader(self,batch_size=64):
+        return DataLoader(
+                        self.get_train_dataset(),
+                        batch_size=batch_size,
+                        collate_fn=default_data_collator
+                    )
 
+    def get_eval_dataloader(self,batch_size=64):
+        return DataLoader(
+                        self.get_eval_dataset(),
+                        batch_size=batch_size,
+                        collate_fn=default_data_collator
+                    )
+                            
 class ClassificationMixin():
     def __init__(self):
         self.is_classification = True
@@ -88,6 +105,7 @@ class ActivityTask(Task):
         
         min_date = dataset_args.get("min_date",None)
         max_date = dataset_args.get("max_date",None)
+
         day_window_size = dataset_args.get("day_window_size",None)
         max_missing_days_in_window = dataset_args.get("max_missing_days_in_window",None)
         data_location = dataset_args.get("data_location",None)
@@ -117,6 +135,9 @@ class ActivityTask(Task):
 
         train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
     
+        limit_train_frac = dataset_args.get("limit_train_frac",None)
+        if limit_train_frac:
+            train_participant_dates = train_participant_dates[:int(len(train_participant_dates)*limit_train_frac)]
 
         self.train_dataset = base_dataset(activity_reader, lab_results_reader,
                         participant_dates = train_participant_dates,**dataset_args)
@@ -275,6 +296,9 @@ class SingleWindowActivityTask(Task):
         else:
             raise NotImplementedError
 
+        limit_train_frac = dataset_args.get("limit_train_frac",None)
+        if limit_train_frac:
+            train_participant_dates = train_participant_dates[:int(len(train_participant_dates)*limit_train_frac)]
 
         self.train_dataset = base_dataset(activity_reader, lab_results_reader,
                         participant_dates = train_participant_dates,**dataset_args)
@@ -371,6 +395,10 @@ class EarlyDetection(ActivityTask):
 
         train_participant_dates = [x for x in new_valid_dates if x[0] in train_participants]
         eval_participant_dates = [x for x in new_valid_dates if x[0] in eval_participants]
+
+        limit_train_frac = dataset_args.get("limit_train_frac",None)
+        if limit_train_frac:
+            train_participant_dates = train_participant_dates[:int(len(train_participant_dates)*limit_train_frac)]
 
         self.train_dataset = base_dataset(activity_reader, lab_results_reader,
                         participant_dates = train_participant_dates,**dataset_args)

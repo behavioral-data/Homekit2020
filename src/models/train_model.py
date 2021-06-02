@@ -1,13 +1,16 @@
 from re import L
+
 import warnings
 import os
+from pytorch_lightning.loggers.wandb import WandbLogger
+from tensorflow.keras import callbacks
 
 from torch import tensor
 warnings.filterwarnings("ignore")
 
 import click
 
-from src.models.commands import HuggingFaceCommand, BaseCommand, CNNTransformer
+from src.models.commands import NeuralCommand, BaseCommand, CNNTransformer
 from src.models.autoencode import get_autoencoder_by_name, run_autoencoder
 from src.models.tasks import get_task_with_name, Autoencode
 from src.models.neural_baselines import create_neural_model
@@ -17,12 +20,17 @@ from src.SAnD.core.model import SAnD
 from src.utils import get_logger, render_network_plot
 from src.data.utils import write_dict_to_json
 from src.models.load_model import load_model_from_checkpoint
+from src.models.callbacks import WandBIntegration
 
 from transformers import (BertForSequenceClassification, Trainer, 
                          TrainingArguments, BertConfig, 
                          EncoderDecoderConfig, EncoderDecoderModel,
                          LongformerForSequenceClassification,
                          LongformerConfig, TransfoXLModel)
+
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import WandbLogger
 
 from tensorflow.keras.callbacks import EarlyStopping # type: ignore
 import pandas as pd
@@ -116,7 +124,7 @@ def train_neural_baseline(model_name,task_name,
         logger.info("Eval results...")
         logger.info(results)
 
-@click.command(cls=HuggingFaceCommand)
+@click.command(cls=NeuralCommand)
 @click.argument("model_name")
 @click.argument("task_name")
 def train_autoencoder(model_name,
@@ -222,13 +230,17 @@ def train_cnn_transformer( task_name,
                 data_location=None,
                 no_eval_during_training=False,
                 reset_cls_params=False,
+                use_pl=False,
+                limit_train_frac=None,
                 **model_specific_kwargs):
-    
     logger.info(f"Training CNNTransformer")
     if not eval_frac is None:
         dataset_args["eval_frac"] = eval_frac
+    
+    dataset_args["limit_train_frac"]=limit_train_frac
     dataset_args["return_dict"] = True
     dataset_args["data_location"] = data_location
+    dataset_args["limit_train_frac"] = limit_train_frac
     
     if sinu_position_encoding:
         dataset_args["add_absolute_embedding"] = True
@@ -248,41 +260,55 @@ def train_cnn_transformer( task_name,
                                         num_attention_heads = num_attention_heads,
                                         num_hidden_layers = num_hidden_layers,
                                         num_labels=2,
+                                        learning_rate =learning_rate,
+                                        warmup_steps = warmup_steps,
+                                        inital_batch_size=train_batch_size,
                                         **model_specific_kwargs)
     else:
         model = load_model_from_checkpoint(model_path)
         if reset_cls_params and hasattr(model,"clf"):
             model.clf.reset_parameters()
 
-    training_args = TrainingArguments(
-        output_dir='./results',          # output directorz
-        num_train_epochs=n_epochs,              # total # of training epochs
-        per_device_train_batch_size=train_batch_size,  # batch size per device during training
-        per_device_eval_batch_size=eval_batch_size,   # batch size for evaluation
-        warmup_steps=warmup_steps,                # number of warmup steps for learning rate scheduler
-        weight_decay=weight_decay,
-        learning_rate=learning_rate,               # strength of weight decay
-        logging_dir='./logs',
-        logging_steps=10,
-        do_eval=not no_eval_during_training,
-        dataloader_num_workers=0,
-        dataloader_pin_memory=True,
-        prediction_loss_only=False,
-        evaluation_strategy="no" if no_eval_during_training else "epoch",
-        report_to=["wandb"]            # directory for storing logs
-    )
+   
 
     if task.is_classification:
         metrics = task.get_huggingface_metrics(threshold=classification_threshold)
     else:
         metrics=None
 
-    run_huggingface(model=model, base_trainer=FluTrainer,
-                   training_args=training_args,
-                   metrics = metrics, task=task,
-                   no_wandb=no_wandb, notes=notes)
+    if use_pl:
+        pl_training_args = dict(
+            max_epochs = n_epochs,
+            check_val_every_n_epoch=5,
+            auto_scale_batch_size="binsearch"
+        )
+        run_pytorch_lightning(model,task,training_args=pl_training_args)
+    
+    else:
+        training_args = TrainingArguments(
+            output_dir='./results',          # output directorz
+            num_train_epochs=n_epochs,              # total # of training epochs
+            per_device_train_batch_size=train_batch_size,  # batch size per device during training
+            per_device_eval_batch_size=eval_batch_size,   # batch size for evaluation
+            warmup_steps=warmup_steps,                # number of warmup steps for learning rate scheduler
+            weight_decay=weight_decay,
+            learning_rate=learning_rate,               # strength of weight decay
+            logging_dir='./logs',
+            logging_steps=10,
+            do_eval=not no_eval_during_training,
+            dataloader_num_workers=0,
+            dataloader_pin_memory=True,
+            prediction_loss_only=False,
+            evaluation_strategy="no" if no_eval_during_training else "epoch",
+            report_to=["wandb"]            # directory for storing logs
+        )
 
-@click.command(cls=HuggingFaceCommand)
+        run_huggingface(model=model, base_trainer=FluTrainer,
+                    training_args=training_args,
+                    metrics = metrics, task=task,
+                    no_wandb=no_wandb, notes=notes)
+
+@click.command(cls=NeuralCommand)
 @click.argument("task_name")
 def train_sand( task_name, 
                 n_epochs=10,
@@ -369,7 +395,7 @@ def train_sand( task_name,
                    metrics = metrics, task=task,
                    no_wandb=no_wandb, notes=notes)
 
-@click.command(cls=HuggingFaceCommand)
+@click.command(cls=NeuralCommand)
 @click.argument("task_name")
 def train_bert(task_name,
                 n_epochs=10,
@@ -468,7 +494,7 @@ def train_bert(task_name,
                    no_wandb=no_wandb, notes=notes)
 
 
-@click.command(cls=HuggingFaceCommand)
+@click.command(cls=NeuralCommand)
 @click.argument("task_name")
 def train_longformer(task_name,
                     n_epochs=10,
@@ -599,4 +625,35 @@ def run_huggingface(model,base_trainer,training_args,
         wandb.log({"model_img": [wandb.Image(Image.open(model_img_path), caption="Model Graph")]})
         wandb.log(eval_metrics)
         wandb.log(train_metrics)
+
+def run_pytorch_lightning(model, task, 
+                        training_args={},
+                        no_wandb=False,
+                        notes=None):                     
+    if not no_wandb:
+        logger = WandbLogger(project="flu")
+        logger.experiment.notes = notes
+        logger.experiment.summary["task"] = task.get_name()
+        logger.experiment.summary["model"] = model.base_model_prefix
+       
+        checkpoint_callback = ModelCheckpoint(
+                            dirpath=logger.experiment.dir,
+                            filename='{epoch}-',
+                            save_last=True)
+    else:
+        checkpoint_callback = True
+        logger=True
+    
+    if os.environ.get("DEBUG_DATA"):
+        training_args["num_sanity_val_steps"] = 0
+
+    trainer = pl.Trainer(logger=logger,
+                         checkpoint_callback=checkpoint_callback,
+                         gpus = -1,
+                         **training_args)
+
+    model.set_train_dataset(task.get_train_dataset())
+    model.set_eval_dataset(task.get_eval_dataset())
+
+    trainer.fit(model)
     
