@@ -20,7 +20,6 @@ from src.SAnD.core.model import SAnD
 from src.utils import get_logger, render_network_plot
 from src.data.utils import write_dict_to_json
 from src.models.load_model import load_model_from_checkpoint
-from src.models.callbacks import WandBIntegration
 
 from transformers import (BertForSequenceClassification, Trainer, 
                          TrainingArguments, BertConfig, 
@@ -232,6 +231,7 @@ def train_cnn_transformer( task_name,
                 reset_cls_params=False,
                 use_pl=False,
                 limit_train_frac=None,
+                freeze_encoder=False,
                 **model_specific_kwargs):
     logger.info(f"Training CNNTransformer")
     if not eval_frac is None:
@@ -269,8 +269,14 @@ def train_cnn_transformer( task_name,
         if reset_cls_params and hasattr(model,"clf"):
             model.clf.reset_parameters()
 
-   
-
+    if freeze_encoder:
+        for param in model.blocks.parameters():
+            param.requires_grad = False
+        for param in model.input_embedding.parameters():
+            param.requires_grad = False
+        for param in model.positional_encoding.parameters():
+            param.requires_grad = False
+            
     if task.is_classification:
         metrics = task.get_huggingface_metrics(threshold=classification_threshold)
     else:
