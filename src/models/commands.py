@@ -2,6 +2,9 @@ import json
 from random import choice
 import click
 from src.utils import read_yaml
+from src.models.train_model import (train_cnn_transformer, train_neural_baseline,
+                                    train_autoencoder, train_sand,
+                                    train_bert, train_longformer)
 
 def validate_dataset_args(ctx, param, value):
     try:
@@ -71,3 +74,51 @@ class CNNTransformer(NeuralCommand):
             click.Option(("--use_pl",),is_flag=True, help="Run the job with pytorch lightning rather than huggingface")
         ]
         self.params = self.params + loss_options + cnn_transformer_params
+
+
+@click.command(cls=CNNTransformer, name="train-cnn-transformer")
+@click.argument("task_name")
+def train_cnn_transformer_command(*args, **kwargs):
+    train_cnn_transformer(*args,**kwargs)
+
+
+@click.command(cls=BaseCommand,name="train-neural-baseline")
+@click.argument("model_name")
+@click.argument("task_name")
+@click.option("--n_epochs", default=10)
+@click.option("--pos_class_weight", default=100)
+@click.option("--neg_class_weight", default=1)
+@click.option("--eval_frac", default=0.15)
+@click.option("--no_early_stopping",is_flag=True)
+def train_neural_baseline_command(*args,**kwargs):
+    train_neural_baseline(*args,**kwargs)
+
+
+@click.command(cls=NeuralCommand,name="train-autoencoder")
+@click.argument("model_name")
+@click.argument("task_name")
+def train_autoencoder_command(*args, **kwargs):
+    train_autoencoder(*args,**kwargs)
+
+@click.command(cls=NeuralCommand,name="train-sand")
+@click.argument("task_name")
+def train_sand_command(*args,**kwargs):
+    train_sand(*args,**kwargs)
+
+
+@click.command(cls=NeuralCommand, name="train-bert")
+@click.argument("task_name")
+def train_bert_command(*args,**kwargs):
+    train_bert(*args,**kwargs)
+
+@click.command(cls=NeuralCommand, name="train-longformer")
+@click.argument("task_name")
+def train_longformer_command(*args,**kwargs):
+    train_longformer(*args,**kwargs)
+
+
+MODEL_COMMANDS = [train_cnn_transformer_command,
+                  train_autoencoder_command,
+                  train_neural_baseline_command,
+                  train_longformer_command,
+                  train_sand_command]

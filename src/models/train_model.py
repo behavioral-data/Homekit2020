@@ -10,7 +10,6 @@ warnings.filterwarnings("ignore")
 
 import click
 
-from src.models.commands import NeuralCommand, BaseCommand, CNNTransformer
 from src.models.autoencode import get_autoencoder_by_name, run_autoencoder
 from src.models.tasks import get_task_with_name, Autoencode
 from src.models.neural_baselines import create_neural_model
@@ -38,14 +37,6 @@ import torch
 
 logger = get_logger()
 
-@click.command(cls=BaseCommand)
-@click.argument("model_name")
-@click.argument("task_name")
-@click.option("--n_epochs", default=10)
-@click.option("--pos_class_weight", default=100)
-@click.option("--neg_class_weight", default=1)
-@click.option("--eval_frac", default=0.15)
-@click.option("--no_early_stopping",is_flag=True)
 def train_neural_baseline(model_name,task_name,
                          model_path=None,
                          n_epochs=10,
@@ -123,9 +114,6 @@ def train_neural_baseline(model_name,task_name,
         logger.info("Eval results...")
         logger.info(results)
 
-@click.command(cls=NeuralCommand)
-@click.argument("model_name")
-@click.argument("task_name")
 def train_autoencoder(model_name,
                 task_name, 
                 n_epochs=10,
@@ -202,8 +190,6 @@ def train_autoencoder(model_name,
                    no_wandb=no_wandb, notes=notes)
 
 
-@click.command(cls=CNNTransformer)
-@click.argument("task_name")
 def train_cnn_transformer( task_name, 
                 n_epochs=10,
                 hidden_size=768,
@@ -314,8 +300,7 @@ def train_cnn_transformer( task_name,
                     metrics = metrics, task=task,
                     no_wandb=no_wandb, notes=notes)
 
-@click.command(cls=NeuralCommand)
-@click.argument("task_name")
+
 def train_sand( task_name, 
                 n_epochs=10,
                 hidden_size=768,
@@ -401,8 +386,6 @@ def train_sand( task_name,
                    metrics = metrics, task=task,
                    no_wandb=no_wandb, notes=notes)
 
-@click.command(cls=NeuralCommand)
-@click.argument("task_name")
 def train_bert(task_name,
                 n_epochs=10,
                 hidden_size=768,
@@ -499,9 +482,6 @@ def train_bert(task_name,
                    metrics = metrics, task=task,
                    no_wandb=no_wandb, notes=notes)
 
-
-@click.command(cls=NeuralCommand)
-@click.argument("task_name")
 def train_longformer(task_name,
                     n_epochs=10,
                     hidden_size=768,
