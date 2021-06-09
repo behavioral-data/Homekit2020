@@ -18,7 +18,6 @@ from wandb.data_types import Table
 
 from src.SAnD.core import modules
 from src.models.losses import build_loss_fn
-from src.models.eval import classification_eval, WandBROCCurve
 from src.utils import check_for_wandb_run
 
 class Config(object):
