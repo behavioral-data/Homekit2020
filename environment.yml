@@ -38,5 +38,6 @@ dependencies:
     - wandb
     - xgboost
     - tensorboard
+    - ray[default]
 variables:
   USE_TORCH: 1
