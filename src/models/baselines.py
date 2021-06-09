@@ -11,7 +11,7 @@ from src.utils import get_logger
 from src.models.commands import BaseCommand
 from src.models.eval import classification_eval
 
-logger = get_logger()
+logger = get_logger(__name__)
 
 @click.command()
 @click.argument("task_name")

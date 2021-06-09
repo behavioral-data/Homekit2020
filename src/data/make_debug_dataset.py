@@ -3,7 +3,7 @@ import os
 import click
 from src.data.make_dataset import lab_results, lab_updates, process_surveys, process_minute_level, process_day_level
 from src.utils import get_logger
-logger = get_logger()
+logger = get_logger(__name__)
 
 @click.command()
 def main():

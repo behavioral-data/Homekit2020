@@ -35,7 +35,7 @@ import pandas as pd
 from PIL import Image
 import torch
 
-logger = get_logger()
+logger = get_logger(__name__)
 
 def train_neural_baseline(model_name,task_name,
                          model_path=None,

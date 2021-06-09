@@ -20,7 +20,7 @@ import dask.dataframe as dd
 from dotenv import dotenv_values
 
 config = dotenv_values(".env")
-logger = get_logger()
+logger = get_logger(__name__)
 
 DATASET_VERSION="2020-07-15"
 RAW_DATA_PATH = os.path.join(config["MAIN_PATH"],"data","raw","audere","data-export",DATASET_VERSION)

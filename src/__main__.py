@@ -12,7 +12,7 @@ from src.models.train_model import (train_neural_baseline, train_bert, train_lon
 from src.models.baselines import select_random, train_xgboost
 from src.utils import get_logger
 from src.models.commands import MODEL_COMMANDS
-logger = get_logger()
+logger = get_logger(__name__)
 
 @click.group()
 def cli():

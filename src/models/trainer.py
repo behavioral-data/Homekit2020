@@ -20,7 +20,7 @@ from transformers.utils.dummy_pt_objects import get_polynomial_decay_schedule_wi
 import wandb
 
 from src.utils import get_logger, check_for_wandb_run, write_jsonl
-logger = get_logger()
+logger = get_logger(__name__)
 
 
 class FluTrainer(Trainer):

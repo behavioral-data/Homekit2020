@@ -5,7 +5,7 @@ import click
 import yaml
 
 from src.utils import read_yaml, get_logger
-logger = get_logger()
+logger = get_logger(__name__)
 
 from src.data.task_datasets import MinuteLevelActivityReader
 from src.data.utils import get_cached_datareader_path

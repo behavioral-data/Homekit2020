@@ -17,7 +17,7 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import train_test_split
 
 from src.utils import get_logger, read_yaml
-logger = get_logger()
+logger = get_logger(__name__)
 
 from src.data.utils import get_dask_df, load_processed_table
 from src.models.features import get_feature_with_name
