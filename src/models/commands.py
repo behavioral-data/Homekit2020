@@ -67,6 +67,7 @@ class CNNTransformer(NeuralCommand):
         super().__init__(*args, **kwargs)
         cnn_transformer_params = [
             click.Option(("--reset_cls_params",),is_flag=True, help="Reset the parameters in a the classifcation layer after loading pretrained model"),
+            click.Option(("--freeze_encoder",),is_flag=True, help="Freeze the encoder during training"),
             click.Option(("--use_pl",),is_flag=True, help="Run the job with pytorch lightning rather than huggingface")
         ]
         self.params = self.params + loss_options + cnn_transformer_params
