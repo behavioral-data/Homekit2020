@@ -1,0 +1,5 @@
+day_window_size: 4
+eval_frac: 0.5
+max_missing_days_in_window: 2
+shuffle: 1
+clause: "have_flu > 0"
