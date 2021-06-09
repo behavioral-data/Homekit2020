@@ -1,10 +1,7 @@
 import os
 import pickle
-from re import match
 
 import click
-from dask.base import dont_optimize
-from pyarrow.dataset import dataset
 import yaml
 
 from src.utils import read_yaml, get_logger
