@@ -7,16 +7,18 @@ import argparse
 import subprocess
 import sys
 import time
+import os
 
 from pathlib import Path
+this_dir = Path(__file__).parents[0]
+template_file = this_dir / "slurm-template.sh"
 
-template_file = Path(__file__) / "slurm-template.sh"
+DIR = "${DIR}"
 JOB_NAME = "${JOB_NAME}"
 ACCOUNT = "${ACCOUNT}"
-PARITION = "${PARITION}"
+PARTITION = "${PARTITION}"
 NUM_NODES = "${NUM_NODES}"
 NUM_GPUS_PER_NODE = "${NUM_GPUS_PER_NODE}"
-PARTITION_OPTION = "${PARTITION_OPTION}"
 COMMAND_PLACEHOLDER = "${COMMAND_PLACEHOLDER}"
 CONDA_PATH = "${CONDA_PATH}"
 GIVEN_NODE = "${GIVEN_NODE}"
@@ -24,6 +26,11 @@ CONDA_ENV = "${CONDA_ENV}"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--dir",
+        type=str,
+        required=True,
+        help="The job's run directory")
     parser.add_argument(
         "--exp-name",
         type=str,
@@ -59,11 +66,6 @@ if __name__ == "__main__":
         default=0,
         help="Number of GPUs to use in each node. (Default: 0)")
     parser.add_argument(
-        "--partition",
-        "-p",
-        type=str,
-    )
-    parser.add_argument(
         "--conda-path",
         type=str,
         default="/gscratch/bdata/$USER/anaconda3/bin/conda"
@@ -71,7 +73,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--conda-env",
         type=str,
-        default="seattleflustudy",
+        default=None,
         help="The name of the conda environment")
     parser.add_argument(
         "--command",
@@ -80,6 +82,9 @@ if __name__ == "__main__":
         help="The command you wish to execute. For example: "
         " --command 'python test.py'. "
         "Note that the command must be a string.")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true")
     args = parser.parse_args()
 
     if args.node:
@@ -91,19 +96,22 @@ if __name__ == "__main__":
     job_name = "{}_{}".format(args.exp_name,
                               time.strftime("%m%d-%H%M", time.localtime()))
 
-    partition_option = "#SBATCH --partition={}".format(
-        args.partition) if args.partition else ""
+    if args.conda_path:
+        conda_path_option = f"export PATH=$PATH:{args.conda_path}"
+    else:
+        conda_path_option = ""
 
     # ===== Modified the template script =====
     with open(template_file, "r") as f:
         text = f.read()
+    text = text.replace(DIR, args.dir)
     text = text.replace(JOB_NAME, job_name)
     text = text.replace(NUM_NODES, str(args.num_nodes))
-    text = text.replace(PARITION, args.parition)
+    text = text.replace(PARTITION, args.partition)
     text = text.replace(ACCOUNT,args.account)
-    text = text.replace(CONDA_PATH,args.conda_path)
+    text = text.replace(CONDA_PATH,conda_path_option)
+    text = text.replace(CONDA_ENV,args.conda_env)
     text = text.replace(NUM_GPUS_PER_NODE, str(args.num_gpus))
-    text = text.replace(PARTITION_OPTION, partition_option)
     text = text.replace(COMMAND_PLACEHOLDER, str(args.command))
     text = text.replace(GIVEN_NODE, node_info)
     text = text.replace(
@@ -113,14 +121,20 @@ if __name__ == "__main__":
         "RUNNABLE!")
 
     # ===== Save the script =====
-    script_file = "{}.sh".format(job_name)
+    jobs_dir = os.path.join(this_dir,"job_scripts")
+    os.makedirs(jobs_dir,exist_ok=True)
+
+    script_file = os.path.join(jobs_dir,"{}.sh".format(job_name))
     with open(script_file, "w") as f:
         f.write(text)
 
-    # ===== Submit the job =====
-    print("Starting to submit job!")
-    subprocess.Popen(["sbatch", script_file])
-    print(
-        "Job submitted! Script file is at: <{}>. Log file is at: <{}>".format(
-            script_file, "{}.log".format(job_name)))
+    if not args.dry_run:
+        # ===== Submit the job =====
+        print("Starting to submit job!")
+        subprocess.Popen(["sbatch", script_file])
+        print(
+            "Job submitted! Script file is at: <{}>. Log file is at: <{}>".format(
+                script_file, "{}.log".format(job_name)))
+    else:
+        print(f"Dry run! Not submitting job. Script file is at {script_file}")
     sys.exit(0)
