@@ -20,8 +20,10 @@ ${GIVEN_NODE}
 
 # Load modules or your own conda environment here
 # module load pytorch/v1.4.0-gpu
-# conda activate ${CONDA_ENV}
-${LOAD_ENV}
+
+export PATH=$PATH:${CONDA_PATH}
+conda activate ${CONDA_ENV}
+
 
 # ===== DO NOT CHANGE THINGS HERE UNLESS YOU KNOW WHAT YOU ARE DOING =====
 # This script is a modification to the implementation suggest by gregSchwartz18 here:

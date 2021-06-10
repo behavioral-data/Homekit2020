@@ -18,8 +18,9 @@ NUM_NODES = "${NUM_NODES}"
 NUM_GPUS_PER_NODE = "${NUM_GPUS_PER_NODE}"
 PARTITION_OPTION = "${PARTITION_OPTION}"
 COMMAND_PLACEHOLDER = "${COMMAND_PLACEHOLDER}"
+CONDA_PATH = "${CONDA_PATH}"
 GIVEN_NODE = "${GIVEN_NODE}"
-LOAD_ENV = "${LOAD_ENV}"
+CONDA_ENV = "${CONDA_ENV}"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -63,9 +64,15 @@ if __name__ == "__main__":
         type=str,
     )
     parser.add_argument(
-        "--load-env",
+        "--conda-path",
         type=str,
-        help="The script to load your environment ('module load cuda/10.1')")
+        default="/gscratch/bdata/$USER/anaconda3/bin/conda"
+    )
+    parser.add_argument(
+        "--conda-env",
+        type=str,
+        default="seattleflustudy",
+        help="The name of the conda environment")
     parser.add_argument(
         "--command",
         type=str,
@@ -94,10 +101,10 @@ if __name__ == "__main__":
     text = text.replace(NUM_NODES, str(args.num_nodes))
     text = text.replace(PARITION, args.parition)
     text = text.replace(ACCOUNT,args.account)
+    text = text.replace(CONDA_PATH,args.conda_path)
     text = text.replace(NUM_GPUS_PER_NODE, str(args.num_gpus))
     text = text.replace(PARTITION_OPTION, partition_option)
     text = text.replace(COMMAND_PLACEHOLDER, str(args.command))
-    text = text.replace(LOAD_ENV, str(args.load_env))
     text = text.replace(GIVEN_NODE, node_info)
     text = text.replace(
         "# THIS FILE IS A TEMPLATE AND IT SHOULD NOT BE DEPLOYED TO "
