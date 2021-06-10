@@ -101,3 +101,6 @@ logs/*
 dask-worker-space/global.lock
 .gitignore
 dask-worker-space/purge.lock
+
+#Slurm scripts
+slurm-utils/job_scripts
