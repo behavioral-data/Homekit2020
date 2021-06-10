@@ -1,5 +1,4 @@
 python ./slurm-utils/slurm-launch.py \
-        --dry-run\
         --dir "/homes/gws/mikeam/seattleflustudy"\
         --exp-name "test_1" \
         --num-nodes 1 \
