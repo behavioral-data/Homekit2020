@@ -28,9 +28,11 @@ tune.run(
     train_fn,
     config={
         # define search space here
-        "gpu":1,
+        "gpu":4,
+        "num_samples":20,
         "num_gpus_per_worker":1,
         "warmup_steps": tune.choice([10, 40]),
+        "pos_class_weight": tune.uniform(0, 10),
         # wandb configuration
         "wandb": {
             "project": "test",
