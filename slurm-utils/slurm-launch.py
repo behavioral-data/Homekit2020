@@ -97,7 +97,7 @@ if __name__ == "__main__":
                               time.strftime("%m%d-%H%M", time.localtime()))
 
     if args.conda_path:
-        conda_path_option = f"export PATH=$PATH:{args.conda_path}"
+        conda_path_option = "source " +  os.path.join(args.conda_path,"etc","profile.d","conda.sh")
     else:
         conda_path_option = ""
 
