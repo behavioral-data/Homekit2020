@@ -49,6 +49,7 @@ def train_neural_baseline(model_name,task_name,
                          dataset_args = {},
                          activity_level="minute",
                          look_for_cached_datareader=False,
+                         datareader_ray_obj_ref=None,
                          data_location=None):
 
     if model_path:
@@ -58,7 +59,8 @@ def train_neural_baseline(model_name,task_name,
     dataset_args["eval_frac"] = eval_frac
     dataset_args["data_location"] = data_location
     task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level,
-                                        look_for_cached_datareader=look_for_cached_datareader)
+                                        look_for_cached_datareader=look_for_cached_datareader,
+                                        datareader_ray_obj_ref=datareader_ray_obj_ref)
 
     train_X, train_y = task.get_train_dataset().to_stacked_numpy()
     eval_X, eval_y  = task.get_eval_dataset().to_stacked_numpy()
@@ -139,6 +141,7 @@ def train_autoencoder(model_name,
                 dataset_args = {},
                 activity_level="minute",
                 look_for_cached_datareader=False,
+                datareader_ray_obj_ref=None,
                 data_location=None,
                 no_eval_during_training=False):
     
@@ -151,7 +154,8 @@ def train_autoencoder(model_name,
     dataset_args["data_location"] = data_location
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level,
-                                        look_for_cached_datareader=look_for_cached_datareader)
+                                        look_for_cached_datareader=look_for_cached_datareader,
+                                        datareader_ray_obj_ref=datareader_ray_obj_ref)
     
     if sinu_position_encoding:
         dataset_args["add_absolute_embedding"] = True
@@ -212,6 +216,7 @@ def train_cnn_transformer( task_name,
                 dataset_args = {},
                 activity_level="minute",
                 look_for_cached_datareader=False,
+                datareader_ray_obj_ref=None,
                 data_location=None,
                 no_eval_during_training=False,
                 reset_cls_params=False,
@@ -233,7 +238,8 @@ def train_cnn_transformer( task_name,
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args,
                                         activity_level=activity_level,
-                                        look_for_cached_datareader=look_for_cached_datareader)
+                                        look_for_cached_datareader=look_for_cached_datareader,
+                                        datareader_ray_obj_ref=datareader_ray_obj_ref)
     
     
     if not model_path:
@@ -325,6 +331,7 @@ def train_sand( task_name,
                 dataset_args = {},
                 activity_level="minute",
                 look_for_cached_datareader=False,
+                datareader_ray_obj_ref=None,
                 data_location=None,
                 no_eval_during_training=False):
     
@@ -338,7 +345,8 @@ def train_sand( task_name,
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args, 
                                          activity_level=activity_level,
-                                         look_for_cached_datareader=look_for_cached_datareader)
+                                         look_for_cached_datareader=look_for_cached_datareader,
+                                         datareader_ray_obj_ref=datareader_ray_obj_ref)
     
     if sinu_position_encoding:
         dataset_args["add_absolute_embedding"] = True
@@ -410,6 +418,7 @@ def train_bert(task_name,
                 dataset_args = {},
                 activity_level="minute",
                 look_for_cached_datareader=False,
+                datareader_ray_obj_ref=None,
                 no_eval_during_training=False,
                 data_location=None):
     
@@ -506,6 +515,7 @@ def train_longformer(task_name,
                     dataset_args = {},
                     activity_level="minute",
                     look_for_cached_datareader=False,
+                    datareader_ray_obj_ref=None,
                     no_eval_during_training=False,
                     data_location=None):
     
@@ -520,7 +530,8 @@ def train_longformer(task_name,
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args,
                                          activity_level=activity_level,
-                                         look_for_cached_datareader=look_for_cached_datareader)
+                                         look_for_cached_datareader=look_for_cached_datareader,
+                                         datareader_ray_obj_ref=datareader_ray_obj_ref)
     
     train_dataset = task.get_train_dataset()
     infer_example = train_dataset[0]["inputs_embeds"]

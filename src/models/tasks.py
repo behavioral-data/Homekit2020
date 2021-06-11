@@ -3,6 +3,7 @@ import datetime
 
 from torch.utils.data import DataLoader
 from transformers.data.data_collator import default_data_collator
+import ray
 
 import src.data.task_datasets as td
 from src.models.eval import classification_eval, autoencode_eval
@@ -92,7 +93,8 @@ class ActivityTask(Task):
         level data"""
     def __init__(self,base_dataset,dataset_args={},
                      activity_level = "minute",
-                     look_for_cached_datareader=False):
+                     look_for_cached_datareader=False,
+                     datareader_ray_obj_ref=None):
         
         super(ActivityTask,self).__init__()
         
@@ -122,6 +124,8 @@ class ActivityTask(Task):
             activity_reader = load_cached_activity_reader(self.get_name(),
                                                           dataset_args=dataset_args,
                                                           fail_if_mismatched=True)
+        elif datareader_ray_obj_ref:
+            activity_reader = ray.get(datareader_ray_obj_ref)
         else:
             add_features_path = dataset_args.pop("add_features_path",None)
             activity_reader = base_activity_reader(participant_ids=participant_ids,
@@ -254,7 +258,8 @@ class SingleWindowActivityTask(Task):
        (e.g.) predicting a user's BMI."""
     
     def __init__(self,base_dataset,dataset_args={}, activity_level="minute",
-                window_selection="first",look_for_cached_datareader=False, **kwargs):
+                window_selection="first",look_for_cached_datareader=False,
+                datareader_ray_obj_ref=None, **kwargs):
         Task.__init__(self)
         eval_frac = dataset_args.pop("eval_frac",None)
         split_date = dataset_args.pop("split_date",None)
@@ -277,6 +282,8 @@ class SingleWindowActivityTask(Task):
             activity_reader = load_cached_activity_reader(self.get_name(),
                                                           dataset_args=dataset_args,
                                                           fail_if_mismatched=True)
+        elif datareader_ray_obj_ref:
+            raise NotImplementedError
         else:
             add_features_path = dataset_args.pop("add_features_path",None)
             activity_reader = base_activity_reader(participant_ids=participant_ids,
@@ -287,8 +294,8 @@ class SingleWindowActivityTask(Task):
                                                            add_features_path=add_features_path,
                                                            data_location=data_location)
 
-
         train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
+        
         if window_selection == "first":
             train_participant_dates = self.filter_participant_dates(train_participant_dates)
             eval_participant_dates = self.filter_participant_dates(eval_participant_dates)

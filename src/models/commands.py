@@ -47,6 +47,7 @@ universal_options = [
     click.Option(('--data_location',), default=None,type=click.Path(exists=True)),
     click.Option(('--limit_train_frac',), default=None,type=float,help="Truncate the training data so <limit_train_frac>"),
     click.Option(('--look_for_cached_datareader',), is_flag=True, default=False),
+    click.Option(('--datareader_ray_obj_ref',), default=None)
 ]
 
 loss_options = [
