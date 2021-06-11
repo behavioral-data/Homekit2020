@@ -51,18 +51,16 @@ def load_cached_activity_reader(name, dataset_args=None,
 
 @click.command()
 @click.argument("config_path", type= click.Path(exists=True))
-def main(config_path):
-    args =  read_yaml(config_path)
-    datareader = MinuteLevelActivityReader(**args)
-    name = os.path.split(os.path.splitext(config_path)[0])[-1]
+@click.option('--data_location', default=None,type=click.Path(exists=True))
+@click.option('--postfix', default="",type=str)
+def main(config_path, data_location=None, postfix=""):
+    reader_args = read_yaml(config_path)
+    if data_location:
+        reader_args["data_location"] = data_location
+    datareader = MinuteLevelActivityReader(**reader_args)
+    name = os.path.split(os.path.splitext(config_path)[0])[-1] + postfix
     cache_path = get_cached_datareader_path(name)
-    print(name)
     logger.info(f"Dumping pickle to {cache_path}...")
     pickle.dump(datareader,open(cache_path,"wb"), protocol=4)
-    
-    args["is_cached"] = True
-    with open(config_path, 'w') as outfile:
-        yaml.dump(args, outfile, default_flow_style=False)
- 
 if __name__ == "__main__":
     main()
