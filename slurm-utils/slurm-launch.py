@@ -23,6 +23,7 @@ COMMAND_PLACEHOLDER = "${COMMAND_PLACEHOLDER}"
 CONDA_PATH = "${CONDA_PATH}"
 GIVEN_NODE = "${GIVEN_NODE}"
 CONDA_ENV = "${CONDA_ENV}"
+LOG_PATH = "${LOG_PATH}"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -101,6 +102,11 @@ if __name__ == "__main__":
     else:
         conda_path_option = ""
 
+    jobs_dir = os.path.join(this_dir,"jobs")
+    this_jobs_dir = os.path.join(jobs_dir,job_name)
+    os.makedirs(this_jobs_dir,exist_ok=True)
+    log_path = os.path.join(this_jobs_dir,"slurm.log")
+
     # ===== Modified the template script =====
     with open(template_file, "r") as f:
         text = f.read()
@@ -109,6 +115,7 @@ if __name__ == "__main__":
     text = text.replace(NUM_NODES, str(args.num_nodes))
     text = text.replace(PARTITION, args.partition)
     text = text.replace(ACCOUNT,args.account)
+    text = text.replace(LOG_PATH, log_path)
     text = text.replace(CONDA_PATH,conda_path_option)
     text = text.replace(CONDA_ENV,args.conda_env)
     text = text.replace(NUM_GPUS_PER_NODE, str(args.num_gpus))
@@ -121,10 +128,7 @@ if __name__ == "__main__":
         "RUNNABLE!")
 
     # ===== Save the script =====
-    jobs_dir = os.path.join(this_dir,"job_scripts")
-    os.makedirs(jobs_dir,exist_ok=True)
-
-    script_file = os.path.join(jobs_dir,"{}.sh".format(job_name))
+    script_file = os.path.join(this_jobs_dir,"{}.sh".format(job_name))
     with open(script_file, "w") as f:
         f.write(text)
 
