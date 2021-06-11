@@ -32,6 +32,7 @@ dependencies:
   - matplotlib
   - pytorch-lightning>=0.10.0
   - torchmetrics
+  - tensorboardx
   - pip:
     - torchviz
     - pyyaml==5.4.1
@@ -39,5 +40,6 @@ dependencies:
     - xgboost
     - tensorboard
     - ray[default]
+    - tabulate
 variables:
   USE_TORCH: 1
