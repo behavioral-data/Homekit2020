@@ -2,6 +2,7 @@ from os import rename
 import numpy as np
 import pandas as pd
 import wandb
+import copy
 from wandb.viz import CustomChart
 from wandb.data_types import Table
 
@@ -13,6 +14,7 @@ from scipy.stats import pearsonr, spearmanr
 
 from sklearn.metrics import (accuracy_score,precision_recall_fscore_support, roc_auc_score,
                             mean_absolute_error)
+
 
 from functools import partial
 from src.utils import check_for_wandb_run
@@ -43,13 +45,14 @@ def classification_eval(logits, labels, threshold = 0.5, prefix=None):
         results["roc"] = wandb.plot.roc_curve(labels, input_probs,
                                             labels=["Negative","Positive"], classes_to_plot=[1])
         results["pr"] = wandb.plot.pr_curve(labels, input_probs,
-                                            labels=["Negative","Positive"], classes_to_plot=[1])
+    
+                                          labels=["Negative","Positive"], classes_to_plot=[1])
     if prefix:
         renamed = {}
         for k,v in results.items():
             renamed[prefix+k] = v
-        return renamed
-
+        results = renamed
+    
     return results
 
 def get_huggingface_classification_eval(threshold=0.5):
