@@ -104,3 +104,5 @@ dask-worker-space/purge.lock
 
 #Slurm scripts
 slurm-utils/job_scripts
+slurm-utils/jobs
+
