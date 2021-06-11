@@ -5,6 +5,6 @@ python ./slurm-utils/slurm-launch.py \
         --conda-path "/gscratch/bdata/mikeam/anaconda3"\
         --account "cse" \
         --partition "cse-gpu" \
-        --num-gpus 4 \
+        --num-gpus 6 \
         --conda-env seattleflustudy \
         --command "python ./slurm-utils/raytune-test.py"

@@ -1,5 +1,8 @@
 import os
 os.environ["DEBUG_DATA"] = "1"
+os.environ["WANDB_MODE"] = "offline"
+os.environ["WANDB_SILENT"] = "true"
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 import logging
 
 from ray.tune.integration.wandb import wandb_mixin
@@ -11,7 +14,7 @@ from src.utils import get_logger
 @wandb_mixin
 def train_fn(config):
     
-    dataset_args = validate_dataset_args(None,None,"/homes/gws/mikeam/seattleflustudy/src/data/dataset_configs/PredictTrigger.yaml")
+    dataset_args = validate_dataset_args(None,None,"/gscratch/bdata/mikeam/SeattleFluStudy/src/data/dataset_configs/PredictTrigger.yaml")
     train_cnn_transformer("PredictTrigger",
                           dataset_args=dataset_args,
                           train_batch_size=300,
@@ -24,8 +27,9 @@ loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
 for logger in loggers:
     logger.setLevel(logging.WARNING)
 
-tune.run(
+analysis = tune.run(
     train_fn,
+    num_samples=1,
     config={
         # define search space here
         "gpu":4,
@@ -39,4 +43,7 @@ tune.run(
             "api_key":"4175520a5f76bf971932f02a8ed7c9c4b2b38207"
         }
     },
-    resources_per_trial={"gpu": 1})
+    resources_per_trial={"gpu": 2})
+
+print("Best config: ", analysis.get_best_config(
+    metric="eval_roc_auc", mode="min"))
