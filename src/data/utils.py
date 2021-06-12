@@ -23,9 +23,10 @@ config = dotenv_values(".env")
 logger = get_logger(__name__)
 
 DATASET_VERSION="2020-07-15"
-RAW_DATA_PATH = os.path.join(config["MAIN_PATH"],"data","raw","audere","data-export",DATASET_VERSION)
-PROCESSED_DATA_PATH = os.path.join(config["MAIN_PATH"],"data","processed")
-DEBUG_DATA_PATH = os.path.join(config["MAIN_PATH"],"data","debug")
+main_path = os.getcwd()
+RAW_DATA_PATH = os.path.join(main_path,"data","raw","audere","data-export",DATASET_VERSION)
+PROCESSED_DATA_PATH = os.path.join(main_path,"data","processed")
+DEBUG_DATA_PATH = os.path.join(main_path,"data","debug")
 
 def get_raw_dataset_path(name):
     if name in constants.MTL_NAMES:
