@@ -281,6 +281,9 @@ def train_cnn_transformer( task_name,
     if output_dir:
         results_dir = os.path.join(output_dir,"results")
         logging_dir = os.path.join(output_dir,"logs")
+
+        os.mkdir(results_dir)
+        os.mkdir(logging_dir)
     else:
         results_dir = './results'
         logging_dir = './logs'
