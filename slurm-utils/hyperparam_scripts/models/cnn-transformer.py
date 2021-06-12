@@ -23,9 +23,10 @@ def train_fn(config,checkpoint_dir=None):
                           warmup_steps=20,
                           loss_fn="FocalLoss",
 # 			  look_for_cached_datareader=True,                        
-			  no_eval_during_training=True,
+			              no_eval_during_training=True,
+                          output_dir = tune.get_trial_dir(),
                           tune=True,
-			  no_wandb=True,
+			              no_wandb=True,
                           **config)
 
 def main():

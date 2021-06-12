@@ -4,6 +4,7 @@ import warnings
 import os
 from pytorch_lightning.loggers.wandb import WandbLogger
 import ray
+from ray.tune.session import report
 from tensorflow.keras import callbacks
 
 from torch import tensor
@@ -225,6 +226,7 @@ def train_cnn_transformer( task_name,
                 limit_train_frac=None,
                 freeze_encoder=False,
                 tune=False,
+                output_dir=None,
                 **model_specific_kwargs):
     logger.info(f"Training CNNTransformer")
     if not eval_frac is None:
@@ -276,6 +278,18 @@ def train_cnn_transformer( task_name,
     else:
         metrics=None
 
+    if output_dir:
+        results_dir = os.path.join(output_dir,"results")
+        logging_dir = os.path.join(output_dir,"logs")
+    else:
+        results_dir = './results'
+        logging_dir = './logs'
+
+    if no_wandb:
+        report_to = []
+    else:
+        report_to = ["wandb"]
+
     if use_pl:
         pl_training_args = dict(
             max_epochs = n_epochs,
@@ -286,21 +300,21 @@ def train_cnn_transformer( task_name,
     
     else:
         training_args = TrainingArguments(
-            output_dir='./results',          # output directorz
+            output_dir=results_dir,          # output directorz
             num_train_epochs=n_epochs,              # total # of training epochs
             per_device_train_batch_size=train_batch_size,  # batch size per device during training
             per_device_eval_batch_size=eval_batch_size,   # batch size for evaluation
             warmup_steps=warmup_steps,                # number of warmup steps for learning rate scheduler
             weight_decay=weight_decay,
             learning_rate=learning_rate,               # strength of weight decay
-            logging_dir='./logs',
+            logging_dir=logging_dir,
             logging_steps=10,
             do_eval=not no_eval_during_training,
             dataloader_num_workers=0,
             dataloader_pin_memory=True,
             prediction_loss_only=False,
             evaluation_strategy="no" if no_eval_during_training else "epoch",
-            report_to=["wandb"]            # directory for storing logs
+            report_to=report_to            # directory for storing logs
         )
 
         run_huggingface(model=model, base_trainer=FluTrainer,
