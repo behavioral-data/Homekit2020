@@ -140,12 +140,6 @@ class FluTrainer(Trainer):
             if not key.startswith(f"{metric_key_prefix}_"):
                 metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
         
-        tune_results = copy.deepcopy(metrics)
-        print(tune_results)
-        for r in ["roc","pr"]:
-            tune_results.pop(f"{metric_key_prefix}_{r}",None)
-        tune.report(**tune_results)
-
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
     def write_results(self,preds,label_ids, description=None):

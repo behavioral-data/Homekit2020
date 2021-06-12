@@ -3,6 +3,7 @@ from re import L
 import warnings
 import os
 from pytorch_lightning.loggers.wandb import WandbLogger
+import ray
 from tensorflow.keras import callbacks
 
 from torch import tensor
@@ -223,6 +224,7 @@ def train_cnn_transformer( task_name,
                 use_pl=False,
                 limit_train_frac=None,
                 freeze_encoder=False,
+                tune=False,
                 **model_specific_kwargs):
     logger.info(f"Training CNNTransformer")
     if not eval_frac is None:
@@ -304,7 +306,8 @@ def train_cnn_transformer( task_name,
         run_huggingface(model=model, base_trainer=FluTrainer,
                     training_args=training_args,
                     metrics = metrics, task=task,
-                    no_wandb=no_wandb, notes=notes)
+                    no_wandb=no_wandb, notes=notes,
+                    tune=tune)
 
 
 def train_sand( task_name, 
@@ -574,7 +577,8 @@ def train_longformer(task_name,
 
 
 def run_huggingface(model,base_trainer,training_args,
-                    metrics, task,no_wandb=False,notes=None):
+                    metrics, task,no_wandb=False,notes=None,
+                    tune=True):
     if not no_wandb:
         import wandb
         wandb.init(project="flu",
@@ -612,6 +616,10 @@ def run_huggingface(model,base_trainer,training_args,
     train_metrics.pop("_roc")
     train_metrics = {"train/"+k[1:] : v for k,v in train_metrics.items()}
     
+    if tune:
+        ray.tune.report(**eval_metrics)
+        ray.tune.report(**train_metrics)
+
     if wandb:
         x_dummy = torch.tensor(train_dataset[0]["inputs_embeds"]).unsqueeze(0).cuda()
         y_dummy = torch.tensor(train_dataset[0]["label"]).unsqueeze(0).cuda()

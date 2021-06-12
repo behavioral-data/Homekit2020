@@ -41,6 +41,7 @@ universal_options = [
     click.Option(("--model_path",), type=click.Path(file_okay=False,exists=True),
                   help = "path containing a checkpoint-X directory and a model_config.json"),
     click.Option(('--no_wandb',), is_flag=True),
+    click.Option(('--tune',), is_flag=True),
     click.Option(('--notes',), type=str, default=None),
     click.Option(('--dataset_args',), default=None,callback=validate_dataset_args),
     click.Option(('--activity_level',),type=click.Choice(["day","minute"]), default="minute"),
