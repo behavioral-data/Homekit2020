@@ -1,7 +1,7 @@
 import os
 os.environ["DEBUG_DATA"] = "1"
 os.environ["WANDB_MODE"] = "offline"
-#os.environ["WANDB_SILENT"] = "true"
+os.environ["WANDB_SILENT"] = "true"
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE"] = "1"
 import pickle
@@ -14,7 +14,6 @@ from src.models.commands import validate_dataset_args
 from src.utils import get_logger
 
 
-@wandb_mixin
 def train_fn(config,checkpoint_dir=None):
     dataset_args = validate_dataset_args(None,None,"/gscratch/bdata/mikeam/SeattleFluStudy/src/data/dataset_configs/PredictTrigger.yaml")
     train_cnn_transformer("PredictTrigger",
@@ -25,10 +24,13 @@ def train_fn(config,checkpoint_dir=None):
                           loss_fn="FocalLoss",
  			  look_for_cached_datareader=True,                        
 			  no_eval_during_training=True,
+                          tune=True,
                           **config)
 
 def main():
 #    obj_ref = ray.put(pickle.load(open("/gscratch/bdata/mikeam/SeattleFluStudy/data/processed/cached_datareaders/PredictTrigger-train_eval.pickle", "rb" )))
+    print(os.environ["ip_head"], os.environ["redis_password"])
+    ray.init(address='auto', _node_ip_address=os.environ["ip_head"].split(":")[0], _redis_password=os.environ["redis_password"])
     analysis = tune.run(
         train_fn,
         num_samples=10,
@@ -37,7 +39,7 @@ def main():
             "focal_alpha":tune.uniform(0.1,1.0),
             "focal_alpha":tune.uniform(1,3),
 #            "datareader_ray_obj_ref":obj_ref,
-            "learning_rate":tune.loguniform(1e-5, 1e-2),
+            "learning_rate":tune.loguniform(1e-6,1e-4),
             "num_attention_heads":tune.choice([1,2,4]),
             "num_hidden_layers":tune.choice([1,2,3,4]),
             # wandb configuration
@@ -54,7 +56,7 @@ def main():
     print("Best config: ", analysis.get_best_config(
         metric="eval_roc_auc", mode="min"))
     df = analysis.results_df
-    df_path = os.path.join(__file__,"test.csv")
+    df_path = os.path.join(__file__,"CNNTransformer-PredictTrigger.csv")
     print(f"Writing all results to {df_path}")
     df.to_csv(df_path)
 
