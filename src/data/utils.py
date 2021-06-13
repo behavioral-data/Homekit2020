@@ -149,3 +149,41 @@ def write_dict_to_json(data,path):
 def load_json(path):
     with open(path, 'r') as infile:
         return json.load(infile)
+
+def validate_reader(dataset_args,data_reader):
+    props = ["min_date","max_date","split_date","min_windows",
+            "day_window_size","max_missing_days_in_window"]
+    dont_match = []
+    
+    for prop in props:
+        args_prop = dataset_args.get(prop,None)
+        #Assume (maybe a bad assumption) that default args are preserved
+        if args_prop is None:
+            continue
+        reader_prop = getattr(data_reader,prop)
+        prop_match = args_prop == reader_prop
+
+        if not prop_match:
+            dont_match.append((prop,args_prop,reader_prop))
+    return dont_match
+
+def load_cached_activity_reader(name, dataset_args=None,
+                                fail_if_mismatched=False,
+                                activity_level="minute"):
+    if not activity_level == "minute":
+        raise NotImplementedError("Can only cache minute level activities")
+        
+    cache_path = get_cached_datareader_path(name)
+    reader = pickle.load(open(cache_path, "rb" ) )
+    if dataset_args:
+        dont_match = validate_reader(dataset_args,reader)
+        if len(dont_match) != 0:
+            message = f"Mismatch between cached data reader and dataset args:{dont_match}"
+            if fail_if_mismatched:
+                raise ValueError(message)
+            else: 
+                logger.warning(message)
+
+    elif fail_if_mismatched:
+        raise(ValueError("In order to check for match with cached activity_reader must pass dataset_args"))
+    return reader

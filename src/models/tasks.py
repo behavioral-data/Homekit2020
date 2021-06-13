@@ -7,8 +7,7 @@ import ray
 
 import src.data.task_datasets as td
 from src.models.eval import classification_eval, autoencode_eval
-from src.data.utils import get_features_path, load_processed_table
-from src.data.cache_datareader import load_cached_activity_reader
+from src.data.utils import get_features_path, load_processed_table, load_cached_activity_reader
 from src.utils import get_logger
 logger = get_logger(__name__)
 
