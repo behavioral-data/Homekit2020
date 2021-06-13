@@ -1,6 +1,7 @@
 from datetime import datetime
 import multiprocessing
-from functools import lru_cache, reduce
+
+from functools import  reduce
 from operator import and_ as bit_and
 import random
 import numpy as np
@@ -15,6 +16,7 @@ dask.config.set({"distributed.comm.timeouts.connect": "60"})
 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import train_test_split
+from methodtools import lru_cache
 
 from src.utils import get_logger, read_yaml
 logger = get_logger(__name__)
@@ -283,6 +285,7 @@ class ActivtyDataset(Dataset):
                        add_absolute_embedding = False,
                        add_cls=False,
                        shuffle=False,
+                       cache=True,
                        **_):
         
         self.activity_reader = activity_reader
@@ -312,7 +315,11 @@ class ActivtyDataset(Dataset):
 
         if self.add_cls:
             self.cls_init = np.random.randn(1,self.size[-1]).astype(np.float32)   
-   
+
+        self.cache = cache
+        if self.cache:
+            self.get_item_cache = {}
+
     def get_user_data_in_date_range(self,participant_id, start, end):
         eod = end + pd.to_timedelta("1D") - pd.to_timedelta("1min")
         return self.get_user_data_in_time_range(participant_id,start,eod)
@@ -345,10 +352,14 @@ class ActivtyDataset(Dataset):
     def __len__(self):
         return len(self.participant_dates)
     
-    @lru_cache(maxsize=None)
     def __getitem__(self,index):
         # Could cache this later
-    
+        if self.cache:
+            try:
+                return self.get_item_cache[index]
+            except KeyError:
+                pass
+
         participant_id, end_date = self.participant_dates[index]
         start_date = end_date - pd.Timedelta(self.day_window_size -1, unit = "days")
         activity_data = self.get_user_data_in_date_range(participant_id,start_date,end_date)
@@ -385,8 +396,12 @@ class ActivtyDataset(Dataset):
                 item["global_attention_mask"] = mask
             
             return item
-
-        return activity_data.values, label
+        
+        result = activity_data.values, label
+        if self.cache:
+            self.get_item_cache[index] = result
+        
+        return result
     
     def to_stacked_numpy(self,flatten = False):
         

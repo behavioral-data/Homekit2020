@@ -93,7 +93,8 @@ class ActivityTask(Task):
     def __init__(self,base_dataset,dataset_args={},
                      activity_level = "minute",
                      look_for_cached_datareader=False,
-                     datareader_ray_obj_ref=None):
+                     datareader_ray_obj_ref=None,
+                     cache=True):
         
         super(ActivityTask,self).__init__()
         
@@ -143,9 +144,12 @@ class ActivityTask(Task):
             train_participant_dates = train_participant_dates[:int(len(train_participant_dates)*limit_train_frac)]
 
         self.train_dataset = base_dataset(activity_reader, lab_results_reader,
-                        participant_dates = train_participant_dates,**dataset_args)
+                        participant_dates = train_participant_dates,
+                        cache=cache,**dataset_args)
         self.eval_dataset = base_dataset(activity_reader, lab_results_reader,
-                        participant_dates = eval_participant_dates,**dataset_args)
+                            participant_dates = eval_participant_dates,
+                            cache=cache,
+                            **dataset_args)
     
     def get_description(self):
         return self.__doc__
