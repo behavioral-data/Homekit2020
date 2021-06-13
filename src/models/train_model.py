@@ -219,6 +219,7 @@ def train_cnn_transformer( task_name,
                 activity_level="minute",
                 look_for_cached_datareader=False,
                 datareader_ray_obj_ref=None,
+                task_ray_obj_ref=None,
                 data_location=None,
                 no_eval_during_training=False,
                 reset_cls_params=False,
@@ -240,10 +241,13 @@ def train_cnn_transformer( task_name,
     if sinu_position_encoding:
         dataset_args["add_absolute_embedding"] = True
 
-    task = get_task_with_name(task_name)(dataset_args=dataset_args,
-                                        activity_level=activity_level,
-                                        look_for_cached_datareader=look_for_cached_datareader,
-                                        datareader_ray_obj_ref=datareader_ray_obj_ref)
+    if task_ray_obj_ref:
+        task = ray.get(task_ray_obj_ref)
+    else:
+        task = get_task_with_name(task_name)(dataset_args=dataset_args,
+                                            activity_level=activity_level,
+                                            look_for_cached_datareader=look_for_cached_datareader,
+                                            datareader_ray_obj_ref=datareader_ray_obj_ref)
     
     
     if not model_path:
