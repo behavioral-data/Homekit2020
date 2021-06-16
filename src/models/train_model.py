@@ -252,7 +252,6 @@ def train_cnn_transformer( task_name,
     
     if not model_path:
         train_dataset = task.get_train_dataset()
-        print(train_dataset[0])
         infer_example = train_dataset[0]["inputs_embeds"]
         n_timesteps, n_features = infer_example.shape
 
@@ -635,9 +634,8 @@ def run_huggingface(model,base_trainer,training_args,
 
     train_metrics = trainer.predict(train_dataset, metric_key_prefix="",
                                     description="Train").metrics
-    train_metrics.pop("_roc")
+    train_metrics.pop("_roc",None)
     train_metrics = {"train/"+k[1:] : v for k,v in train_metrics.items()}
-    
     if tune:
         ray.tune.report(**eval_metrics)
         ray.tune.report(**train_metrics)
@@ -681,6 +679,5 @@ def run_pytorch_lightning(model, task,
 
     model.set_train_dataset(task.get_train_dataset())
     model.set_eval_dataset(task.get_eval_dataset())
-
     trainer.fit(model)
     
