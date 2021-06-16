@@ -282,6 +282,9 @@ def train_cnn_transformer( task_name,
     else:
         metrics=None
 
+    if tune:
+        output_dir = ray.tune.get_trial_dir()
+
     if output_dir:
         results_dir = os.path.join(output_dir,"results")
         logging_dir = os.path.join(output_dir,"logs")
@@ -291,7 +294,7 @@ def train_cnn_transformer( task_name,
     else:
         results_dir = './results'
         logging_dir = './logs'
-
+    print(results_dir)
     if no_wandb:
         report_to = []
     else:
@@ -613,9 +616,10 @@ def run_huggingface(model,base_trainer,training_args,
     train_dataset = task.get_train_dataset()
     eval_dataset = task.get_eval_dataset()
 
-    # if hasattr(model,"config"):
-    #     write_dict_to_json(model.config.to_dict(),
-    #                        os.path.join(training_args.output_dir,"model_config.json"))
+    if hasattr(model,"config"):
+        write_dict_to_json(model.config.to_dict(),
+                           os.path.join(training_args.output_dir,"model_config.json"),
+                           safe=True)
 
     training_args.save_total_limit=3
     trainer_args = dict(
@@ -640,7 +644,7 @@ def run_huggingface(model,base_trainer,training_args,
         ray.tune.report(**eval_metrics)
         ray.tune.report(**train_metrics)
 
-    if wandb:
+    if not no_wandb:
         x_dummy = torch.tensor(train_dataset[0]["inputs_embeds"]).unsqueeze(0).cuda()
         y_dummy = torch.tensor(train_dataset[0]["label"]).unsqueeze(0).cuda()
         pred_dummy = model(inputs_embeds=x_dummy, labels = y_dummy)[0]
@@ -650,6 +654,12 @@ def run_huggingface(model,base_trainer,training_args,
         wandb.log({"model_img": [wandb.Image(Image.open(model_img_path), caption="Model Graph")]})
         wandb.log(eval_metrics)
         wandb.log(train_metrics)
+    
+    final_dir = os.path.join(training_args.output_dir,"final_model")
+    os.makedirs(final_dir)
+    print(f"Saving final model to...{final_dir}")
+    trainer.save_model(final_dir)
+
 
 def run_pytorch_lightning(model, task, 
                         training_args={},

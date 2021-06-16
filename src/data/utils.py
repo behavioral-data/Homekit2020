@@ -142,10 +142,19 @@ def load_results(path):
     softmax_results = softmax(logits,axis=1)["neg_logit"].rename("pos_prob")
     return pd.concat([results["label"],logits,softmax_results],axis=1)
 
-def write_dict_to_json(data,path):
+def write_dict_to_json(data,path,safe=True):
+    if safe:
+        data = {k:v for k,v in data.iteritems() if is_jsonable(v)}
+        
     with open(path, 'w') as outfile:
         json.dump(data, outfile)
     
+def is_jsonable(x):
+    try:
+        json.dumps(x)
+        return True
+    except (TypeError, OverflowError):
+        return False
 
 def load_json(path):
     with open(path, 'r') as infile:
