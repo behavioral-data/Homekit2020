@@ -1,6 +1,7 @@
 import os
 import glob 
 import json
+import pickle
 
 import pyarrow.parquet as pq
 import pandas as pd
