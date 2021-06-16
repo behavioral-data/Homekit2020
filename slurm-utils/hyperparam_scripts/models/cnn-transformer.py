@@ -57,7 +57,7 @@ def main():
 
 
     print("Best config: ", analysis.get_best_config(
-        metric="eval_roc_auc", mode="min"))
+        metric="eval/roc_auc", mode="min"))
     df = analysis.results_df
     df_path = os.path.join(analysis._experiment_dir,"CNNTransformer-PredictTrigger.csv")
     print(f"Writing all results to {df_path}")
