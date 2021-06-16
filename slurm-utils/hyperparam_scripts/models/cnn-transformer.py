@@ -1,8 +1,8 @@
 import os
 #os.environ["DEBUG_DATA"] = "1"
 os.environ["WANDB_MODE"] = "offline"
-os.environ["WANDB_SILENT"] = "true"
-os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+#os.environ["WANDB_SILENT"] = "true"
+#os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 #os.environ["RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE"] = "1"
 import pickle
 
@@ -35,11 +35,11 @@ def main():
     obj_ref = ray.put(pickle.load(open("/gscratch/bdata/mikeam/SeattleFluStudy/data/processed/cached_datareaders/PredictTrigger-train_eval.pickle", "rb" )))
     analysis = tune.run(
         train_fn,
-        num_samples=10,
+        num_samples=55555,
         config={
             # define search space here
             "focal_alpha":tune.uniform(0.1,1.0),
-            "focal_alpha":tune.uniform(1,3),
+            "focal_gamma":tune.uniform(1,3),
             "datareader_ray_obj_ref":obj_ref,
             "learning_rate":tune.loguniform(1e-6,1e-4),
             "num_attention_heads":tune.choice([1,2,4]),
