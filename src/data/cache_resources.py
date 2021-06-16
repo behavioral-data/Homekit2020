@@ -30,6 +30,7 @@ def main(config_path, task_name=None, cache_path=None, data_location=None, postf
          activity_level="minute",preload=False):
 
     reader_args = read_yaml(config_path)
+    reader_args["return_dict"] = True
     if data_location:
         reader_args["data_location"] = data_location
     
@@ -40,11 +41,11 @@ def main(config_path, task_name=None, cache_path=None, data_location=None, postf
         resource = get_task_with_name(task_name)(dataset_args=reader_args,
                                         activity_level=activity_level)
         if preload:
+            print("Train dataset is of length {} ")
             train_dataset = resource.get_train_dataset()
             eval_dataset = resource.get_eval_dataset()
             for dataset in [train_dataset, eval_dataset]:
                 data_loader = DataLoader(dataset, batch_size=1000)
-
                 [_ for _ in tqdm(data_loader)]
     
     if not cache_path:
