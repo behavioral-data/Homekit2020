@@ -395,9 +395,10 @@ class ActivtyDataset(Dataset):
                 mask[0] = 1
                 item["global_attention_mask"] = mask
             
-            return item
-        
-        result = activity_data.values, label
+            result = item
+        else:
+            result = activity_data.values, label
+
         if self.cache:
             self.get_item_cache[index] = result
         
