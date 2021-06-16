@@ -22,7 +22,8 @@ def train_fn(config,checkpoint_dir=None):
                           eval_batch_size=500, 
                           warmup_steps=20,
                           loss_fn="FocalLoss",
-# 			  look_for_cached_datareader=True,                        
+# 			  look_for_cached_datareader=True, 
+                          task_ray_obj_ref = config["obj_ref"],                    
 			              no_eval_during_training=True,
                           output_dir = tune.get_trial_dir(),
                           tune=True,
@@ -32,15 +33,15 @@ def train_fn(config,checkpoint_dir=None):
 def main():
     print(os.environ["ip_head"], os.environ["redis_password"])
     ray.init(address='auto', _node_ip_address=os.environ["ip_head"].split(":")[0], _redis_password=os.environ["redis_password"])
-    obj_ref = ray.put(pickle.load(open("/gscratch/bdata/mikeam/SeattleFluStudy/data/processed/cached_datareaders/PredictTrigger-train_eval.pickle", "rb" )))
+    obj_ref = ray.put(pickle.load(open("/gscratch/bdata/mikeam/SeattleFluStudy/data/processed/cached_tasks/PredictTrigger-train-eval.pickle", "rb" )))
     analysis = tune.run(
         train_fn,
-        num_samples=55555,
+        num_samples=4,
         config={
             # define search space here
             "focal_alpha":tune.uniform(0.1,1.0),
             "focal_gamma":tune.uniform(1,3),
-            "datareader_ray_obj_ref":obj_ref,
+            "obj_ref":obj_ref,
             "learning_rate":tune.loguniform(1e-6,1e-4),
             "num_attention_heads":tune.choice([1,2,4]),
             "num_hidden_layers":tune.choice([1,2,3,4]),
