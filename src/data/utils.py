@@ -144,8 +144,8 @@ def load_results(path):
 
 def write_dict_to_json(data,path,safe=True):
     if safe:
-        data = {k:v for k,v in data.iteritems() if is_jsonable(v)}
-        
+        data = {k:v for k,v in data.items() if is_jsonable(v)}
+
     with open(path, 'w') as outfile:
         json.dump(data, outfile)
     
