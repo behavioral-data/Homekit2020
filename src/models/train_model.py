@@ -252,6 +252,7 @@ def train_cnn_transformer( task_name,
     
     if not model_path:
         train_dataset = task.get_train_dataset()
+        print(train_dataset[0])
         infer_example = train_dataset[0]["inputs_embeds"]
         n_timesteps, n_features = infer_example.shape
 
@@ -613,9 +614,9 @@ def run_huggingface(model,base_trainer,training_args,
     train_dataset = task.get_train_dataset()
     eval_dataset = task.get_eval_dataset()
 
-    if hasattr(model,"config"):
-        write_dict_to_json(model.config.to_dict(),
-                           os.path.join(training_args.output_dir,"model_config.json"))
+    # if hasattr(model,"config"):
+    #     write_dict_to_json(model.config.to_dict(),
+    #                        os.path.join(training_args.output_dir,"model_config.json"))
 
     training_args.save_total_limit=3
     trainer_args = dict(
