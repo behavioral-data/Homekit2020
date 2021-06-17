@@ -28,6 +28,7 @@ def train_fn(config,checkpoint_dir=None):
                           output_dir = tune.get_trial_dir(),
                           tune=True,
 			              no_wandb=True,
+                          n_epochs=25,
                           **config)
 
 def main():
@@ -36,7 +37,7 @@ def main():
     obj_ref = ray.put(pickle.load(open("/gscratch/bdata/mikeam/SeattleFluStudy/data/processed/cached_tasks/PredictTrigger-train-eval.pickle", "rb" )))
     analysis = tune.run(
         train_fn,
-        num_samples=4,
+        num_samples=25,
         config={
             # define search space here
             "focal_alpha":tune.uniform(0.1,1.0),
