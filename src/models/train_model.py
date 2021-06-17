@@ -641,8 +641,8 @@ def run_huggingface(model,base_trainer,training_args,
     train_metrics.pop("_roc",None)
     train_metrics = {"train/"+k[1:] : v for k,v in train_metrics.items()}
     if tune:
-        ray.tune.report(**eval_metrics)
-        ray.tune.report(**train_metrics)
+        all_metrics = {**eval_metrics,**train_metrics}
+        ray.tune.report(**all_metrics)
 
     if not no_wandb:
         x_dummy = torch.tensor(train_dataset[0]["inputs_embeds"]).unsqueeze(0).cuda()
