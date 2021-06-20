@@ -15,8 +15,8 @@ from src.utils import get_logger
 
 
 def train_fn(config,checkpoint_dir=None):
-    dataset_args = validate_dataset_args(None,None,"/gscratch/bdata/mikeam/SeattleFluStudy/src/data/dataset_configs/PredictFatigue.yaml")
-    train_cnn_transformer("PredictSurveyClause",
+    dataset_args = validate_dataset_args(None,None,"/gscratch/bdata/mikeam/SeattleFluStudy/src/data/dataset_configs/PredictFluPos.yaml")
+    train_cnn_transformer("PredictFluPos",
                           dataset_args=dataset_args,
                           train_batch_size=500,
                           eval_batch_size=500, 
@@ -52,14 +52,14 @@ def main():
             }
         },
         resources_per_trial={"gpu": 4},
-	name="CNN-PredictFatigue",
+	name="CNN-PredictFluPos",
 	local_dir="/gscratch/bdata/mikeam/SeattleFluStudy/results")
 
 
     print("Best config: ", analysis.get_best_config(
         metric="eval/roc_auc", mode="min"))
     df = analysis.results_df
-    df_path = os.path.join(analysis._experiment_dir,"CNN-PredictFatigue.csv")
+    df_path = os.path.join(analysis._experiment_dir,"CNN-PredictFluPos.csv")
     print(f"Writing all results to {df_path}")
     df.to_csv(df_path)
 
