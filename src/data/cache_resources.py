@@ -21,18 +21,18 @@ from src.models.tasks import get_task_with_name
 @click.command()
 @click.argument("config_path", type= click.Path(exists=True))
 @click.option("--task_name", type=str,help="If provided, cache a task and not a datareader")
-@click.option('--data_location', default=None,type=click.Path(exists=True))
+@click.option('--train_data_location', default=None,type=click.Path(exists=True))
 @click.option('--cache_path', default=None)
 @click.option('--activity_level', default="minute")
 @click.option('--preload', is_flag=True)
 @click.option('--postfix', default="",type=str)
-def main(config_path, task_name=None, cache_path=None, data_location=None, postfix="",
+def main(config_path, task_name=None, cache_path=None, train_data_location=None, postfix="",
          activity_level="minute",preload=False):
 
     reader_args = read_yaml(config_path)
     reader_args["return_dict"] = True
-    if data_location:
-        reader_args["data_location"] = data_location
+    if train_data_location:
+        reader_args["train_data_location"] = train_data_location
     
     if not task_name:
         resource = MinuteLevelActivityReader(**reader_args)

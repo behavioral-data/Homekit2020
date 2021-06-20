@@ -52,14 +52,14 @@ def train_neural_baseline(model_name,task_name,
                          activity_level="minute",
                          look_for_cached_datareader=False,
                          datareader_ray_obj_ref=None,
-                         data_location=None):
+                         train_data_location=None):
 
     if model_path:
         raise NotImplementedError()
 
     logger.info(f"Training {model_name} on {task_name}")
     dataset_args["eval_frac"] = eval_frac
-    dataset_args["data_location"] = data_location
+    dataset_args["train_data_location"] = train_data_location
     task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level,
                                         look_for_cached_datareader=look_for_cached_datareader,
                                         datareader_ray_obj_ref=datareader_ray_obj_ref)
@@ -144,7 +144,7 @@ def train_autoencoder(model_name,
                 activity_level="minute",
                 look_for_cached_datareader=False,
                 datareader_ray_obj_ref=None,
-                data_location=None,
+                train_data_location=None,
                 no_eval_during_training=False):
     
     if model_path:
@@ -153,7 +153,7 @@ def train_autoencoder(model_name,
     logger.info(f"Training {model_name}")
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
-    dataset_args["data_location"] = data_location
+    dataset_args["train_data_location"] = train_data_location
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level,
                                         look_for_cached_datareader=look_for_cached_datareader,
@@ -220,7 +220,7 @@ def train_cnn_transformer( task_name,
                 look_for_cached_datareader=False,
                 datareader_ray_obj_ref=None,
                 task_ray_obj_ref=None,
-                data_location=None,
+                train_data_location=None,
                 no_eval_during_training=False,
                 reset_cls_params=False,
                 use_pl=False,
@@ -235,7 +235,7 @@ def train_cnn_transformer( task_name,
     
     dataset_args["limit_train_frac"]=limit_train_frac
     dataset_args["return_dict"] = True
-    dataset_args["data_location"] = data_location
+    dataset_args["train_data_location"] = train_data_location
     dataset_args["limit_train_frac"] = limit_train_frac
     
     if sinu_position_encoding:
@@ -359,7 +359,7 @@ def train_sand( task_name,
                 activity_level="minute",
                 look_for_cached_datareader=False,
                 datareader_ray_obj_ref=None,
-                data_location=None,
+                train_data_location=None,
                 no_eval_during_training=False):
     
     if model_path:
@@ -368,7 +368,7 @@ def train_sand( task_name,
     logger.info(f"Training SAnD")
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
-    dataset_args["data_location"] = data_location
+    dataset_args["train_data_location"] = train_data_location
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args, 
                                          activity_level=activity_level,
@@ -447,7 +447,7 @@ def train_bert(task_name,
                 look_for_cached_datareader=False,
                 datareader_ray_obj_ref=None,
                 no_eval_during_training=False,
-                data_location=None):
+                train_data_location=None):
     
     if model_path:
         raise NotImplementedError()
@@ -455,7 +455,7 @@ def train_bert(task_name,
     logger.info(f"Training BERT on {task_name}")
     dataset_args["return_dict"] = True
     dataset_args["eval_frac"] = eval_frac
-    dataset_args["data_location"] = data_location
+    dataset_args["train_data_location"] = train_data_location
     
     
     if sinu_position_encoding:
@@ -544,7 +544,7 @@ def train_longformer(task_name,
                     look_for_cached_datareader=False,
                     datareader_ray_obj_ref=None,
                     no_eval_during_training=False,
-                    data_location=None):
+                    train_data_location=None):
     
     if model_path:
         raise NotImplementedError()
@@ -553,7 +553,7 @@ def train_longformer(task_name,
     dataset_args["return_dict"] = True
     dataset_args["eval_frac"] = eval_frac
     dataset_args["return_global_attention_mask"] = True
-    dataset_args["data_location"] = data_location
+    dataset_args["train_data_location"] = train_data_location
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args,
                                          activity_level=activity_level,

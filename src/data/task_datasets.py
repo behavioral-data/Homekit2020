@@ -63,7 +63,7 @@ class DayLevelActivityReader(object):
                        max_missing_days_in_window=5,
                        min_windows=1,
                        add_features_path=None,
-                       data_location=None):
+                       train_data_location=None):
         
         self.min_date = min_date
         self.split_date = split_date
@@ -75,7 +75,7 @@ class DayLevelActivityReader(object):
         self.max_missing_days_in_window = max_missing_days_in_window
         self.obs_per_day = 1
 
-        df = load_processed_table("fitbit_day_level_activity", path=data_location)
+        df = load_processed_table("fitbit_day_level_activity", path=train_data_location)
 
         date_filters = []
         filters = []
@@ -156,7 +156,7 @@ class MinuteLevelActivityReader(object):
                        scaler=StandardScaler,
                        max_missing_days_in_window=5,
                        min_windows=1,
-                       data_location=None,
+                       train_data_location=None,
                        **_):
         
         self.min_date = min_date
@@ -175,7 +175,7 @@ class MinuteLevelActivityReader(object):
         #pylint:disable=unused-variable 
         with Client(n_workers=min(n_cores,16), threads_per_worker=1) as client:
             dask_df = get_dask_df("processed_fitbit_minute_level_activity",
-                                    path = data_location)
+                                    path = train_data_location)
     
             if not participant_ids is None:
                 dask_df = dask_df[dask_df["participant_id"].isin(participant_ids)] 
