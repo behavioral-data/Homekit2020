@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 from xgboost import callback
 import wandb
 import ray
+import pickle
 
 from src.models.tasks import get_task_with_name
 from src.utils import get_logger
@@ -70,11 +71,12 @@ def train_xgboost(task_name, dataset_args ={},
     dataset_args["data_location"] = data_location
     # dataset_args["data_location"] = data_location
 
-    if task_ray_obj_ref:
-        task = ray.get(task_ray_obj_ref)
-    else:
-        task = get_task_with_name(task_name)(dataset_args=dataset_args,
-                                         activity_level="day")
+    # if task_ray_obj_ref:
+    #     task = ray.get(task_ray_obj_ref)
+    # else:
+    #     task = get_task_with_name(task_name)(dataset_args=dataset_args,
+    #                                      activity_level="day")
+    task = pickle.load(open("./data/processed/cached_tasks/PredictTrigger-Daily-train-eval.pickle", "rb" ))
     if not task.is_classification:
         raise ValueError(f"{task_name} is not an classification task")
 
@@ -105,7 +107,7 @@ def train_xgboost(task_name, dataset_args ={},
     bst = xgb.train(param, train, 10, evallist, callbacks=callbacks)
     eval_pred = bst.predict(eval)
     eval_logits = np.stack([1-eval_pred,eval_pred],axis=1)
-    results = classification_eval(eval_logits,eval.get_label())
+    results = classification_eval(eval_logits,eval.get_label(),prefix="eval/")
 
 
     if not no_wandb:

@@ -15,7 +15,7 @@ from src.utils import get_logger
 
 
 def train_fn(config,checkpoint_dir=None):
-    dataset_args = validate_dataset_args(None,None,"/gscratch/bdata/mikeam/SeattleFluStudy/src/data/dataset_configs/PredictFluPos.yaml")
+    dataset_args = validate_dataset_args(None,None,"/gscratch/bdata/mikeam/SeattleFluStudy/src/data/dataset_configs/PredictTrigger.yaml")
     train_xgboost("PredictFluPos",
                     dataset_args=dataset_args,
                     task_ray_obj_ref = config["obj_ref"],                    
@@ -42,14 +42,14 @@ def main():
             }
         },
         resources_per_trial={"gpu": 4},
-	name="CNN-PredictFluPos",
+	name="XGB-PredictTrigger",
 	local_dir="/gscratch/bdata/mikeam/SeattleFluStudy/results")
 
 
     print("Best config: ", analysis.get_best_config(
         metric="eval/roc_auc", mode="min"))
     df = analysis.results_df
-    df_path = os.path.join(analysis._experiment_dir,"XGB-PredictFluPos.csv")
+    df_path = os.path.join(analysis._experiment_dir,"XGB-PredictTigger.csv")
     print(f"Writing all results to {df_path}")
     df.to_csv(df_path)
 
