@@ -30,7 +30,8 @@ def main(config_path, task_name=None, cache_path=None, data_location=None, postf
          activity_level="minute",preload=False):
 
     reader_args = read_yaml(config_path)
-    reader_args["return_dict"] = True
+    if activity_level == "minute":
+        reader_args["return_dict"] = True
     if data_location:
         reader_args["data_location"] = data_location
     
