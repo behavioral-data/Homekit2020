@@ -5,6 +5,7 @@ from src.utils import read_yaml
 from src.models.train_model import (train_cnn_transformer, train_neural_baseline,
                                     train_autoencoder, train_sand,
                                     train_bert, train_longformer)
+from src.models.baselines import train_xgboost
 
 def validate_dataset_args(ctx, param, value):
     try:
@@ -119,9 +120,16 @@ def train_bert_command(*args,**kwargs):
 def train_longformer_command(*args,**kwargs):
     train_longformer(*args,**kwargs)
 
+@click.command(cls=BaseCommand)
+@click.argument("task_name", name="train-xgboost")
+@click.option("--add_features_path", type = click.Path(dir_okay=False), default=None)
+def train_xgboost_command(*args,**kwargs):
+    train_xgboost(*args,**kwargs)
+
 
 MODEL_COMMANDS = [train_cnn_transformer_command,
                   train_autoencoder_command,
                   train_neural_baseline_command,
                   train_longformer_command,
-                  train_sand_command]
+                  train_sand_command,
+                  train_xgboost_command]

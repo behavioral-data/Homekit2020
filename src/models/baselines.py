@@ -51,9 +51,6 @@ def xgb_wandb_callback():
 
     return callback
 
-@click.command(cls=BaseCommand)
-@click.argument("task_name")
-@click.option("--add_features_path", type = click.Path(dir_okay=False), default=None)
 def train_xgboost(task_name, dataset_args ={},
                 no_wandb=False,
                 notes=None,
