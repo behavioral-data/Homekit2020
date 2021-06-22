@@ -1,10 +1,12 @@
 import click
 import numpy as np
 from json import loads
+from ray import tune
 import xgboost as xgb
 from matplotlib import pyplot as plt
 from xgboost import callback
 import wandb
+import ray
 
 from src.models.tasks import get_task_with_name
 from src.utils import get_logger
@@ -58,17 +60,24 @@ def train_xgboost(task_name, dataset_args ={},
                 activity_level="day",
                 look_for_cached_datareader = False,
                 add_features_path=None,
-                train_data_location=None,
+                data_location=None,
                 limit_train_frac=None,
+                max_depth=2,
+                eta=1,
+                objective="binary:logistic",
+                task_ray_obj_ref=None,
                 **_):
 
     """ Baseline for classification tasks that uses daily aggregated features"""
     logger.info(f"Training XGBoost on {task_name}")
     dataset_args["add_features_path"] = add_features_path
-    dataset_args["train_data_location"] = train_data_location
-    # dataset_args["train_data_location"] = train_data_location
+    dataset_args["data_location"] = data_location
+    # dataset_args["data_location"] = data_location
 
-    task = get_task_with_name(task_name)(dataset_args=dataset_args,
+    if task_ray_obj_ref:
+        task = ray.get(task_ray_obj_ref)
+    else:
+        task = get_task_with_name(task_name)(dataset_args=dataset_args,
                                          activity_level="day")
     if not task.is_classification:
         raise ValueError(f"{task_name} is not an classification task")
@@ -79,7 +88,7 @@ def train_xgboost(task_name, dataset_args ={},
         train = train.slice(inds)
     eval = task.get_eval_dataset().to_dmatrix()
     
-    param = {'max_depth': 2, 'eta': 1, 'objective': 'binary:logistic'}
+    param = {'max_depth': max_depth, 'eta': eta, 'objective': objective}
     param['nthread'] = 4
     param['eval_metric'] = 'auc'
     evallist = [(eval, 'eval'), (train, 'train')]
@@ -109,4 +118,5 @@ def train_xgboost(task_name, dataset_args ={},
         wandb.log({"feature_importance": wandb.Image(plt)})
         wandb.log(results)
 
-    
+    if tune:
+        ray.tune.report(**results)
