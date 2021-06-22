@@ -69,14 +69,14 @@ def train_xgboost(task_name, dataset_args ={},
     logger.info(f"Training XGBoost on {task_name}")
     dataset_args["add_features_path"] = add_features_path
     dataset_args["data_location"] = data_location
-    # dataset_args["data_location"] = data_location
+    dataset_args["data_location"] = data_location
 
-    # if task_ray_obj_ref:
-    #     task = ray.get(task_ray_obj_ref)
-    # else:
-    #     task = get_task_with_name(task_name)(dataset_args=dataset_args,
-    #                                      activity_level="day")
-    task = pickle.load(open("./data/processed/cached_tasks/PredictTrigger-Daily-train-eval.pickle", "rb" ))
+    if task_ray_obj_ref:
+        task = ray.get(task_ray_obj_ref)
+    else:
+        task = get_task_with_name(task_name)(dataset_args=dataset_args,
+                                         activity_level="day")
+
     if not task.is_classification:
         raise ValueError(f"{task_name} is not an classification task")
 
