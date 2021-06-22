@@ -3,6 +3,7 @@ import math
 import torch
 import numpy as np
 import torch.nn as nn
+from torch.nn.modules import dropout
 
 
 class PositionalEncoding(nn.Module):
@@ -113,11 +114,13 @@ class DenseInterpolation(nn.Module):
 
 
 class ClassificationModule(nn.Module):
-    def __init__(self, d_model: int, factor: int, num_class: int) -> None:
+    def __init__(self, d_model: int, factor: int, num_class: int,
+                dropout_p:float = 0.0) -> None:
         super(ClassificationModule, self).__init__()
         self.d_model = d_model
         self.factor = factor
         self.num_class = num_class
+        self.dropout = nn.Dropout(dropout_p)
 
         self.fc = nn.Linear(int(d_model * factor), num_class)
 
@@ -126,7 +129,9 @@ class ClassificationModule(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x.contiguous().view(-1, int(self.factor * self.d_model))
+        x = self.dropout(x)
         x = self.fc(x)
+
         return x
 
     def reset_parameters(self):
