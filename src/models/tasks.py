@@ -110,7 +110,7 @@ class ActivityTask(Task):
 
         day_window_size = dataset_args.get("day_window_size",None)
         max_missing_days_in_window = dataset_args.get("max_missing_days_in_window",None)
-        train_data_location = dataset_args.get("train_data_location",None)
+        data_location = dataset_args.get("data_location",None)
 
         lab_results_reader = td.LabResultsReader()
         participant_ids = lab_results_reader.participant_ids
@@ -134,7 +134,7 @@ class ActivityTask(Task):
                                                            day_window_size=day_window_size,
                                                            max_missing_days_in_window=max_missing_days_in_window,
                                                            add_features_path=add_features_path,
-                                                           train_data_location = train_data_location)
+                                                           data_location = data_location)
 
 
         train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
@@ -274,7 +274,7 @@ class SingleWindowActivityTask(Task):
 
         lab_results_reader = td.LabResultsReader()
         participant_ids = lab_results_reader.participant_ids
-        train_data_location = dataset_args.pop("train_data_location",None)
+        data_location = dataset_args.pop("data_location",None)
 
         if activity_level == "minute":
             base_activity_reader = td.MinuteLevelActivityReader
@@ -295,7 +295,7 @@ class SingleWindowActivityTask(Task):
                                                            day_window_size=day_window_size,
                                                            max_missing_days_in_window=max_missing_days_in_window,
                                                            add_features_path=add_features_path,
-                                                           train_data_location=train_data_location)
+                                                           data_location=data_location)
 
         train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
         
@@ -357,7 +357,7 @@ class EarlyDetection(ActivityTask):
         max_date = dataset_args.pop("max_date",None)
         day_window_size = dataset_args.pop("day_window_size",4)
         window_pad = dataset_args.pop("window_pad",20)
-        train_data_location = dataset_args.pop("train_data_location",None)
+        data_location = dataset_args.pop("data_location",None)
         max_missing_days_in_window = dataset_args.pop("max_missing_days_in_window",None)
 
         lab_results_reader = td.LabResultsReader(pos_only=True)
@@ -380,7 +380,7 @@ class EarlyDetection(ActivityTask):
                                                            day_window_size=day_window_size,
                                                            max_missing_days_in_window=max_missing_days_in_window,
                                                            add_features_path=add_features_path,
-                                                           train_data_location=train_data_location)
+                                                           data_location=data_location)
 
 
         pos_dates = lab_results_reader.results
