@@ -10,7 +10,6 @@ import ray
 
 from src.models.tasks import get_task_with_name
 from src.utils import get_logger
-from src.models.commands import BaseCommand
 from src.models.eval import classification_eval
 
 logger = get_logger(__name__)

@@ -120,8 +120,8 @@ def train_bert_command(*args,**kwargs):
 def train_longformer_command(*args,**kwargs):
     train_longformer(*args,**kwargs)
 
-@click.command(cls=BaseCommand)
-@click.argument("task_name", name="train-xgboost")
+@click.command(cls=BaseCommand, name="train-xgboost")
+@click.argument("task_name")
 @click.option("--add_features_path", type = click.Path(dir_okay=False), default=None)
 def train_xgboost_command(*args,**kwargs):
     train_xgboost(*args,**kwargs)
