@@ -45,7 +45,7 @@ universal_options = [
     click.Option(('--notes',), type=str, default=None),
     click.Option(('--dataset_args',), default=None,callback=validate_dataset_args),
     click.Option(('--activity_level',),type=click.Choice(["day","minute"]), default="minute"),
-    click.Option(('--train_data_location',), default=None,type=click.Path(exists=True)),
+    click.Option(('--data_location',), default=None,type=click.Path(exists=True)),
     click.Option(('--limit_train_frac',), default=None,type=float,help="Truncate the training data so <limit_train_frac>"),
     click.Option(('--look_for_cached_datareader',), is_flag=True, default=False),
     click.Option(('--datareader_ray_obj_ref',), default=None),
