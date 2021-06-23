@@ -15,8 +15,8 @@ from src.utils import get_logger
 
 
 def train_fn(config,checkpoint_dir=None):
-    dataset_args = validate_dataset_args(None,None,"/gscratch/bdata/mikeam/SeattleFluStudy/src/data/dataset_configs/PredictTrigger.yaml")
-    train_xgboost("PredictFluPos",
+    dataset_args = validate_dataset_args(None,None,"/gscratch/bdata/mikeam/SeattleFluStudy/src/data/dataset_configs/PredictFatigue.yaml")
+    train_xgboost("PredictSurveyClause",
                     dataset_args=dataset_args,
                     task_ray_obj_ref = config["obj_ref"],                    
                     tune=True,
@@ -49,9 +49,12 @@ def main():
     print("Best config: ", analysis.get_best_config(
         metric="eval/roc_auc", mode="min"))
     df = analysis.results_df
-    df_path = os.path.join(analysis._experiment_dir,"XGB-PredictTigger.csv")
+    df_path = os.path.join(analysis._experiment_dir,"XGB-PredictSurveyClause.csv")
     print(f"Writing all results to {df_path}")
     df.to_csv(df_path)
 
+    best_score = df["eval/roc_auc"].min()
+    print(f"Best Score: {best_score}")
+    
 if __name__ == "__main__":
     main()
