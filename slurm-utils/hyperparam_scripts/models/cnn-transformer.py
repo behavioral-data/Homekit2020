@@ -21,7 +21,6 @@ def train_fn(config,checkpoint_dir=None):
                           train_batch_size=500,
                           eval_batch_size=500, 
                           warmup_steps=20,
-                          loss_fn="FocalLoss",
 # 			  look_for_cached_datareader=True, 
                           task_ray_obj_ref = config["obj_ref"],                    
 			              no_eval_during_training=True,
@@ -46,6 +45,7 @@ def main():
             "learning_rate":tune.loguniform(1e-6,1e-4),
             "num_attention_heads":tune.choice([1,2,4]),
             "num_hidden_layers":tune.choice([1,2,3,4]),
+            "pos_class_weight":tune.choice(list(range(1,100))),
             # wandb configuration
             "wandb": {
                 "project": "test",
@@ -53,14 +53,14 @@ def main():
             }
         },
         resources_per_trial={"gpu": 4},
-	name="CNNTransformer-PredictFatigue",
+	name="CNNTransformer-CE-PredictFatigue",
 	local_dir="/gscratch/bdata/mikeam/SeattleFluStudy/results")
 
 
     print("Best config: ", analysis.get_best_config(
         metric="eval/roc_auc", mode="min"))
     df = analysis.results_df
-    df_path = os.path.join(analysis._experiment_dir,"CNNTransformer-PredictFatigue.csv")
+    df_path = os.path.join(analysis._experiment_dir,"CNNTransformer-CE-PredictFatigue.csv")
     print(f"Writing all results to {df_path}")
     df.to_csv(df_path)
 
