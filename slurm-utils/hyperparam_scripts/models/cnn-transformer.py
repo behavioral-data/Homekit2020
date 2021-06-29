@@ -15,7 +15,7 @@ from src.utils import get_logger
 
 
 def train_fn(config,checkpoint_dir=None):
-    dataset_args = validate_dataset_args(None,None,"/gscratch/bdata/mikeam/SeattleFluStudy/src/data/dataset_configs/PredictFatigue.yaml")
+    dataset_args = validate_dataset_args(None,None,"/homes/gws/mikeam/seattleflustudy/src/data/dataset_configs/PredictFluSymptoms.yaml")
     train_cnn_transformer("PredictSurveyClause",
                           dataset_args=dataset_args,
                           train_batch_size=500,
@@ -53,16 +53,19 @@ def main():
             }
         },
         resources_per_trial={"gpu": 4},
-	name="CNNTransformer-CE-PredictFatigue",
+	name="CNNTransformer-CE-PredictFluSymptoms",
 	local_dir="/gscratch/bdata/mikeam/SeattleFluStudy/results")
 
 
     print("Best config: ", analysis.get_best_config(
         metric="eval/roc_auc", mode="min"))
     df = analysis.results_df
-    df_path = os.path.join(analysis._experiment_dir,"CNNTransformer-CE-PredictFatigue.csv")
+    df_path = os.path.join(analysis._experiment_dir,"CNNTransformer-CE-PredictFluSymptons.csv")
     print(f"Writing all results to {df_path}")
     df.to_csv(df_path)
-
+    
+    best_score = df["eval/roc_auc"].max()
+    print(f"Best Score: {best_score}")
+    
 if __name__ == "__main__":
     main()
