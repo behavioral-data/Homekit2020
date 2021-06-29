@@ -21,6 +21,7 @@ def train_fn(config,checkpoint_dir=None):
                           train_batch_size=500,
                           eval_batch_size=500, 
                           warmup_steps=20,
+                          loss_fn="CrossEntropyLoss",
 # 			  look_for_cached_datareader=True, 
                           task_ray_obj_ref = config["obj_ref"],                    
 			              no_eval_during_training=True,
@@ -66,6 +67,6 @@ def main():
     
     best_score = df["eval/roc_auc"].max()
     print(f"Best Score: {best_score}")
-    
+
 if __name__ == "__main__":
     main()
