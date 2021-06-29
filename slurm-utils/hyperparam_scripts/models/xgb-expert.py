@@ -21,7 +21,7 @@ def train_fn(config,checkpoint_dir=None):
                     task_ray_obj_ref = config["obj_ref"],                    
                     tune=True,
                     no_wandb=True,
-                    add_features_path="/gscratch/bdata/mikeam/SeattleFluStudy/data/processed/features/ExpertFeatures.csv"
+                    add_features_path="/gscratch/bdata/mikeam/SeattleFluStudy/data/processed/features/ExpertFeatures.csv",
                     **config)
 
 def main():
