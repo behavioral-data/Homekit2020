@@ -113,7 +113,7 @@ class ActivityTask(Task):
         data_location = dataset_args.get("data_location",None)
 
         lab_results_reader = td.LabResultsReader()
-        participant_ids = lab_results_reader.participant_ids
+        # participant_ids = lab_results_reader.participant_ids
 
         if activity_level == "minute":
             base_activity_reader = td.MinuteLevelActivityReader
@@ -128,8 +128,7 @@ class ActivityTask(Task):
             activity_reader = ray.get(datareader_ray_obj_ref)
         else:
             add_features_path = dataset_args.pop("add_features_path",None)
-            activity_reader = base_activity_reader(participant_ids=participant_ids,
-                                                           min_date = min_date,
+            activity_reader = base_activity_reader(min_date = min_date,
                                                            max_date = max_date,
                                                            day_window_size=day_window_size,
                                                            max_missing_days_in_window=max_missing_days_in_window,
