@@ -7,6 +7,7 @@ from pytorch_lightning.loggers.wandb import WandbLogger
 import ray
 from ray.tune.session import report
 from tensorflow.keras import callbacks
+import pickle
 
 from torch import tensor
 warnings.filterwarnings("ignore")
@@ -219,6 +220,7 @@ def train_cnn_transformer( task_name,
                 dataset_args = {},
                 activity_level="minute",
                 look_for_cached_datareader=False,
+                cached_task_path = None,
                 datareader_ray_obj_ref=None,
                 task_ray_obj_ref=None, 
                 data_location=None,
@@ -245,7 +247,11 @@ def train_cnn_transformer( task_name,
     if sinu_position_encoding:
         dataset_args["add_absolute_embedding"] = True
 
-    if task_ray_obj_ref:
+    if cached_task_path:
+        logger.info(f"Loading pickle from {cached_task_path}...")
+        task = pickle.load(open(cached_task_path,"rb"))
+
+    elif task_ray_obj_ref:
         task = ray.get(task_ray_obj_ref)
     else:
         task = get_task_with_name(task_name)(dataset_args=dataset_args,
