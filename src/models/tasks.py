@@ -212,6 +212,22 @@ class PredictTrigger(ActivityTask,ClassificationMixin):
     def get_name(self):
         return "PredictTrigger"
 
+class Labler(object):
+    def __init__(self, survey_respones, clause):
+        self.clause = clause
+        self.survey_responses = survey_respones
+
+    def __call__(self,participant_id,start_date,end_date):
+        try:
+            participant_data = self.survey_responses.loc[participant_id]
+        except KeyError:
+            return 0
+        if isinstance(participant_data, pd.Series):
+            participant_data = pd.DataFrame(participant_data).T
+        on_date = participant_data[participant_data["timestamp"].dt.date == end_date]
+        meets_clause = on_date.query(self.clause)
+        return len(meets_clause) > 0
+
 class PredictSurveyClause(ActivityTask,ClassificationMixin):
     """Predict the whether a clause in the onehot
        encoded surveys is true for a given day. 
@@ -231,17 +247,7 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
         ClassificationMixin.__init__(self)
     
     def get_labeler(self):
-        def labeler(participant_id,start_date,end_date):
-            try:
-                participant_data = self.survey_responses.loc[participant_id]
-            except KeyError:
-                return 0
-            if isinstance(participant_data, pd.Series):
-                participant_data = pd.DataFrame(participant_data).T
-            on_date = participant_data[participant_data["timestamp"].dt.date == end_date]
-            meets_clause = on_date.query(self.clause)
-            return len(meets_clause) > 0
-        return labeler
+        return Labler(self.survey_responses,self.clause)
 
     def get_name(self):
         return f"PredictSurveyCol-{self.clause}"
