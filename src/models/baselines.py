@@ -63,6 +63,8 @@ def train_xgboost(task_name, dataset_args ={},
                 eta=1,
                 objective="binary:logistic",
                 task_ray_obj_ref=None,
+                only_with_lab_results=False,
+                cached_task_path=None,
                 **_):
 
     """ Baseline for classification tasks that uses daily aggregated features"""
@@ -70,20 +72,24 @@ def train_xgboost(task_name, dataset_args ={},
     dataset_args["add_features_path"] = add_features_path
     dataset_args["data_location"] = data_location
     dataset_args["data_location"] = data_location
+    if limit_train_frac:
+        dataset_args["limit_train_frac"] = limit_train_frac
 
     if task_ray_obj_ref:
         task = ray.get(task_ray_obj_ref)
+    elif cached_task_path:
+        logger.info(f"Loading pickle from {cached_task_path}...")
+        task = pickle.load(open(cached_task_path,"rb"))
     else:
         task = get_task_with_name(task_name)(dataset_args=dataset_args,
-                                         activity_level="day")
+                                            only_with_lab_results=only_with_lab_results,
+                                            activity_level="day",
+                                            limit_train_frac=limit_train_frac)
 
     if not task.is_classification:
         raise ValueError(f"{task_name} is not an classification task")
 
     train = task.get_train_dataset().to_dmatrix()
-    if limit_train_frac:
-        inds = list(range(int(len(task.get_train_dataset())*limit_train_frac)))
-        train = train.slice(inds)
     eval = task.get_eval_dataset().to_dmatrix()
     
     param = {'max_depth': max_depth, 'eta': eta, 'objective': objective}
