@@ -93,7 +93,10 @@ class DayLevelActivityReader(object):
             
         if not len(filters) == 0:
             df = df[filters]
-
+        
+        if not participant_ids is None:
+            df = df[df["participant_id"].isin(participant_ids)]
+            
         valid_participant_dates = df.groupby("participant_id").apply(self.get_valid_dates)
         self.daily_data = df.set_index(["participant_id","date"])
 
@@ -133,19 +136,33 @@ class DayLevelActivityReader(object):
 
         return all_possible_end_dates[mask].rename("dates")
 
-    def split_participant_dates(self,date=None,eval_frac=None):
-        """If random, split a fraction equal to random for eval,
-            else, split participant dates to be before and after a given date"""
+    def split_participant_dates(self,date=None,eval_frac=None, by_participant=False,
+                                limit_train_frac=False):
+            """If random, split a fraction equal to random for eval,
+                else, split participant dates to be before and after a given date"""
 
-        if eval_frac:
-            train,eval = train_test_split(self.participant_dates,test_size=eval_frac)
-            return train,eval
-        elif date:
-            before = [x for x in self.participant_dates if x[1] <= pd.to_datetime(date) ]
-            after = [x for x in self.participant_dates if x[1] > pd.to_datetime(date) ]
-            return before, after
-        else:
-            raise ValueError("If splitting, must either provide a date or fraction")
+            if eval_frac:
+                if by_participant:
+                    ids = [x[0] for x in self.participant_dates]
+                    all_ids = list(set(ids))
+                    left_ids = all_ids[:int(len(all_ids)*eval_frac)]
+                    if limit_train_frac:
+                        left_ids = left_ids[:int(limit_train_frac*len(left_ids))]
+                    
+                    left_ids = set(left_ids)
+                    train = [x for x in self.participant_dates if x[0] in left_ids]
+                    eval = [x for x in self.participant_dates if not x[0] in left_ids]
+                else:
+                    train,eval = train_test_split(self.participant_dates,test_size=eval_frac)
+                    train = train[:int(limit_train_frac*len(train))]
+            elif date:
+                if limit_train_frac:
+                    raise NotImplementedError
+                train = [x for x in self.participant_dates if x[1] <= pd.to_datetime(date) ]
+                eval = [x for x in self.participant_dates if x[1] > pd.to_datetime(date) ]
+            else:
+                raise ValueError("If splitting, must either provide a date or fraction")
+            return train, eval
 
 class MinuteLevelActivityReader(object):
     def __init__(self, min_date=None,
@@ -241,19 +258,32 @@ class MinuteLevelActivityReader(object):
 
         return all_possible_end_dates[mask].rename("dates")
 
-    def split_participant_dates(self,date=None,eval_frac=None):
+    def split_participant_dates(self,date=None,eval_frac=None, by_participant=False,
+                            limit_train_frac=False):
         """If random, split a fraction equal to random for eval,
             else, split participant dates to be before and after a given date"""
 
         if eval_frac:
-            train,eval = train_test_split(self.participant_dates,test_size=eval_frac)
-            return train,eval
+            if by_participant:
+                ids = [x[0] for x in self.participant_dates]
+                all_ids = list(set(ids))
+                left_ids = set(all_ids[:int(len(all_ids)*eval_frac)])
+                if limit_train_frac:
+                    left_ids = left_ids[:int(limit_train_frac*len(left_ids))]
+
+                train = [x for x in self.participant_dates if x[0] in left_ids]
+                eval = [x for x in self.participant_dates if not x[0] in left_ids]
+            else:
+                train,eval = train_test_split(self.participant_dates,test_size=eval_frac)
+                train = train[:int(limit_train_frac*len(train))]
         elif date:
-            before = [x for x in self.participant_dates if x[1] <= pd.to_datetime(date) ]
-            after = [x for x in self.participant_dates if x[1] > pd.to_datetime(date) ]
-            return before, after
+            if limit_train_frac:
+                raise NotImplementedError
+            train = [x for x in self.participant_dates if x[1] <= pd.to_datetime(date) ]
+            eval = [x for x in self.participant_dates if x[1] > pd.to_datetime(date) ]
         else:
             raise ValueError("If splitting, must either provide a date or fraction")
+        return train, eval
 
 class LabResultsReader(object):
     def __init__(self,min_date=None,
