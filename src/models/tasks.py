@@ -94,7 +94,9 @@ class ActivityTask(Task):
                      activity_level = "minute",
                      look_for_cached_datareader=False,
                      datareader_ray_obj_ref=None,
-                     cache=True):
+                     cache=True,
+                     only_with_lab_results=False,
+                     limit_train_frac=None):
         
         super(ActivityTask,self).__init__()
         
@@ -111,9 +113,12 @@ class ActivityTask(Task):
         day_window_size = dataset_args.get("day_window_size",None)
         max_missing_days_in_window = dataset_args.get("max_missing_days_in_window",None)
         data_location = dataset_args.get("data_location",None)
-
         lab_results_reader = td.LabResultsReader()
-        # participant_ids = lab_results_reader.participant_ids
+
+        if only_with_lab_results:
+            participant_ids = lab_results_reader.participant_ids
+        else: 
+            participant_ids = None
 
         if activity_level == "minute":
             base_activity_reader = td.MinuteLevelActivityReader
@@ -129,18 +134,21 @@ class ActivityTask(Task):
         else:
             add_features_path = dataset_args.pop("add_features_path",None)
             activity_reader = base_activity_reader(min_date = min_date,
-                                                           max_date = max_date,
-                                                           day_window_size=day_window_size,
-                                                           max_missing_days_in_window=max_missing_days_in_window,
-                                                           add_features_path=add_features_path,
-                                                           data_location = data_location)
+                                                   participant_ids=participant_ids,
+                                                   max_date = max_date,
+                                                   day_window_size=day_window_size,
+                                                   max_missing_days_in_window=max_missing_days_in_window,
+                                                   add_features_path=add_features_path,
+                                                   data_location = data_location)
 
-
-        train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
-    
-        limit_train_frac = dataset_args.get("limit_train_frac",None)
         if limit_train_frac:
-            train_participant_dates = train_participant_dates[:int(len(train_participant_dates)*limit_train_frac)]
+            train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac,
+                                                                                                     limit_train_frac=limit_train_frac,
+                                                                                                     by_participant=True)
+
+        else:
+            train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
+        
 
         self.train_dataset = base_dataset(activity_reader, lab_results_reader,
                         participant_dates = train_participant_dates,
