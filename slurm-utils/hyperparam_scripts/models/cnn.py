@@ -55,13 +55,17 @@ def main():
 	name="CNN-PredictFluPos",
 	local_dir="/gscratch/bdata/mikeam/SeattleFluStudy/results")
 
-
+    df = analysis.results_df
     print("Best config: ", analysis.get_best_config(
         metric="eval/roc_auc", mode="min"))
-    df = analysis.results_df
+    
     df_path = os.path.join(analysis._experiment_dir,"CNN-PredictFluPos.csv")
     print(f"Writing all results to {df_path}")
     df.to_csv(df_path)
+
+    best_score = df["eval/roc_auc"].min()
+    print(f"Best Score: {best_score}")
+    
 
 if __name__ == "__main__":
     main()

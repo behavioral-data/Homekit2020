@@ -53,8 +53,8 @@ def main():
     print(f"Writing all results to {df_path}")
     df.to_csv(df_path)
 
-    best_score = df["eval/roc_auc"].min()
+    best_score = df["eval/roc_auc"].max()
     print(f"Best Score: {best_score}")
-    
+
 if __name__ == "__main__":
     main()
