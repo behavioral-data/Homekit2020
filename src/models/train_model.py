@@ -374,13 +374,15 @@ def train_sand( task_name,
                 look_for_cached_datareader=False,
                 datareader_ray_obj_ref=None,
                 data_location=None,
-                no_eval_during_training=False):
+                no_eval_during_training=False,
+                **_):
     
     if model_path:
         raise NotImplementedError()
 
     logger.info(f"Training SAnD")
-    dataset_args["eval_frac"] = eval_frac
+    if not eval_frac is None:
+        dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
     dataset_args["data_location"] = data_location
 
