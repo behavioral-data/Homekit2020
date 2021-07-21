@@ -51,7 +51,8 @@ universal_options = [
     click.Option(('--look_for_cached_datareader',), is_flag=True, default=False),
     click.Option(('--cached_task_path',),type=str),
     click.Option(('--datareader_ray_obj_ref',), default=None),
-    click.Option(('--task_ray_obj_ref',), default=None)
+    click.Option(('--task_ray_obj_ref',), default=None),
+    click.Option(('--only_with_lab_results',),is_flag=True, default=None)
 ]
 
 loss_options = [
