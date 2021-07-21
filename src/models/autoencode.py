@@ -1,7 +1,7 @@
 from src.utils import get_logger
 from src.models.models import CNNEncoder
 
-logger = get_logger()
+logger = get_logger(__name__)
 
 import warnings
 warnings.filterwarnings('ignore')

@@ -5,6 +5,7 @@ from src.utils import read_yaml
 from src.models.train_model import (train_cnn_transformer, train_neural_baseline,
                                     train_autoencoder, train_sand,
                                     train_bert, train_longformer)
+from src.models.baselines import train_xgboost
 
 def validate_dataset_args(ctx, param, value):
     try:
@@ -41,12 +42,17 @@ universal_options = [
     click.Option(("--model_path",), type=click.Path(file_okay=False,exists=True),
                   help = "path containing a checkpoint-X directory and a model_config.json"),
     click.Option(('--no_wandb',), is_flag=True),
+    click.Option(('--tune',), is_flag=True),
     click.Option(('--notes',), type=str, default=None),
     click.Option(('--dataset_args',), default=None,callback=validate_dataset_args),
     click.Option(('--activity_level',),type=click.Choice(["day","minute"]), default="minute"),
     click.Option(('--data_location',), default=None,type=click.Path(exists=True)),
     click.Option(('--limit_train_frac',), default=None,type=float,help="Truncate the training data so <limit_train_frac>"),
     click.Option(('--look_for_cached_datareader',), is_flag=True, default=False),
+    click.Option(('--cached_task_path',),type=str),
+    click.Option(('--datareader_ray_obj_ref',), default=None),
+    click.Option(('--task_ray_obj_ref',), default=None),
+    click.Option(('--only_with_lab_results',),is_flag=True, default=None)
 ]
 
 loss_options = [
@@ -116,9 +122,16 @@ def train_bert_command(*args,**kwargs):
 def train_longformer_command(*args,**kwargs):
     train_longformer(*args,**kwargs)
 
+@click.command(cls=BaseCommand, name="train-xgboost")
+@click.argument("task_name")
+@click.option("--add_features_path", type = click.Path(dir_okay=False), default=None)
+def train_xgboost_command(*args,**kwargs):
+    train_xgboost(*args,**kwargs)
+
 
 MODEL_COMMANDS = [train_cnn_transformer_command,
                   train_autoencoder_command,
                   train_neural_baseline_command,
                   train_longformer_command,
-                  train_sand_command]
+                  train_sand_command,
+                  train_xgboost_command]

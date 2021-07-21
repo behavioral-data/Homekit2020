@@ -1,9 +1,13 @@
 from copy import copy
 from typing import Union, Dict
+from pytorch_lightning.core.step_result import Result
+
+import gc
 
 import torch
 import torch.nn as nn
 from torch import Tensor
+from torch.nn.modules import dropout
 from torch.utils.data import DataLoader
 
 import pytorch_lightning as pl
@@ -88,8 +92,8 @@ class CNNEncoder(nn.Module):
 
 class CNNToTransformerEncoder(pl.LightningModule):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
-                stride_sizes=[2,2,2], dropout_rate=0.2, num_labels=2, learning_rate=1e-3, warmup_steps=100,
-                max_positional_embeddings = 1440*5, factor=64, inital_batch_size=100,
+                stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, learning_rate=1e-3, warmup_steps=100,
+                max_positional_embeddings = 1440*5, factor=64, inital_batch_size=100, clf_dropout_rate=0.0,
                 **model_specific_kwargs) -> None:
         self.config = get_config_from_locals(locals())
 
@@ -111,7 +115,8 @@ class CNNToTransformerEncoder(pl.LightningModule):
         ])
         
         self.dense_interpolation = modules.DenseInterpolation(self.input_embedding.final_output_length, factor)
-        self.clf = modules.ClassificationModule(self.d_model, factor, num_labels)
+        self.clf = modules.ClassificationModule(self.d_model, factor, num_labels,
+                                                dropout_p=clf_dropout_rate)
         
         self.criterion = build_loss_fn(model_specific_kwargs)
 
@@ -150,10 +155,12 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.eval_dataset = dataset
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, pin_memory=True,
+                         shuffle=True)
     
     def val_dataloader(self):
-        return DataLoader(self.eval_dataset, batch_size=3*self.batch_size)
+        return DataLoader(self.eval_dataset, batch_size=3*self.batch_size, pin_memory=True,
+                          shuffle=True)
 
     def training_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
         x = batch["inputs_embeds"]
@@ -164,58 +171,84 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.log("train/loss", loss.item(),on_step=True)
 
         probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
-        self.train_probs.append(probs)
-        self.train_labels.append(y)
+        # self.train_probs.append(probs.detach().cpu())
+        # self.train_labels.append(y.detach().cpu())
         return {"loss":loss, "preds": logits, "labels":y}
 
     def on_train_epoch_start(self):
         self.train_probs = []
         self.train_labels = []
+        super().on_train_epoch_start()
     
-    def on_train_end(self):
-        train_preds = torch.cat(self.train_probs, dim=0)
-        train_labels = torch.cat(self.train_labels, dim=0)
-        train_auc = torchmetrics.functional.auroc(train_preds,train_labels,pos_label=1)
+    # def on_train_epoch_end(self):
+    #     self.train_probs = []
+    #     self.train_labels = []
+
+    # def on_train_end(self):
+    #     train_preds = torch.cat(self.train_probs, dim=0)
+    #     train_labels = torch.cat(self.train_labels, dim=0)
+    #     train_auc = torchmetrics.functional.auroc(train_preds,train_labels,pos_label=1)
     
-        eval_preds = torch.cat(self.eval_probs, dim=0)
-        eval_labels = torch.cat(self.eval_labels, dim=0)
+    #     eval_preds = torch.cat(self.eval_probs, dim=0)
+    #     eval_labels = torch.cat(self.eval_labels, dim=0)
         
-        fpr, tpr, _ = torchmetrics.functional.roc(eval_preds, eval_labels, pos_label=1)
-        eval_auc = torchmetrics.functional.auroc(eval_preds,eval_labels,pos_label=1)
+    #     fpr, tpr, _ = torchmetrics.functional.roc(eval_preds, eval_labels, pos_label=1)
+    #     eval_auc = torchmetrics.functional.auroc(eval_preds,eval_labels,pos_label=1)
 
-        if check_for_wandb_run():
-            labels = ["Positive"] * len(fpr)
-            table = Table(columns= ["class","fpr","tpr"], data=list(zip(labels,fpr,tpr)))
-            plot = wandb.plot_table(
-                "wandb/area-under-curve/v0",
-                table,
-                {"x": "fpr", "y": "tpr", "class": "class"},
-                {
-                    "title": "ROC",
-                    "x-axis-title": "False positive rate",
-                    "y-axis-title": "True positive rate",
-                },
+    #     results = {"train/roc_auc":train_auc,
+    #                 "eval/roc_auc":eval_auc}
 
-            )
-            wandb.log({"eval/roc":plot,
-                      "train/roc_auc":train_auc,
-                      "eval/roc_auc":eval_auc})
-        super().on_train_end()
+    #     if check_for_wandb_run():
+    #         labels = ["Positive"] * len(fpr)
+    #         table = Table(columns= ["class","fpr","tpr"], data=list(zip(labels,fpr,tpr)))
+    #         plot = wandb.plot_table(
+    #             "wandb/area-under-curve/v0",
+    #             table,
+    #             {"x": "fpr", "y": "tpr", "class": "class"},
+    #             {
+    #                 "title": "ROC",
+    #                 "x-axis-title": "False positive rate",
+    #                 "y-axis-title": "True positive rate",
+    #             },
+
+    #         )
+    #         results["eval/roc"] = plot
+    #         wandb.log(results)
+
+    #     super().on_train_end()
    
     def on_validation_epoch_start(self):
         self.eval_probs = []
         self.eval_labels = []
     
+    def on_validation_epoch_end(self):
+        eval_preds = torch.cat(self.eval_probs, dim=0)
+        eval_labels = torch.cat(self.eval_labels, dim=0)
+        eval_auc = torchmetrics.functional.auroc(eval_preds,eval_labels,pos_label=1)
+        self.eval_probs = []
+        self.eval_labels = []
+    
+        self.log_dict({"eval/roc_auc":eval_auc})
+        # for obj in gc.get_objects():
+        #     try:
+        #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+        #             print(type(obj), obj.size())
+        #     except:
+        #         pass
+        super().on_validation_epoch_end()
+
     def validation_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
         x = batch["inputs_embeds"]
         y = batch["label"]
-        loss,logits = self.forward(x,y)
+        with torch.no_grad():
+            loss,logits = self.forward(x,y)
 
-        self.log("eval/loss", loss.item(),on_step=True)
+            self.log("eval/loss", loss.item(),on_step=True)
+            
+            probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
+            self.eval_probs.append(probs.detach().cpu())
+            self.eval_labels.append(y.detach().cpu())
         
-        probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
-        self.eval_probs.append(probs)
-        self.eval_labels.append(y)
 
         return {"loss":loss, "preds": logits, "labels":y}
     

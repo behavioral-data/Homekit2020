@@ -1,12 +1,14 @@
 import os
 import glob 
 import json
+import pickle
 
 import pyarrow.parquet as pq
 import pandas as pd
 from scipy.special import softmax
 import pyarrow as pa
 from torch.utils import data
+import numpy as np
 
 from src.utils import get_logger
 import src.data.constants as constants
@@ -20,12 +22,13 @@ import dask.dataframe as dd
 from dotenv import dotenv_values
 
 config = dotenv_values(".env")
-logger = get_logger()
+logger = get_logger(__name__)
 
 DATASET_VERSION="2020-07-15"
-RAW_DATA_PATH = os.path.join(config["MAIN_PATH"],"data","raw","audere","data-export",DATASET_VERSION)
-PROCESSED_DATA_PATH = os.path.join(config["MAIN_PATH"],"data","processed")
-DEBUG_DATA_PATH = os.path.join(config["MAIN_PATH"],"data","debug")
+main_path = os.getcwd()
+RAW_DATA_PATH = os.path.join(main_path,"data","raw","audere","data-export",DATASET_VERSION)
+PROCESSED_DATA_PATH = os.path.join(main_path,"data","processed")
+DEBUG_DATA_PATH = os.path.join(main_path,"data","debug")
 
 def get_raw_dataset_path(name):
     if name in constants.MTL_NAMES:
@@ -123,7 +126,7 @@ def download_wandb_table(run_id,table_name="roc_table",
     return pd.DataFrame(data["data"],columns=data["columns"])
 
 
-def get_dask_df(name,path= None,min_date=None,max_date=None,index=None):
+def get_dask_df(name=None,path= None,min_date=None,max_date=None,index=None):
     if not path:
         path = get_processed_dataset_path(name)
     filters = []
@@ -140,11 +143,67 @@ def load_results(path):
     softmax_results = softmax(logits,axis=1)["neg_logit"].rename("pos_prob")
     return pd.concat([results["label"],logits,softmax_results],axis=1)
 
-def write_dict_to_json(data,path):
+def write_dict_to_json(data,path,safe=True):
+    if safe:
+        data = {k:v for k,v in data.items() if is_jsonable(v)}
+
     with open(path, 'w') as outfile:
         json.dump(data, outfile)
     
+def is_jsonable(x):
+    try:
+        json.dumps(x)
+        return True
+    except (TypeError, OverflowError):
+        return False
 
 def load_json(path):
     with open(path, 'r') as infile:
         return json.load(infile)
+
+def validate_reader(dataset_args,data_reader):
+    props = ["min_date","max_date","split_date","min_windows",
+            "day_window_size","max_missing_days_in_window"]
+    dont_match = []
+    
+    for prop in props:
+        args_prop = dataset_args.get(prop,None)
+        #Assume (maybe a bad assumption) that default args are preserved
+        if args_prop is None:
+            continue
+        reader_prop = getattr(data_reader,prop)
+        prop_match = args_prop == reader_prop
+
+        if not prop_match:
+            dont_match.append((prop,args_prop,reader_prop))
+    return dont_match
+
+def load_cached_activity_reader(name, dataset_args=None,
+                                fail_if_mismatched=False,
+                                activity_level="minute"):
+    if not activity_level == "minute":
+        raise NotImplementedError("Can only cache minute level activities")
+        
+    cache_path = get_cached_datareader_path(name)
+    reader = pickle.load(open(cache_path, "rb" ) )
+    if dataset_args:
+        dont_match = validate_reader(dataset_args,reader)
+        if len(dont_match) != 0:
+            message = f"Mismatch between cached data reader and dataset args:{dont_match}"
+            if fail_if_mismatched:
+                raise ValueError(message)
+            else: 
+                logger.warning(message)
+
+    elif fail_if_mismatched:
+        raise(ValueError("In order to check for match with cached activity_reader must pass dataset_args"))
+    return reader
+
+def split_by_participant(df,frac):
+    participants = df["participant_id"].unique()
+    np.random.shuffle(participants)
+    left_participants = participants[:int(frac*len(participants))]
+    mask = df["participant_id"].isin(left_participants)
+    left = df[mask]
+    right = df[~mask]
+    return left, right

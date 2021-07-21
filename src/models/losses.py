@@ -25,14 +25,14 @@ def build_loss_fn(kwargs):
         raise ValueError("Must pass a loss function name")
     
     if loss_fn == "CrossEntropyLoss":
-        neg_class_weight = kwargs.pop("neg_class_weight")
-        pos_class_weight = kwargs.pop("pos_class_weight")
+        neg_class_weight = kwargs.pop("neg_class_weight",1)
+        pos_class_weight = kwargs.pop("pos_class_weight",1)
         loss_weights = torch.tensor([float(neg_class_weight),float(pos_class_weight)])
         return nn.CrossEntropyLoss(weight=loss_weights)
     
     elif loss_fn == "FocalLoss":
-        alpha = kwargs.pop("focal_alpha")
-        gamma = kwargs.pop("focal_gamma")
+        alpha = kwargs.pop("focal_alpha",0.25)
+        gamma = kwargs.pop("focal_gamma",2.0)
         return FocalLoss(alpha=alpha,gamma=gamma)
 
     else:

@@ -2,8 +2,12 @@ from re import L
 
 import warnings
 import os
+from pytorch_lightning.accelerators import accelerator
 from pytorch_lightning.loggers.wandb import WandbLogger
+import ray
+from ray.tune.session import report
 from tensorflow.keras import callbacks
+import pickle
 
 from torch import tensor
 warnings.filterwarnings("ignore")
@@ -35,7 +39,7 @@ import pandas as pd
 from PIL import Image
 import torch
 
-logger = get_logger()
+logger = get_logger(__name__)
 
 def train_neural_baseline(model_name,task_name,
                          model_path=None,
@@ -49,6 +53,7 @@ def train_neural_baseline(model_name,task_name,
                          dataset_args = {},
                          activity_level="minute",
                          look_for_cached_datareader=False,
+                         datareader_ray_obj_ref=None,
                          data_location=None):
 
     if model_path:
@@ -58,7 +63,8 @@ def train_neural_baseline(model_name,task_name,
     dataset_args["eval_frac"] = eval_frac
     dataset_args["data_location"] = data_location
     task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level,
-                                        look_for_cached_datareader=look_for_cached_datareader)
+                                        look_for_cached_datareader=look_for_cached_datareader,
+                                        datareader_ray_obj_ref=datareader_ray_obj_ref)
 
     train_X, train_y = task.get_train_dataset().to_stacked_numpy()
     eval_X, eval_y  = task.get_eval_dataset().to_stacked_numpy()
@@ -139,6 +145,7 @@ def train_autoencoder(model_name,
                 dataset_args = {},
                 activity_level="minute",
                 look_for_cached_datareader=False,
+                datareader_ray_obj_ref=None,
                 data_location=None,
                 no_eval_during_training=False):
     
@@ -151,7 +158,8 @@ def train_autoencoder(model_name,
     dataset_args["data_location"] = data_location
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level,
-                                        look_for_cached_datareader=look_for_cached_datareader)
+                                        look_for_cached_datareader=look_for_cached_datareader,
+                                        datareader_ray_obj_ref=datareader_ray_obj_ref)
     
     if sinu_position_encoding:
         dataset_args["add_absolute_embedding"] = True
@@ -212,12 +220,20 @@ def train_cnn_transformer( task_name,
                 dataset_args = {},
                 activity_level="minute",
                 look_for_cached_datareader=False,
+                cached_task_path = None,
+                datareader_ray_obj_ref=None,
+                task_ray_obj_ref=None, 
                 data_location=None,
                 no_eval_during_training=False,
                 reset_cls_params=False,
                 use_pl=False,
                 limit_train_frac=None,
                 freeze_encoder=False,
+                tune=False,
+                output_dir=None,
+                kernel_sizes = [5,3,2],
+                out_channels = [256,128,64],
+                stride_sizes = [3,2,2],
                 **model_specific_kwargs):
     logger.info(f"Training CNNTransformer")
     if not eval_frac is None:
@@ -231,9 +247,17 @@ def train_cnn_transformer( task_name,
     if sinu_position_encoding:
         dataset_args["add_absolute_embedding"] = True
 
-    task = get_task_with_name(task_name)(dataset_args=dataset_args,
-                                        activity_level=activity_level,
-                                        look_for_cached_datareader=look_for_cached_datareader)
+    if cached_task_path:
+        logger.info(f"Loading pickle from {cached_task_path}...")
+        task = pickle.load(open(cached_task_path,"rb"))
+
+    elif task_ray_obj_ref:
+        task = ray.get(task_ray_obj_ref)
+    else:
+        task = get_task_with_name(task_name)(dataset_args=dataset_args,
+                                            activity_level=activity_level,
+                                            look_for_cached_datareader=look_for_cached_datareader,
+                                            datareader_ray_obj_ref=datareader_ray_obj_ref)
     
     
     if not model_path:
@@ -249,6 +273,10 @@ def train_cnn_transformer( task_name,
                                         learning_rate =learning_rate,
                                         warmup_steps = warmup_steps,
                                         inital_batch_size=train_batch_size,
+                                        dropout_rate=0.5,
+                                        kernel_sizes=kernel_sizes,
+                                        stride_sizes=stride_sizes,
+                                        out_channels=out_channels,
                                         **model_specific_kwargs)
     else:
         model = load_model_from_checkpoint(model_path)
@@ -268,37 +296,56 @@ def train_cnn_transformer( task_name,
     else:
         metrics=None
 
+    if tune:
+        output_dir = ray.tune.get_trial_dir()
+
+    if output_dir:
+        results_dir = os.path.join(output_dir,"results")
+        logging_dir = os.path.join(output_dir,"logs")
+
+        os.mkdir(results_dir)
+        os.mkdir(logging_dir)
+    else:
+        results_dir = './results'
+        logging_dir = './logs'
+    print(results_dir)
+    if no_wandb:
+        report_to = []
+    else:
+        report_to = ["wandb"]
+
     if use_pl:
         pl_training_args = dict(
             max_epochs = n_epochs,
-            check_val_every_n_epoch=5,
+            check_val_every_n_epoch=10,
             auto_scale_batch_size="binsearch"
         )
         run_pytorch_lightning(model,task,training_args=pl_training_args)
     
     else:
         training_args = TrainingArguments(
-            output_dir='./results',          # output directorz
+            output_dir=results_dir,          # output directorz
             num_train_epochs=n_epochs,              # total # of training epochs
             per_device_train_batch_size=train_batch_size,  # batch size per device during training
             per_device_eval_batch_size=eval_batch_size,   # batch size for evaluation
             warmup_steps=warmup_steps,                # number of warmup steps for learning rate scheduler
             weight_decay=weight_decay,
             learning_rate=learning_rate,               # strength of weight decay
-            logging_dir='./logs',
+            logging_dir=logging_dir,
             logging_steps=10,
             do_eval=not no_eval_during_training,
             dataloader_num_workers=0,
             dataloader_pin_memory=True,
             prediction_loss_only=False,
             evaluation_strategy="no" if no_eval_during_training else "epoch",
-            report_to=["wandb"]            # directory for storing logs
+            report_to=report_to            # directory for storing logs
         )
 
         run_huggingface(model=model, base_trainer=FluTrainer,
                     training_args=training_args,
                     metrics = metrics, task=task,
-                    no_wandb=no_wandb, notes=notes)
+                    no_wandb=no_wandb, notes=notes,
+                    tune=tune)
 
 
 def train_sand( task_name, 
@@ -325,20 +372,24 @@ def train_sand( task_name,
                 dataset_args = {},
                 activity_level="minute",
                 look_for_cached_datareader=False,
+                datareader_ray_obj_ref=None,
                 data_location=None,
-                no_eval_during_training=False):
+                no_eval_during_training=False,
+                **_):
     
     if model_path:
         raise NotImplementedError()
 
     logger.info(f"Training SAnD")
-    dataset_args["eval_frac"] = eval_frac
+    if not eval_frac is None:
+        dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
     dataset_args["data_location"] = data_location
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args, 
                                          activity_level=activity_level,
-                                         look_for_cached_datareader=look_for_cached_datareader)
+                                         look_for_cached_datareader=look_for_cached_datareader,
+                                         datareader_ray_obj_ref=datareader_ray_obj_ref)
     
     if sinu_position_encoding:
         dataset_args["add_absolute_embedding"] = True
@@ -410,6 +461,7 @@ def train_bert(task_name,
                 dataset_args = {},
                 activity_level="minute",
                 look_for_cached_datareader=False,
+                datareader_ray_obj_ref=None,
                 no_eval_during_training=False,
                 data_location=None):
     
@@ -506,6 +558,7 @@ def train_longformer(task_name,
                     dataset_args = {},
                     activity_level="minute",
                     look_for_cached_datareader=False,
+                    datareader_ray_obj_ref=None,
                     no_eval_during_training=False,
                     data_location=None):
     
@@ -520,7 +573,8 @@ def train_longformer(task_name,
 
     task = get_task_with_name(task_name)(dataset_args=dataset_args,
                                          activity_level=activity_level,
-                                         look_for_cached_datareader=look_for_cached_datareader)
+                                         look_for_cached_datareader=look_for_cached_datareader,
+                                         datareader_ray_obj_ref=datareader_ray_obj_ref)
     
     train_dataset = task.get_train_dataset()
     infer_example = train_dataset[0]["inputs_embeds"]
@@ -563,7 +617,9 @@ def train_longformer(task_name,
 
 
 def run_huggingface(model,base_trainer,training_args,
-                    metrics, task,no_wandb=False,notes=None):
+                    metrics, task,no_wandb=False,notes=None,
+                    tune=True):
+                    
     if not no_wandb:
         import wandb
         wandb.init(project="flu",
@@ -579,7 +635,8 @@ def run_huggingface(model,base_trainer,training_args,
 
     if hasattr(model,"config"):
         write_dict_to_json(model.config.to_dict(),
-                           os.path.join(training_args.output_dir,"model_config.json"))
+                           os.path.join(training_args.output_dir,"model_config.json"),
+                           safe=True)
 
     training_args.save_total_limit=3
     trainer_args = dict(
@@ -598,10 +655,13 @@ def run_huggingface(model,base_trainer,training_args,
 
     train_metrics = trainer.predict(train_dataset, metric_key_prefix="",
                                     description="Train").metrics
-    train_metrics.pop("_roc")
+    train_metrics.pop("_roc",None)
     train_metrics = {"train/"+k[1:] : v for k,v in train_metrics.items()}
-    
-    if wandb:
+    if tune:
+        all_metrics = {**eval_metrics,**train_metrics}
+        ray.tune.report(**all_metrics)
+
+    if not no_wandb:
         x_dummy = torch.tensor(train_dataset[0]["inputs_embeds"]).unsqueeze(0).cuda()
         y_dummy = torch.tensor(train_dataset[0]["label"]).unsqueeze(0).cuda()
         pred_dummy = model(inputs_embeds=x_dummy, labels = y_dummy)[0]
@@ -611,11 +671,18 @@ def run_huggingface(model,base_trainer,training_args,
         wandb.log({"model_img": [wandb.Image(Image.open(model_img_path), caption="Model Graph")]})
         wandb.log(eval_metrics)
         wandb.log(train_metrics)
+    
+    final_dir = os.path.join(training_args.output_dir,"final_model")
+    os.makedirs(final_dir)
+    print(f"Saving final model to...{final_dir}")
+    trainer.save_model(final_dir)
+
 
 def run_pytorch_lightning(model, task, 
                         training_args={},
                         no_wandb=False,
                         notes=None):                     
+    pl.seed_everything(42194)
     if not no_wandb:
         logger = WandbLogger(project="flu")
         logger.experiment.notes = notes
@@ -625,7 +692,13 @@ def run_pytorch_lightning(model, task,
         checkpoint_callback = ModelCheckpoint(
                             dirpath=logger.experiment.dir,
                             filename='{epoch}-',
-                            save_last=True)
+                            save_last=True,
+                            save_top_k=3,
+                            monitor="eval/roc_auc",
+                            every_n_val_epochs=1,
+                            mode='max')
+
+
     else:
         checkpoint_callback = True
         logger=True
@@ -635,11 +708,14 @@ def run_pytorch_lightning(model, task,
 
     trainer = pl.Trainer(logger=logger,
                          checkpoint_callback=checkpoint_callback,
+                         callbacks=[checkpoint_callback],
                          gpus = -1,
+                         accelerator="dp",
+                         terminate_on_nan=True,
                          **training_args)
 
     model.set_train_dataset(task.get_train_dataset())
     model.set_eval_dataset(task.get_eval_dataset())
-
     trainer.fit(model)
-    
+    print(f"Best model score: {checkpoint_callback.best_model_score}")
+    print(f"Best model path: {checkpoint_callback.best_model_path}")

@@ -3,13 +3,13 @@ import datetime
 
 from torch.utils.data import DataLoader
 from transformers.data.data_collator import default_data_collator
+import ray
 
 import src.data.task_datasets as td
 from src.models.eval import classification_eval, autoencode_eval
-from src.data.utils import get_features_path, load_processed_table
-from src.data.cache_datareader import load_cached_activity_reader
+from src.data.utils import get_features_path, load_processed_table, load_cached_activity_reader
 from src.utils import get_logger
-logger = get_logger()
+logger = get_logger(__name__)
 
 import pandas as pd
 
@@ -92,7 +92,11 @@ class ActivityTask(Task):
         level data"""
     def __init__(self,base_dataset,dataset_args={},
                      activity_level = "minute",
-                     look_for_cached_datareader=False):
+                     look_for_cached_datareader=False,
+                     datareader_ray_obj_ref=None,
+                     cache=True,
+                     only_with_lab_results=False,
+                     limit_train_frac=None):
         
         super(ActivityTask,self).__init__()
         
@@ -109,9 +113,12 @@ class ActivityTask(Task):
         day_window_size = dataset_args.get("day_window_size",None)
         max_missing_days_in_window = dataset_args.get("max_missing_days_in_window",None)
         data_location = dataset_args.get("data_location",None)
-
         lab_results_reader = td.LabResultsReader()
-        participant_ids = lab_results_reader.participant_ids
+
+        if only_with_lab_results:
+            participant_ids = lab_results_reader.participant_ids
+        else: 
+            participant_ids = None
 
         if activity_level == "minute":
             base_activity_reader = td.MinuteLevelActivityReader
@@ -122,27 +129,34 @@ class ActivityTask(Task):
             activity_reader = load_cached_activity_reader(self.get_name(),
                                                           dataset_args=dataset_args,
                                                           fail_if_mismatched=True)
+        elif datareader_ray_obj_ref:
+            activity_reader = ray.get(datareader_ray_obj_ref)
         else:
             add_features_path = dataset_args.pop("add_features_path",None)
-            activity_reader = base_activity_reader(participant_ids=participant_ids,
-                                                           min_date = min_date,
-                                                           max_date = max_date,
-                                                           day_window_size=day_window_size,
-                                                           max_missing_days_in_window=max_missing_days_in_window,
-                                                           add_features_path=add_features_path,
-                                                           data_location = data_location)
+            activity_reader = base_activity_reader(min_date = min_date,
+                                                   participant_ids=participant_ids,
+                                                   max_date = max_date,
+                                                   day_window_size=day_window_size,
+                                                   max_missing_days_in_window=max_missing_days_in_window,
+                                                   add_features_path=add_features_path,
+                                                   data_location = data_location)
 
-
-        train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
-    
-        limit_train_frac = dataset_args.get("limit_train_frac",None)
         if limit_train_frac:
-            train_participant_dates = train_participant_dates[:int(len(train_participant_dates)*limit_train_frac)]
+            train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac,
+                                                                                                     limit_train_frac=limit_train_frac,
+                                                                                                     by_participant=True)
+
+        else:
+            train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
+        
 
         self.train_dataset = base_dataset(activity_reader, lab_results_reader,
-                        participant_dates = train_participant_dates,**dataset_args)
+                        participant_dates = train_participant_dates,
+                        cache=cache,**dataset_args)
         self.eval_dataset = base_dataset(activity_reader, lab_results_reader,
-                        participant_dates = eval_participant_dates,**dataset_args)
+                            participant_dates = eval_participant_dates,
+                            cache=cache,
+                            **dataset_args)
     
     def get_description(self):
         return self.__doc__
@@ -206,6 +220,22 @@ class PredictTrigger(ActivityTask,ClassificationMixin):
     def get_name(self):
         return "PredictTrigger"
 
+class Labler(object):
+    def __init__(self, survey_respones, clause):
+        self.clause = clause
+        self.survey_responses = survey_respones
+
+    def __call__(self,participant_id,start_date,end_date):
+        try:
+            participant_data = self.survey_responses.loc[participant_id]
+        except KeyError:
+            return 0
+        if isinstance(participant_data, pd.Series):
+            participant_data = pd.DataFrame(participant_data).T
+        on_date = participant_data[participant_data["timestamp"].dt.date == end_date]
+        meets_clause = on_date.query(self.clause)
+        return len(meets_clause) > 0
+
 class PredictSurveyClause(ActivityTask,ClassificationMixin):
     """Predict the whether a clause in the onehot
        encoded surveys is true for a given day. 
@@ -225,17 +255,7 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
         ClassificationMixin.__init__(self)
     
     def get_labeler(self):
-        def labeler(participant_id,start_date,end_date):
-            try:
-                participant_data = self.survey_responses.loc[participant_id]
-            except KeyError:
-                return 0
-            if isinstance(participant_data, pd.Series):
-                participant_data = pd.DataFrame(participant_data).T
-            on_date = participant_data[participant_data["timestamp"].dt.date == end_date]
-            meets_clause = on_date.query(self.clause)
-            return len(meets_clause) > 0
-        return labeler
+        return Labler(self.survey_responses,self.clause)
 
     def get_name(self):
         return f"PredictSurveyCol-{self.clause}"
@@ -254,7 +274,8 @@ class SingleWindowActivityTask(Task):
        (e.g.) predicting a user's BMI."""
     
     def __init__(self,base_dataset,dataset_args={}, activity_level="minute",
-                window_selection="first",look_for_cached_datareader=False, **kwargs):
+                window_selection="first",look_for_cached_datareader=False,
+                datareader_ray_obj_ref=None, **kwargs):
         Task.__init__(self)
         eval_frac = dataset_args.pop("eval_frac",None)
         split_date = dataset_args.pop("split_date",None)
@@ -277,6 +298,8 @@ class SingleWindowActivityTask(Task):
             activity_reader = load_cached_activity_reader(self.get_name(),
                                                           dataset_args=dataset_args,
                                                           fail_if_mismatched=True)
+        elif datareader_ray_obj_ref:
+            raise NotImplementedError
         else:
             add_features_path = dataset_args.pop("add_features_path",None)
             activity_reader = base_activity_reader(participant_ids=participant_ids,
@@ -287,8 +310,8 @@ class SingleWindowActivityTask(Task):
                                                            add_features_path=add_features_path,
                                                            data_location=data_location)
 
-
         train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
+        
         if window_selection == "first":
             train_participant_dates = self.filter_participant_dates(train_participant_dates)
             eval_participant_dates = self.filter_participant_dates(eval_participant_dates)

@@ -13,7 +13,7 @@ import glob
 
 from src.utils import get_logger
 import os
-logger = get_logger()
+logger = get_logger(__name__)
 
 from src.data.utils import load_raw_table, load_processed_table, get_processed_dataset_path
 import src.data.constants as cons

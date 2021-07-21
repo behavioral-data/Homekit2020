@@ -37,8 +37,8 @@ def read_jsonl(path,line=None):
             data.append(json.loads(line))
     return data
     
-def get_logger():
-    logger = logging.getLogger(__name__)
+def get_logger(name):
+    logger = logging.getLogger(name)
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",

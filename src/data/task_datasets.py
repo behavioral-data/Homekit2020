@@ -1,6 +1,7 @@
 from datetime import datetime
 import multiprocessing
-from functools import lru_cache, reduce
+
+from functools import  reduce
 from operator import and_ as bit_and
 import random
 import numpy as np
@@ -15,9 +16,10 @@ dask.config.set({"distributed.comm.timeouts.connect": "60"})
 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import train_test_split
+from methodtools import lru_cache
 
 from src.utils import get_logger, read_yaml
-logger = get_logger()
+logger = get_logger(__name__)
 
 from src.data.utils import get_dask_df, load_processed_table
 from src.models.features import get_feature_with_name
@@ -91,7 +93,10 @@ class DayLevelActivityReader(object):
             
         if not len(filters) == 0:
             df = df[filters]
-
+        
+        if not participant_ids is None:
+            df = df[df["participant_id"].isin(participant_ids)]
+            
         valid_participant_dates = df.groupby("participant_id").apply(self.get_valid_dates)
         self.daily_data = df.set_index(["participant_id","date"])
 
@@ -131,19 +136,33 @@ class DayLevelActivityReader(object):
 
         return all_possible_end_dates[mask].rename("dates")
 
-    def split_participant_dates(self,date=None,eval_frac=None):
-        """If random, split a fraction equal to random for eval,
-            else, split participant dates to be before and after a given date"""
+    def split_participant_dates(self,date=None,eval_frac=None, by_participant=False,
+                                limit_train_frac=False):
+            """If random, split a fraction equal to random for eval,
+                else, split participant dates to be before and after a given date"""
 
-        if eval_frac:
-            train,eval = train_test_split(self.participant_dates,test_size=eval_frac)
-            return train,eval
-        elif date:
-            before = [x for x in self.participant_dates if x[1] <= pd.to_datetime(date) ]
-            after = [x for x in self.participant_dates if x[1] > pd.to_datetime(date) ]
-            return before, after
-        else:
-            raise ValueError("If splitting, must either provide a date or fraction")
+            if eval_frac:
+                if by_participant:
+                    ids = [x[0] for x in self.participant_dates]
+                    all_ids = list(set(ids))
+                    left_ids = all_ids[:int(len(all_ids)*eval_frac)]
+                    if limit_train_frac:
+                        left_ids = left_ids[:int(limit_train_frac*len(left_ids))]
+                    
+                    left_ids = set(left_ids)
+                    train = [x for x in self.participant_dates if x[0] in left_ids]
+                    eval = [x for x in self.participant_dates if not x[0] in left_ids]
+                else:
+                    train,eval = train_test_split(self.participant_dates,test_size=eval_frac)
+                    train = train[:int(limit_train_frac*len(train))]
+            elif date:
+                if limit_train_frac:
+                    raise NotImplementedError
+                train = [x for x in self.participant_dates if x[1] <= pd.to_datetime(date) ]
+                eval = [x for x in self.participant_dates if x[1] > pd.to_datetime(date) ]
+            else:
+                raise ValueError("If splitting, must either provide a date or fraction")
+            return train, eval
 
 class MinuteLevelActivityReader(object):
     def __init__(self, min_date=None,
@@ -239,19 +258,32 @@ class MinuteLevelActivityReader(object):
 
         return all_possible_end_dates[mask].rename("dates")
 
-    def split_participant_dates(self,date=None,eval_frac=None):
+    def split_participant_dates(self,date=None,eval_frac=None, by_participant=False,
+                            limit_train_frac=False):
         """If random, split a fraction equal to random for eval,
             else, split participant dates to be before and after a given date"""
 
         if eval_frac:
-            train,eval = train_test_split(self.participant_dates,test_size=eval_frac)
-            return train,eval
+            if by_participant:
+                ids = [x[0] for x in self.participant_dates]
+                all_ids = list(set(ids))
+                left_ids = set(all_ids[:int(len(all_ids)*eval_frac)])
+                if limit_train_frac:
+                    left_ids = left_ids[:int(limit_train_frac*len(left_ids))]
+
+                train = [x for x in self.participant_dates if x[0] in left_ids]
+                eval = [x for x in self.participant_dates if not x[0] in left_ids]
+            else:
+                train,eval = train_test_split(self.participant_dates,test_size=eval_frac)
+                train = train[:int(limit_train_frac*len(train))]
         elif date:
-            before = [x for x in self.participant_dates if x[1] <= pd.to_datetime(date) ]
-            after = [x for x in self.participant_dates if x[1] > pd.to_datetime(date) ]
-            return before, after
+            if limit_train_frac:
+                raise NotImplementedError
+            train = [x for x in self.participant_dates if x[1] <= pd.to_datetime(date) ]
+            eval = [x for x in self.participant_dates if x[1] > pd.to_datetime(date) ]
         else:
             raise ValueError("If splitting, must either provide a date or fraction")
+        return train, eval
 
 class LabResultsReader(object):
     def __init__(self,min_date=None,
@@ -283,6 +315,7 @@ class ActivtyDataset(Dataset):
                        add_absolute_embedding = False,
                        add_cls=False,
                        shuffle=False,
+                       cache=True,
                        **_):
         
         self.activity_reader = activity_reader
@@ -312,7 +345,11 @@ class ActivtyDataset(Dataset):
 
         if self.add_cls:
             self.cls_init = np.random.randn(1,self.size[-1]).astype(np.float32)   
-   
+
+        self.cache = cache
+        if self.cache:
+            self.get_item_cache = {}
+
     def get_user_data_in_date_range(self,participant_id, start, end):
         eod = end + pd.to_timedelta("1D") - pd.to_timedelta("1min")
         return self.get_user_data_in_time_range(participant_id,start,eod)
@@ -345,10 +382,14 @@ class ActivtyDataset(Dataset):
     def __len__(self):
         return len(self.participant_dates)
     
-    @lru_cache(maxsize=None)
     def __getitem__(self,index):
         # Could cache this later
-    
+        if self.cache:
+            try:
+                return self.get_item_cache[index]
+            except KeyError:
+                pass
+
         participant_id, end_date = self.participant_dates[index]
         start_date = end_date - pd.Timedelta(self.day_window_size -1, unit = "days")
         activity_data = self.get_user_data_in_date_range(participant_id,start_date,end_date)
@@ -384,9 +425,14 @@ class ActivtyDataset(Dataset):
                 mask[0] = 1
                 item["global_attention_mask"] = mask
             
-            return item
+            result = item
+        else:
+            result = activity_data.values, label
 
-        return activity_data.values, label
+        if self.cache:
+            self.get_item_cache[index] = result
+        
+        return result
     
     def to_stacked_numpy(self,flatten = False):
         

@@ -6,7 +6,7 @@ import pandas as pd
 from distributed import Client
 
 from src.utils import read_yaml, get_logger
-logger = get_logger()
+logger = get_logger(__name__)
 
 from src.data.utils import get_features_path, get_dask_df
 from src.models.features import get_feature_with_name

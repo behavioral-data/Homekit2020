@@ -4,6 +4,7 @@ from typing import List, Optional, Union
 import os
 from numpy import e
 import time
+import copy
 
 import torch
 from torch.utils.data import DataLoader
@@ -16,11 +17,12 @@ from transformers.trainer_pt_utils import (
     DistributedTensorGatherer,
     nested_concat,
 )
+from ray import tune
 from transformers.utils.dummy_pt_objects import get_polynomial_decay_schedule_with_warmup
 import wandb
 
 from src.utils import get_logger, check_for_wandb_run, write_jsonl
-logger = get_logger()
+logger = get_logger(__name__)
 
 
 class FluTrainer(Trainer):
@@ -137,7 +139,7 @@ class FluTrainer(Trainer):
         for key in list(metrics.keys()):
             if not key.startswith(f"{metric_key_prefix}_"):
                 metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
-
+        
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
     def write_results(self,preds,label_ids, description=None):

@@ -61,10 +61,10 @@ sync_bdata:
 create_environment:
 ifeq (True,$(HAS_CONDA))
 	@echo ">>> Detected conda, creating conda environment."
-	conda create --name $(PROJECT_NAME) python=3
-	conda activate $(PROJECT_NAME)
 	conda env create -f environment.yml
+	conda activate $(PROJECT_NAME)
 	pip install -e .
+	echo MAIN_PATH="\"$PWD\"">> .env
 	@echo ">>> New conda env created. Activate with:\n conda activate $(PROJECT_NAME)"
 else
 	$(PYTHON_INTERPRETER) -m pip install -q virtualenv virtualenvwrapper
@@ -73,6 +73,7 @@ else
 	@bash -c "source `which virtualenvwrapper.sh`;mkvirtualenv $(PROJECT_NAME) --python=$(PYTHON_INTERPRETER)"
 	@echo ">>> New virtualenv created. Activate with:\nworkon $(PROJECT_NAME)"
 endif
+
 
 ## Test python environment is setup correctly
 test_environment:

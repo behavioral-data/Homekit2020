@@ -1,17 +1,19 @@
 import click
 import numpy as np
 from json import loads
+from ray import tune
 import xgboost as xgb
 from matplotlib import pyplot as plt
 from xgboost import callback
 import wandb
+import ray
+import pickle
 
 from src.models.tasks import get_task_with_name
 from src.utils import get_logger
-from src.models.commands import BaseCommand
 from src.models.eval import classification_eval
 
-logger = get_logger()
+logger = get_logger(__name__)
 
 @click.command()
 @click.argument("task_name")
@@ -49,9 +51,6 @@ def xgb_wandb_callback():
 
     return callback
 
-@click.command(cls=BaseCommand)
-@click.argument("task_name")
-@click.option("--add_features_path", type = click.Path(dir_okay=False), default=None)
 def train_xgboost(task_name, dataset_args ={},
                 no_wandb=False,
                 notes=None,
@@ -60,26 +59,40 @@ def train_xgboost(task_name, dataset_args ={},
                 add_features_path=None,
                 data_location=None,
                 limit_train_frac=None,
+                max_depth=2,
+                eta=1,
+                objective="binary:logistic",
+                task_ray_obj_ref=None,
+                only_with_lab_results=False,
+                cached_task_path=None,
                 **_):
 
     """ Baseline for classification tasks that uses daily aggregated features"""
     logger.info(f"Training XGBoost on {task_name}")
     dataset_args["add_features_path"] = add_features_path
     dataset_args["data_location"] = data_location
-    # dataset_args["data_location"] = data_location
+    dataset_args["data_location"] = data_location
+    if limit_train_frac:
+        dataset_args["limit_train_frac"] = limit_train_frac
 
-    task = get_task_with_name(task_name)(dataset_args=dataset_args,
-                                         activity_level="day")
+    if task_ray_obj_ref:
+        task = ray.get(task_ray_obj_ref)
+    elif cached_task_path:
+        logger.info(f"Loading pickle from {cached_task_path}...")
+        task = pickle.load(open(cached_task_path,"rb"))
+    else:
+        task = get_task_with_name(task_name)(dataset_args=dataset_args,
+                                            only_with_lab_results=only_with_lab_results,
+                                            activity_level="day",
+                                            limit_train_frac=limit_train_frac)
+
     if not task.is_classification:
         raise ValueError(f"{task_name} is not an classification task")
 
     train = task.get_train_dataset().to_dmatrix()
-    if limit_train_frac:
-        inds = list(range(int(len(task.get_train_dataset())*limit_train_frac)))
-        train = train.slice(inds)
     eval = task.get_eval_dataset().to_dmatrix()
     
-    param = {'max_depth': 2, 'eta': 1, 'objective': 'binary:logistic'}
+    param = {'max_depth': max_depth, 'eta': eta, 'objective': objective}
     param['nthread'] = 4
     param['eval_metric'] = 'auc'
     evallist = [(eval, 'eval'), (train, 'train')]
@@ -100,7 +113,7 @@ def train_xgboost(task_name, dataset_args ={},
     bst = xgb.train(param, train, 10, evallist, callbacks=callbacks)
     eval_pred = bst.predict(eval)
     eval_logits = np.stack([1-eval_pred,eval_pred],axis=1)
-    results = classification_eval(eval_logits,eval.get_label())
+    results = classification_eval(eval_logits,eval.get_label(),prefix="eval/")
 
 
     if not no_wandb:
@@ -109,4 +122,5 @@ def train_xgboost(task_name, dataset_args ={},
         wandb.log({"feature_importance": wandb.Image(plt)})
         wandb.log(results)
 
-    
+    if tune:
+        ray.tune.report(**results)
