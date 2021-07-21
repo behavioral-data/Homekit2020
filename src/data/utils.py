@@ -8,6 +8,7 @@ import pandas as pd
 from scipy.special import softmax
 import pyarrow as pa
 from torch.utils import data
+import numpy as np
 
 from src.utils import get_logger
 import src.data.constants as constants
@@ -125,7 +126,7 @@ def download_wandb_table(run_id,table_name="roc_table",
     return pd.DataFrame(data["data"],columns=data["columns"])
 
 
-def get_dask_df(name,path= None,min_date=None,max_date=None,index=None):
+def get_dask_df(name=None,path= None,min_date=None,max_date=None,index=None):
     if not path:
         path = get_processed_dataset_path(name)
     filters = []
@@ -197,3 +198,12 @@ def load_cached_activity_reader(name, dataset_args=None,
     elif fail_if_mismatched:
         raise(ValueError("In order to check for match with cached activity_reader must pass dataset_args"))
     return reader
+
+def split_by_participant(df,frac):
+    participants = df["participant_id"].unique()
+    np.random.shuffle(participants)
+    left_participants = participants[:int(frac*len(participants))]
+    mask = df["participant_id"].isin(left_participants)
+    left = df[mask]
+    right = df[~mask]
+    return left, right
