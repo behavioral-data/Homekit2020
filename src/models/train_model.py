@@ -690,6 +690,7 @@ def run_pytorch_lightning(model, task,
                    notes=notes)
         wandb.run.summary["task"] = task.get_name()
         wandb.run.summary["model"] = model.base_model_prefix
+        wandb.config.update(model.hparams)
         logger = WandbLogger()
 
         checkpoint_callback = ModelCheckpoint(

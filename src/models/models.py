@@ -132,7 +132,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.batch_size = inital_batch_size
         self.train_dataset = None
         self.eval_dataset=None
-
+        self.save_hyperparameters()
 
     def forward(self, inputs_embeds,labels):
         x = inputs_embeds.transpose(1, 2)
