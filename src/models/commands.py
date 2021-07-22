@@ -7,7 +7,9 @@ from src.models.train_model import (train_cnn_transformer, train_neural_baseline
                                     train_bert, train_longformer)
 from src.models.baselines import train_xgboost
 
-def validate_dataset_args(ctx, param, value):
+def validate_yaml_or_json(ctx, param, value):
+    if value is None:
+        return
     try:
         return read_yaml(value)
     except FileNotFoundError:
@@ -39,12 +41,14 @@ nerual_options = [
 ]
 
 universal_options = [
+    click.Option(("--task_config",), type=str, help = "path to config yaml for task",callback=validate_yaml_or_json),
+    click.Option(("--task_name",), type=str, help = "name of task in src/models/tasks.py"),
     click.Option(("--model_path",), type=click.Path(file_okay=False,exists=True),
                   help = "path containing a checkpoint-X directory and a model_config.json"),
     click.Option(('--no_wandb',), is_flag=True),
     click.Option(('--tune',), is_flag=True),
     click.Option(('--notes',), type=str, default=None),
-    click.Option(('--dataset_args',), default=None,callback=validate_dataset_args),
+    click.Option(('--dataset_args',), default=None,callback=validate_yaml_or_json),
     click.Option(('--activity_level',),type=click.Choice(["day","minute"]), default="minute"),
     click.Option(('--data_location',), default=None,type=click.Path(exists=True)),
     click.Option(('--limit_train_frac',), default=None,type=float,help="Truncate the training data so <limit_train_frac>"),
@@ -90,7 +94,6 @@ def train_cnn_transformer_command(*args, **kwargs):
 
 @click.command(cls=BaseCommand,name="train-neural-baseline")
 @click.argument("model_name")
-@click.argument("task_name")
 @click.option("--n_epochs", default=10)
 @click.option("--pos_class_weight", default=100)
 @click.option("--neg_class_weight", default=1)
@@ -102,28 +105,23 @@ def train_neural_baseline_command(*args,**kwargs):
 
 @click.command(cls=NeuralCommand,name="train-autoencoder")
 @click.argument("model_name")
-@click.argument("task_name")
 def train_autoencoder_command(*args, **kwargs):
     train_autoencoder(*args,**kwargs)
 
 @click.command(cls=NeuralCommand,name="train-sand")
-@click.argument("task_name")
 def train_sand_command(*args,**kwargs):
     train_sand(*args,**kwargs)
 
 
 @click.command(cls=NeuralCommand, name="train-bert")
-@click.argument("task_name")
 def train_bert_command(*args,**kwargs):
     train_bert(*args,**kwargs)
 
 @click.command(cls=NeuralCommand, name="train-longformer")
-@click.argument("task_name")
 def train_longformer_command(*args,**kwargs):
     train_longformer(*args,**kwargs)
 
 @click.command(cls=BaseCommand, name="train-xgboost")
-@click.argument("task_name")
 @click.option("--add_features_path", type = click.Path(dir_okay=False), default=None)
 def train_xgboost_command(*args,**kwargs):
     train_xgboost(*args,**kwargs)

@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import dask.dataframe as dd
 
-from src.models.commands import validate_dataset_args
+from src.models.commands import validate_yaml_or_json
 from src.data.utils import get_dask_df, write_pandas_to_parquet, load_processed_table
 
 @click.command()

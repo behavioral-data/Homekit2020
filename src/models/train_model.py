@@ -198,7 +198,9 @@ def train_autoencoder(model_name,
                    no_wandb=no_wandb, notes=notes)
 
 
-def train_cnn_transformer( task_name, 
+def train_cnn_transformer( 
+                task_config=None,
+                task_name=None, 
                 n_epochs=10,
                 hidden_size=768,
                 num_attention_heads=4,
@@ -236,9 +238,13 @@ def train_cnn_transformer( task_name,
                 stride_sizes = [3,2,2],
                 **model_specific_kwargs):
     logger.info(f"Training CNNTransformer")
+    if task_config:
+        task_name = task_config["task_name"]
+        dataset_args = task_config["dataset_args"]
+
     if not eval_frac is None:
         dataset_args["eval_frac"] = eval_frac
-    
+
     dataset_args["limit_train_frac"]=limit_train_frac
     dataset_args["return_dict"] = True
     dataset_args["data_location"] = data_location
@@ -348,7 +354,8 @@ def train_cnn_transformer( task_name,
                     tune=tune)
 
 
-def train_sand( task_name, 
+def train_sand( task_config=None,
+                task_name=None,
                 n_epochs=10,
                 hidden_size=768,
                 num_attention_heads=4,
@@ -381,6 +388,10 @@ def train_sand( task_name,
         raise NotImplementedError()
 
     logger.info(f"Training SAnD")
+    if task_config:
+        task_name = task_config["task_name"]
+        dataset_args = task_config["dataset_args"]
+
     if not eval_frac is None:
         dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
@@ -437,7 +448,8 @@ def train_sand( task_name,
                    metrics = metrics, task=task,
                    no_wandb=no_wandb, notes=notes)
 
-def train_bert(task_name,
+def train_bert(task_config=None,
+                task_name=None,
                 n_epochs=10,
                 hidden_size=768,
                 num_attention_heads=4,
@@ -467,6 +479,9 @@ def train_bert(task_name,
     
     if model_path:
         raise NotImplementedError()
+    if task_config:
+        task_name = task_config["task_name"]
+        dataset_args = task_config["dataset_args"]
 
     logger.info(f"Training BERT on {task_name}")
     dataset_args["return_dict"] = True
@@ -534,7 +549,8 @@ def train_bert(task_name,
                    metrics = metrics, task=task,
                    no_wandb=no_wandb, notes=notes)
 
-def train_longformer(task_name,
+def train_longformer(task_config=None,
+                    task_name=None,
                     n_epochs=10,
                     hidden_size=768,
                     num_attention_heads=4,
@@ -564,7 +580,11 @@ def train_longformer(task_name,
     
     if model_path:
         raise NotImplementedError()
-
+    
+    if task_config:
+        task_name = task_config["task_name"]
+        dataset_args = task_config["dataset_args"]
+        
     logger.info(f"Training Longformer on {task_name}")
     dataset_args["return_dict"] = True
     dataset_args["eval_frac"] = eval_frac
