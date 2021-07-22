@@ -226,7 +226,7 @@ def train_cnn_transformer( task_name,
                 data_location=None,
                 no_eval_during_training=False,
                 reset_cls_params=False,
-                use_pl=False,
+                use_huggingface=False,
                 limit_train_frac=None,
                 freeze_encoder=False,
                 tune=False,
@@ -314,7 +314,7 @@ def train_cnn_transformer( task_name,
     else:
         report_to = ["wandb"]
 
-    if use_pl:
+    if not use_huggingface:
         pl_training_args = dict(
             max_epochs = n_epochs,
             check_val_every_n_epoch=10,
@@ -684,13 +684,16 @@ def run_pytorch_lightning(model, task,
                         notes=None):                     
     pl.seed_everything(42194)
     if not no_wandb:
-        logger = WandbLogger(project="flu")
-        logger.experiment.notes = notes
-        logger.experiment.summary["task"] = task.get_name()
-        logger.experiment.summary["model"] = model.base_model_prefix
-       
+        import wandb
+        wandb.init(project="flu",
+                   entity="mikeamerrill",
+                   notes=notes)
+        wandb.run.summary["task"] = task.get_name()
+        wandb.run.summary["model"] = model.base_model_prefix
+        logger = WandbLogger()
+
         checkpoint_callback = ModelCheckpoint(
-                            dirpath=logger.experiment.dir,
+                            dirpath=wandb.run.dir,
                             filename='{epoch}-',
                             save_last=True,
                             save_top_k=3,
@@ -710,7 +713,7 @@ def run_pytorch_lightning(model, task,
                          checkpoint_callback=checkpoint_callback,
                          callbacks=[checkpoint_callback],
                          gpus = -1,
-                         accelerator="dp",
+                         accelerator="ddp",
                          terminate_on_nan=True,
                          **training_args)
 

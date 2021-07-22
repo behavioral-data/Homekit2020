@@ -168,7 +168,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         loss,logits = self.forward(x,y)
         
     
-        self.log("train/loss", loss.item(),on_step=True)
+        self.log("train/loss", loss.item(),on_step=True, sync_dist=True)
 
         probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
         # self.train_probs.append(probs.detach().cpu())
@@ -243,7 +243,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         with torch.no_grad():
             loss,logits = self.forward(x,y)
 
-            self.log("eval/loss", loss.item(),on_step=True)
+            self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
             
             probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
             self.eval_probs.append(probs.detach().cpu())
