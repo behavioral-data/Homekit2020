@@ -96,7 +96,8 @@ class DayLevelActivityReader(object):
         
         if not participant_ids is None:
             df = df[df["participant_id"].isin(participant_ids)]
-            
+        
+        # Need to add metadata to get to run only once
         valid_participant_dates = df.groupby("participant_id").apply(self.get_valid_dates)
         self.daily_data = df.set_index(["participant_id","date"])
 
@@ -190,7 +191,7 @@ class MinuteLevelActivityReader(object):
         pbar.register()
         
         #pylint:disable=unused-variable 
-        with Client(n_workers=min(n_cores,16), threads_per_worker=1) as client:
+        with Client(n_workers=min(n_cores,16)) as client:
             dask_df = get_dask_df("processed_fitbit_minute_level_activity",
                                     path = data_location)
     
@@ -233,10 +234,12 @@ class MinuteLevelActivityReader(object):
             logger.info("Scaling Data...")
             scale_model = self.scaler()
             self.activity_data[self.activity_data.columns] = scale_model.fit_transform(self.activity_data)
-        
-        logger.info("Sorting Index...")
-        self.activity_data = self.activity_data.sort_index()
-
+            
+        self.activity_data = self.activity_data.astype(np.float32)
+        if not self.activity_data.index.is_monotonic:
+            logger.info("Sorting Index...")
+            self.activity_data = self.activity_data.sort_index()
+            
     def get_valid_dates(self, partition):
         dates_with_data = pd.DatetimeIndex(partition[~partition["missing_heartrate"]]["timestamp"].dt.date.unique())
         min_days_with_data = self.day_window_size - self.max_missing_days_in_window
@@ -412,7 +415,7 @@ class ActivtyDataset(Dataset):
         if self.return_dict:
             
             item = {}
-            embeds = activity_data.values.astype(np.float32)        
+            embeds = activity_data.values
             
             if self.add_cls:
                 embeds = np.concatenate([self.cls_init,embeds],axis=0)
