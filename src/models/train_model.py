@@ -209,6 +209,7 @@ def train_cnn_transformer(
                 model_path=None,
                 max_position_embeddings=2048, 
                 no_early_stopping=False,
+                only_with_lab_results=False,
                 train_batch_size = 4,
                 eval_batch_size = 16,
                 eval_frac = None,
@@ -263,6 +264,7 @@ def train_cnn_transformer(
         task = get_task_with_name(task_name)(dataset_args=dataset_args,
                                             activity_level=activity_level,
                                             look_for_cached_datareader=look_for_cached_datareader,
+                                            only_with_lab_results = only_with_lab_results,
                                             datareader_ray_obj_ref=datareader_ray_obj_ref)
     
     
