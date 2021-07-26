@@ -87,7 +87,6 @@ class CNNTransformer(NeuralCommand):
 
 
 @click.command(cls=CNNTransformer, name="train-cnn-transformer")
-@click.argument("task_name")
 def train_cnn_transformer_command(*args, **kwargs):
     train_cnn_transformer(*args,**kwargs)
 
