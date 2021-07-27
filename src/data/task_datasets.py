@@ -11,10 +11,12 @@ from distributed import Client
 import dask
 from dask.diagnostics import ProgressBar
 import dask.dataframe as dd
+
+from dask_ml.preprocessing import StandardScaler
 import xgboost as xgb
 dask.config.set({"distributed.comm.timeouts.connect": "60"})
+from sklearn.preprocessing import MinMaxScaler
 
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import train_test_split
 from methodtools import lru_cache
 
@@ -225,15 +227,18 @@ class MinuteLevelActivityReader(object):
             self.activity_data = dask_df
         
             logger.info("Using Dask to pre-process data:")
+            if self.scaler:
+                logger.info("Scaling Data...")
+                scale_model = self.scaler()
+                numeric = self.activity_data.select_dtypes(include=['float64'])
+                self.activity_data[list(numeric.columns.values)] = scale_model.fit_transform(numeric)
+
             valid_participant_dates, self.activity_data = dask.compute(valid_participant_dates,self.activity_data)
             logger.info("Setting index...")
             self.activity_data = self.activity_data.set_index(["participant_id","timestamp"]).drop(columns=["date"])
             self.participant_dates = list(valid_participant_dates.dropna().apply(pd.Series).stack().droplevel(-1).items())
         
-        if self.scaler:
-            logger.info("Scaling Data...")
-            scale_model = self.scaler()
-            self.activity_data[self.activity_data.columns] = scale_model.fit_transform(self.activity_data)
+       
             
         self.activity_data = self.activity_data.astype(np.float32)
         if not self.activity_data.index.is_monotonic:
