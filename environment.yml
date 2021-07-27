@@ -33,6 +33,7 @@ dependencies:
   - pytorch-lightning>=0.10.0
   - torchmetrics
   - tensorboardx
+  - dask-ml
   - pip:
     - torchviz
     - pyyaml==5.4.1
