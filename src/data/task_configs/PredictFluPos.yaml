@@ -1,6 +1,8 @@
-day_window_size: 4
-max_date: 2020-05-01
-max_missing_days_in_window: 2
-min_date: 2020-01-01
-split_date: 2020-03-01
-shuffle: 1
+task_name:
+  PredictFluPos
+dataset_args:  
+  day_window_size: 4
+  max_missing_days_in_window: 2
+  shuffle: 1
+  split_date: 2020-03-01
+  clause: "have_flu > 0"
