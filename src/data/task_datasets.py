@@ -374,6 +374,7 @@ class ActivtyDataset(Dataset):
             return self.activity_data.iloc[start_ix:end_ix]
 
     def get_label(self,participant_id,start_date,end_date):
+        raise NotImplementedError
         try:
             participant_results = self.lab_results_reader.results.loc[participant_id]
         except KeyError:

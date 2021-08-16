@@ -1,6 +1,7 @@
 import json
 from random import choice
 import click
+import petastorm
 from src.utils import read_yaml
 from src.models.train_model import (train_cnn_transformer, train_neural_baseline,
                                     train_autoencoder, train_sand,
@@ -56,7 +57,16 @@ universal_options = [
     click.Option(('--cached_task_path',),type=str),
     click.Option(('--datareader_ray_obj_ref',), default=None),
     click.Option(('--task_ray_obj_ref',), default=None),
-    click.Option(('--only_with_lab_results',),is_flag=True, default=None)
+    click.Option(('--only_with_lab_results',),is_flag=True, default=None),
+]
+
+petastorm_options = [
+    click.Option(("--train_path",), type=click.Path(file_okay=False,exists=True),
+                  help = "path containing petastorm dataset for training"),
+    click.Option(("--eval_path",), type=click.Path(file_okay=False,exists=True),
+                  help = "path containing petastorm dataset for evaluation"),
+    click.Option(("--test_path",), type=click.Path(file_okay=False,exists=True),
+                  help = "path containing petastorm dataset for testing"),
 ]
 
 loss_options = [
@@ -83,7 +93,7 @@ class CNNTransformer(NeuralCommand):
             click.Option(("--freeze_encoder",),is_flag=True, help="Freeze the encoder during training"),
             click.Option(("--use_huggingface",),is_flag=True, help="Run the job with huggingface rather than pytorch lightning")
         ]
-        self.params = self.params + loss_options + cnn_transformer_params
+        self.params = self.params + loss_options + cnn_transformer_params + petastorm_options
 
 
 @click.command(cls=CNNTransformer, name="train-cnn-transformer")
