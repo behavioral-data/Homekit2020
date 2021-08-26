@@ -1,33 +1,29 @@
-from copy import copy
-from typing import Union, Dict
-from pytorch_lightning.core.step_result import Result
-
 import gc
+from copy import copy
+from typing import Dict, Union
 
+import numpy as np
+import pytorch_lightning as pl
 import torch
 import torch.nn as nn
+import torchmetrics
+import wandb
+from petastorm.pytorch import BatchedDataLoader
+from petastorm.pytorch import DataLoader as PetaDataLoader
+from petastorm.reader import Reader
+from pytorch_lightning.core.step_result import Result
+from wandb import plot
+from src.models.losses import build_loss_fn
+from src.SAnD.core import modules
+from src.utils import check_for_wandb_run
+from src.models.eval import wandb_roc_curve, wandb_pr_curve
 from torch import Tensor
 from torch.nn.modules import dropout
 from torch.utils.data.dataloader import DataLoader
-
-from petastorm.pytorch import DataLoader as PetaDataLoader
-from petastorm.pytorch import BatchedDataLoader
-
-from petastorm.reader import Reader
-
-import pytorch_lightning as pl
-
-import numpy as np
-import torchmetrics
 from transformers import PretrainedConfig
-import wandb
-from wandb.plot.roc_curve import roc_curve
 from wandb.data_types import Table
+from wandb.plot.roc_curve import roc_curve
 
-
-from src.SAnD.core import modules
-from src.models.losses import build_loss_fn
-from src.utils import check_for_wandb_run
 
 class Config(object):
     def __init__(self,data) -> None:
@@ -195,38 +191,28 @@ class CNNToTransformerEncoder(pl.LightningModule):
     #     self.train_labels = []
 
     def on_train_end(self):
-        train_preds = torch.cat(self.train_probs, dim=0)
-        train_labels = torch.cat(self.train_labels, dim=0)
-        train_auc = torchmetrics.functional.auroc(train_preds,train_labels,pos_label=1)
+        # train_preds = torch.cat(self.train_probs, dim=0)
+        # train_labels = torch.cat(self.train_labels, dim=0)
+        # train_auc = torchmetrics.functional.auroc(train_preds,train_labels,pos_label=1)
     
         eval_preds = torch.cat(self.eval_probs, dim=0)
         eval_labels = torch.cat(self.eval_labels, dim=0)
         
-        fpr, tpr, _ = torchmetrics.functional.roc(eval_preds, eval_labels, pos_label=1)
-        eval_auc = torchmetrics.functional.auroc(eval_preds,eval_labels,pos_label=1)
+        # fpr, tpr, _ = torchmetrics.functional.roc(eval_preds, eval_labels, pos_label=1)
+        # eval_auc = torchmetrics.functional.auroc(eval_preds,eval_labels,pos_label=1)
 
-        results = {"train/roc_auc":train_auc,
-                    "eval/roc_auc":eval_auc}
+
+        results = {}
 
         if check_for_wandb_run():
-            labels = ["Positive"] * len(fpr)
-            table = Table(columns= ["class","fpr","tpr"], data=list(zip(labels,fpr,tpr)))
-            plot = wandb.plot_table(
-                "wandb/area-under-curve/v0",
-                table,
-                {"x": "fpr", "y": "tpr", "class": "class"},
-                {
-                    "title": "ROC",
-                    "x-axis-title": "False positive rate",
-                    "y-axis-title": "True positive rate",
-                },
+            results["eval/roc"] = wandb_roc_curve(eval_preds,eval_labels)
+            results["eval/pr"] = wandb_pr_curve(eval_preds,eval_labels)
 
-            )
-            results["eval/roc"] = plot
-            wandb.log(results)
+            wandb.log(results,commit=False)
 
         super().on_train_end()
-   
+
+
     def on_validation_epoch_start(self):
         self.eval_probs = []
         self.eval_labels = []
@@ -235,8 +221,8 @@ class CNNToTransformerEncoder(pl.LightningModule):
         eval_preds = torch.cat(self.eval_probs, dim=0)
         eval_labels = torch.cat(self.eval_labels, dim=0)
         eval_auc = torchmetrics.functional.auroc(eval_preds,eval_labels,pos_label=1)
-        self.eval_probs = []
-        self.eval_labels = []
+        # self.eval_probs = []
+        # self.eval_labels = []
     
         self.log_dict({"eval/roc_auc":eval_auc})
         super().on_validation_epoch_end()

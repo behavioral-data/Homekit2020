@@ -4,10 +4,12 @@ import logging
 import warnings
 import os
 import petastorm
+from ray.util.sgd import data
 logging.getLogger("petastorm").setLevel(logging.ERROR)
 
 from pytorch_lightning.accelerators import accelerator
 from pytorch_lightning.loggers.wandb import WandbLogger
+from pytorch_lightning.loggers.base import DummyExperiment
 from pytorch_lightning.profiler import AdvancedProfiler
 
 from petastorm import make_reader
@@ -729,30 +731,36 @@ def run_pytorch_lightning(model, task,
 
     pl.seed_everything(42194)
     if not no_wandb:
-        import wandb
-        wandb.init(project="flu",
-                   entity="mikeamerrill",
-                   notes=notes)
-        wandb.run.summary["task"] = task.get_name()
-        wandb.run.summary["model"] = model.base_model_prefix
-        wandb.config.update(model.hparams)
         # Creating two wandb runs here?
-        logger = WandbLogger()
+        import wandb
+        # experiment = wandb.init(project="flu",
+        #                       entity="mikeamerrill",
+        #                       notes=notes,
+        #                       reinit=True)
+        logger = WandbLogger(project="flu",
+                              entity="mikeamerrill",
+                              notes=notes,
+                              log_model=True,
+                              reinit=True)
+        if not isinstance(logger.experiment, DummyExperiment):                     
+            logger.experiment.summary["task"] = task.get_name()
+            logger.experiment.summary["model"] = model.base_model_prefix
+            logger.experiment.config.update(model.hparams)
 
         checkpoint_callback = ModelCheckpoint(
-                            dirpath=wandb.run.dir,
+                            # dirpath=logger.experiment.dir,
                             filename='{epoch}-',
-                            save_last=True,
+                            # save_last=True,
                             save_top_k=3,
                             monitor="eval/roc_auc",
                             every_n_val_epochs=1,
                             mode='max')
 
-
     else:
         checkpoint_callback = True
         logger=True
-
+    
+    debug_mode = os.environ.get("DEBUG_MODE")
     trainer = pl.Trainer(logger=logger,
                          checkpoint_callback=checkpoint_callback,
                          callbacks=[checkpoint_callback],
@@ -760,6 +768,7 @@ def run_pytorch_lightning(model, task,
                          accelerator="ddp",
                          terminate_on_nan=True,
                          num_sanity_val_steps=0,
+                         limit_train_batches=10 if debug_mode else 1.0,
                          **training_args)
 
 
