@@ -1,9 +1,20 @@
 from re import L
+import logging
 
 import warnings
 import os
+import petastorm
+from ray.util.sgd import data
+logging.getLogger("petastorm").setLevel(logging.ERROR)
+
 from pytorch_lightning.accelerators import accelerator
 from pytorch_lightning.loggers.wandb import WandbLogger
+from pytorch_lightning.loggers.base import DummyExperiment
+from pytorch_lightning.profiler import AdvancedProfiler
+
+from petastorm import make_reader
+from petastorm.pytorch import DataLoader as PetastormDataLoader
+
 import ray
 from ray.tune.session import report
 from tensorflow.keras import callbacks
@@ -198,7 +209,9 @@ def train_autoencoder(model_name,
                    no_wandb=no_wandb, notes=notes)
 
 
-def train_cnn_transformer( task_name, 
+def train_cnn_transformer( 
+                task_config=None,
+                task_name=None, 
                 n_epochs=10,
                 hidden_size=768,
                 num_attention_heads=4,
@@ -207,6 +220,7 @@ def train_cnn_transformer( task_name,
                 model_path=None,
                 max_position_embeddings=2048, 
                 no_early_stopping=False,
+                only_with_lab_results=False,
                 train_batch_size = 4,
                 eval_batch_size = 16,
                 eval_frac = None,
@@ -226,7 +240,7 @@ def train_cnn_transformer( task_name,
                 data_location=None,
                 no_eval_during_training=False,
                 reset_cls_params=False,
-                use_pl=False,
+                use_huggingface=False,
                 limit_train_frac=None,
                 freeze_encoder=False,
                 tune=False,
@@ -234,11 +248,20 @@ def train_cnn_transformer( task_name,
                 kernel_sizes = [5,3,2],
                 out_channels = [256,128,64],
                 stride_sizes = [3,2,2],
+                backend="petastorm",
+                train_path=None,
+                eval_path=None,
+                test_path=None,
                 **model_specific_kwargs):
+
     logger.info(f"Training CNNTransformer")
+    if task_config:
+        task_name = task_config["task_name"]
+        dataset_args = task_config["dataset_args"]
+
     if not eval_frac is None:
         dataset_args["eval_frac"] = eval_frac
-    
+
     dataset_args["limit_train_frac"]=limit_train_frac
     dataset_args["return_dict"] = True
     dataset_args["data_location"] = data_location
@@ -257,13 +280,22 @@ def train_cnn_transformer( task_name,
         task = get_task_with_name(task_name)(dataset_args=dataset_args,
                                             activity_level=activity_level,
                                             look_for_cached_datareader=look_for_cached_datareader,
-                                            datareader_ray_obj_ref=datareader_ray_obj_ref)
+                                            only_with_lab_results = only_with_lab_results,
+                                            datareader_ray_obj_ref=datareader_ray_obj_ref,
+                                            backend=backend,
+                                            train_path=train_path,
+                                            eval_path=eval_path,
+                                            test_path=test_path)
     
     
     if not model_path:
         train_dataset = task.get_train_dataset()
-        infer_example = train_dataset[0]["inputs_embeds"]
-        n_timesteps, n_features = infer_example.shape
+        # if backend=="petastorm":
+        #     infer_example = next(train_dataset).inputs_embeds
+        # else:
+        #     infer_example = train_dataset[0]["inputs_embeds"]
+        # n_timesteps, n_features = infer_example.shape
+        n_timesteps, n_features = (5760,8)
 
         model = CNNToTransformerEncoder(input_features=n_features,
                                         n_timesteps=n_timesteps,
@@ -314,14 +346,13 @@ def train_cnn_transformer( task_name,
     else:
         report_to = ["wandb"]
 
-    if use_pl:
+    if not use_huggingface:
         pl_training_args = dict(
             max_epochs = n_epochs,
             check_val_every_n_epoch=10,
             auto_scale_batch_size="binsearch"
         )
-        run_pytorch_lightning(model,task,training_args=pl_training_args)
-    
+        run_pytorch_lightning(model,task,training_args=pl_training_args,backend=backend)
     else:
         training_args = TrainingArguments(
             output_dir=results_dir,          # output directorz
@@ -348,7 +379,8 @@ def train_cnn_transformer( task_name,
                     tune=tune)
 
 
-def train_sand( task_name, 
+def train_sand( task_config=None,
+                task_name=None,
                 n_epochs=10,
                 hidden_size=768,
                 num_attention_heads=4,
@@ -381,6 +413,10 @@ def train_sand( task_name,
         raise NotImplementedError()
 
     logger.info(f"Training SAnD")
+    if task_config:
+        task_name = task_config["task_name"]
+        dataset_args = task_config["dataset_args"]
+
     if not eval_frac is None:
         dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
@@ -437,7 +473,8 @@ def train_sand( task_name,
                    metrics = metrics, task=task,
                    no_wandb=no_wandb, notes=notes)
 
-def train_bert(task_name,
+def train_bert(task_config=None,
+                task_name=None,
                 n_epochs=10,
                 hidden_size=768,
                 num_attention_heads=4,
@@ -467,6 +504,9 @@ def train_bert(task_name,
     
     if model_path:
         raise NotImplementedError()
+    if task_config:
+        task_name = task_config["task_name"]
+        dataset_args = task_config["dataset_args"]
 
     logger.info(f"Training BERT on {task_name}")
     dataset_args["return_dict"] = True
@@ -534,7 +574,8 @@ def train_bert(task_name,
                    metrics = metrics, task=task,
                    no_wandb=no_wandb, notes=notes)
 
-def train_longformer(task_name,
+def train_longformer(task_config=None,
+                    task_name=None,
                     n_epochs=10,
                     hidden_size=768,
                     num_attention_heads=4,
@@ -564,7 +605,11 @@ def train_longformer(task_name,
     
     if model_path:
         raise NotImplementedError()
-
+    
+    if task_config:
+        task_name = task_config["task_name"]
+        dataset_args = task_config["dataset_args"]
+        
     logger.info(f"Training Longformer on {task_name}")
     dataset_args["return_dict"] = True
     dataset_args["eval_frac"] = eval_frac
@@ -681,41 +726,63 @@ def run_huggingface(model,base_trainer,training_args,
 def run_pytorch_lightning(model, task, 
                         training_args={},
                         no_wandb=False,
-                        notes=None):                     
+                        notes=None,
+                        backend="petastorm"):       
+
     pl.seed_everything(42194)
     if not no_wandb:
-        logger = WandbLogger(project="flu")
-        logger.experiment.notes = notes
-        logger.experiment.summary["task"] = task.get_name()
-        logger.experiment.summary["model"] = model.base_model_prefix
-       
+        # Creating two wandb runs here?
+        import wandb
+        # experiment = wandb.init(project="flu",
+        #                       entity="mikeamerrill",
+        #                       notes=notes,
+        #                       reinit=True)
+        logger = WandbLogger(project="flu",
+                              entity="mikeamerrill",
+                              notes=notes,
+                              log_model=True,
+                              reinit=True)
+        if not isinstance(logger.experiment, DummyExperiment):                     
+            logger.experiment.summary["task"] = task.get_name()
+            logger.experiment.summary["model"] = model.base_model_prefix
+            logger.experiment.config.update(model.hparams)
+
         checkpoint_callback = ModelCheckpoint(
-                            dirpath=logger.experiment.dir,
+                            # dirpath=logger.experiment.dir,
                             filename='{epoch}-',
-                            save_last=True,
+                            # save_last=True,
                             save_top_k=3,
                             monitor="eval/roc_auc",
                             every_n_val_epochs=1,
                             mode='max')
 
-
     else:
         checkpoint_callback = True
         logger=True
     
-    if os.environ.get("DEBUG_DATA"):
-        training_args["num_sanity_val_steps"] = 0
-
+    debug_mode = os.environ.get("DEBUG_MODE")
     trainer = pl.Trainer(logger=logger,
                          checkpoint_callback=checkpoint_callback,
                          callbacks=[checkpoint_callback],
                          gpus = -1,
-                         accelerator="dp",
+                         accelerator="ddp",
                          terminate_on_nan=True,
+                         num_sanity_val_steps=0,
+                         limit_train_batches=10 if debug_mode else 1.0,
                          **training_args)
 
-    model.set_train_dataset(task.get_train_dataset())
-    model.set_eval_dataset(task.get_eval_dataset())
-    trainer.fit(model)
+
+    if backend == "dask":
+        model.set_train_dataset(task.get_train_dataset())
+        model.set_eval_dataset(task.get_eval_dataset())
+        trainer.fit(model)
+    else:
+        ## Manages train and eval context for petastorm:
+        with PetastormDataLoader(make_reader(task.train_url,transform_spec=task.transform),
+                                   batch_size=model.batch_size) as train_dataset:
+            with PetastormDataLoader(make_reader(task.eval_url,transform_spec=task.transform),
+                                   batch_size=3*model.batch_size) as eval_dataset:
+                trainer.fit(model,train_dataset,eval_dataset)
+
     print(f"Best model score: {checkpoint_callback.best_model_score}")
     print(f"Best model path: {checkpoint_callback.best_model_path}")

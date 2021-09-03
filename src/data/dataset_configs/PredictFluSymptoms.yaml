@@ -1,6 +1,0 @@
-day_window_size: 4
-is_cached: true
-max_missing_days_in_window: 2
-shuffle: 1
-split_date: 2020-03-01
-clause: "have_flu > 0"

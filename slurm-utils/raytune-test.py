@@ -10,13 +10,13 @@ import ray
 from ray.tune.integration.wandb import wandb_mixin
 from ray import tune
 from src.models.train_model import train_cnn_transformer
-from src.models.commands import validate_dataset_args
+from src.models.commands import validate_yaml_or_json
 from src.utils import get_logger
 
 
 @wandb_mixin
 def train_fn(config, checkpoint_dir=None):
-    dataset_args = validate_dataset_args(None,None,"/homes/gws/mikeam/seattleflustudy/src/data/dataset_configs/PredictTrigger.yaml")
+    dataset_args = validate_yaml_or_json(None,None,"/homes/gws/mikeam/seattleflustudy/src/data/dataset_configs/PredictTrigger.yaml")
     train_cnn_transformer("PredictTrigger",
                           dataset_args=dataset_args,
                           train_batch_size=300,

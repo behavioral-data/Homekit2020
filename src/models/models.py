@@ -1,28 +1,29 @@
-from copy import copy
-from typing import Union, Dict
-from pytorch_lightning.core.step_result import Result
-
 import gc
-
-import torch
-import torch.nn as nn
-from torch import Tensor
-from torch.nn.modules import dropout
-from torch.utils.data import DataLoader
-
-import pytorch_lightning as pl
+from copy import copy
+from typing import Dict, Union
 
 import numpy as np
+import pytorch_lightning as pl
+import torch
+import torch.nn as nn
 import torchmetrics
-from transformers import PretrainedConfig
 import wandb
-from wandb.plot.roc_curve import roc_curve
-from wandb.data_types import Table
-
-
-from src.SAnD.core import modules
+from petastorm.pytorch import BatchedDataLoader
+from petastorm.pytorch import DataLoader as PetaDataLoader
+from petastorm.reader import Reader
+from pytorch_lightning.core.step_result import Result
+from wandb import plot
 from src.models.losses import build_loss_fn
+from src.SAnD.core import modules
 from src.utils import check_for_wandb_run
+from src.models.eval import wandb_roc_curve, wandb_pr_curve
+from torch import Tensor
+from torch.nn.modules import dropout
+from torch.utils.data.dataloader import DataLoader
+from transformers import PretrainedConfig
+from wandb.data_types import Table
+from wandb.plot.roc_curve import roc_curve
+
 
 class Config(object):
     def __init__(self,data) -> None:
@@ -94,6 +95,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, learning_rate=1e-3, warmup_steps=100,
                 max_positional_embeddings = 1440*5, factor=64, inital_batch_size=100, clf_dropout_rate=0.0,
+                train_dataloader=None,
                 **model_specific_kwargs) -> None:
         self.config = get_config_from_locals(locals())
 
@@ -117,7 +119,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.dense_interpolation = modules.DenseInterpolation(self.input_embedding.final_output_length, factor)
         self.clf = modules.ClassificationModule(self.d_model, factor, num_labels,
                                                 dropout_p=clf_dropout_rate)
-        
+        self.provided_train_dataloader = None
         self.criterion = build_loss_fn(model_specific_kwargs)
 
         self.name = "CNNToTransformerEncoder"
@@ -132,7 +134,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.batch_size = inital_batch_size
         self.train_dataset = None
         self.eval_dataset=None
-
+        self.save_hyperparameters()
 
     def forward(self, inputs_embeds,labels):
         x = inputs_embeds.transpose(1, 2)
@@ -155,12 +157,16 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.eval_dataset = dataset
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, pin_memory=True,
-                         shuffle=True)
+        if isinstance(self.train_dataset,Reader):
+            return BatchedDataLoader(self.train_dataset, batch_size=self.batch_size)
+        else:
+            return DataLoader(self.train_dataset, batch_size=self.batch_size, pin_memory=True)
     
     def val_dataloader(self):
-        return DataLoader(self.eval_dataset, batch_size=3*self.batch_size, pin_memory=True,
-                          shuffle=True)
+        if isinstance(self.eval_dataset, Reader):
+            return BatchedDataLoader(self.eval_dataset, batch_size=3*self.batch_size)
+        else:
+            return DataLoader(self.eval_dataset, batch_size=3*self.batch_size, pin_memory=True)
 
     def training_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
         x = batch["inputs_embeds"]
@@ -168,7 +174,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         loss,logits = self.forward(x,y)
         
     
-        self.log("train/loss", loss.item(),on_step=True)
+        self.log("train/loss", loss.item(),on_step=True, sync_dist=True)
 
         probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
         # self.train_probs.append(probs.detach().cpu())
@@ -184,39 +190,29 @@ class CNNToTransformerEncoder(pl.LightningModule):
     #     self.train_probs = []
     #     self.train_labels = []
 
-    # def on_train_end(self):
-    #     train_preds = torch.cat(self.train_probs, dim=0)
-    #     train_labels = torch.cat(self.train_labels, dim=0)
-    #     train_auc = torchmetrics.functional.auroc(train_preds,train_labels,pos_label=1)
+    def on_train_end(self):
+        # train_preds = torch.cat(self.train_probs, dim=0)
+        # train_labels = torch.cat(self.train_labels, dim=0)
+        # train_auc = torchmetrics.functional.auroc(train_preds,train_labels,pos_label=1)
     
-    #     eval_preds = torch.cat(self.eval_probs, dim=0)
-    #     eval_labels = torch.cat(self.eval_labels, dim=0)
+        eval_preds = torch.cat(self.eval_probs, dim=0)
+        eval_labels = torch.cat(self.eval_labels, dim=0)
         
-    #     fpr, tpr, _ = torchmetrics.functional.roc(eval_preds, eval_labels, pos_label=1)
-    #     eval_auc = torchmetrics.functional.auroc(eval_preds,eval_labels,pos_label=1)
+        # fpr, tpr, _ = torchmetrics.functional.roc(eval_preds, eval_labels, pos_label=1)
+        # eval_auc = torchmetrics.functional.auroc(eval_preds,eval_labels,pos_label=1)
 
-    #     results = {"train/roc_auc":train_auc,
-    #                 "eval/roc_auc":eval_auc}
 
-    #     if check_for_wandb_run():
-    #         labels = ["Positive"] * len(fpr)
-    #         table = Table(columns= ["class","fpr","tpr"], data=list(zip(labels,fpr,tpr)))
-    #         plot = wandb.plot_table(
-    #             "wandb/area-under-curve/v0",
-    #             table,
-    #             {"x": "fpr", "y": "tpr", "class": "class"},
-    #             {
-    #                 "title": "ROC",
-    #                 "x-axis-title": "False positive rate",
-    #                 "y-axis-title": "True positive rate",
-    #             },
+        results = {}
 
-    #         )
-    #         results["eval/roc"] = plot
-    #         wandb.log(results)
+        if check_for_wandb_run():
+            results["eval/roc"] = wandb_roc_curve(eval_preds,eval_labels)
+            results["eval/pr"] = wandb_pr_curve(eval_preds,eval_labels)
 
-    #     super().on_train_end()
-   
+            wandb.log(results,commit=False)
+
+        super().on_train_end()
+
+
     def on_validation_epoch_start(self):
         self.eval_probs = []
         self.eval_labels = []
@@ -225,16 +221,10 @@ class CNNToTransformerEncoder(pl.LightningModule):
         eval_preds = torch.cat(self.eval_probs, dim=0)
         eval_labels = torch.cat(self.eval_labels, dim=0)
         eval_auc = torchmetrics.functional.auroc(eval_preds,eval_labels,pos_label=1)
-        self.eval_probs = []
-        self.eval_labels = []
+        # self.eval_probs = []
+        # self.eval_labels = []
     
         self.log_dict({"eval/roc_auc":eval_auc})
-        # for obj in gc.get_objects():
-        #     try:
-        #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-        #             print(type(obj), obj.size())
-        #     except:
-        #         pass
         super().on_validation_epoch_end()
 
     def validation_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
@@ -243,7 +233,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         with torch.no_grad():
             loss,logits = self.forward(x,y)
 
-            self.log("eval/loss", loss.item(),on_step=True)
+            self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
             
             probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
             self.eval_probs.append(probs.detach().cpu())

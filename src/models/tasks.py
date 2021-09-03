@@ -1,14 +1,28 @@
+
 import sys
 import datetime
+from warnings import WarningMessage
+import time
+
+from pyspark.sql.functions import transform
+from pyarrow.parquet import ParquetDataset
 
 from torch.utils.data import DataLoader
 from transformers.data.data_collator import default_data_collator
 import ray
 
+import numpy as np
+
+from petastorm import make_reader
+from petastorm.transform import TransformSpec
+from petastorm.etl.dataset_metadata import infer_or_load_unischema
+
 import src.data.task_datasets as td
 from src.models.eval import classification_eval, autoencode_eval
-from src.data.utils import get_features_path, load_processed_table, load_cached_activity_reader
+from src.data.utils import load_processed_table, load_cached_activity_reader, url_from_path
 from src.utils import get_logger
+from src.models.lablers import FluPosLabler, ClauseLabler
+
 logger = get_logger(__name__)
 
 import pandas as pd
@@ -44,6 +58,9 @@ class Task(object):
 
     def get_eval_dataset(self):
         return self.eval_dataset
+    
+    def get_labler(self):
+        return NotImplementedError
     
     def get_train_dataloader(self,batch_size=64):
         return DataLoader(
@@ -87,6 +104,25 @@ class AutoencodeMixin():
             return self.evaluate_results(preds,labels)
         return evaluator
 
+def verify_backend(backend,
+                  limit_train_frac,
+                  data_location,
+                  datareader_ray_obj_ref,
+                  activity_level):
+    
+    if backend == "petastorm":
+        if activity_level == "day":
+            raise NotImplementedError("Day-level data is not yet supported with petastorm")
+        
+        if limit_train_frac:
+            raise NotImplementedError("Petastorm relies on pre-processed data, so limit_train_frac can't be used yet")
+        
+        if data_location:
+            raise NotImplementedError("With Petastorm please use --train_path and --eval_path")
+        
+        if datareader_ray_obj_ref:
+            raise NotImplementedError("Petastorm backend does not support ray references")
+
 class ActivityTask(Task):
     """ Is inhereited by anything that operatres over the minute
         level data"""
@@ -96,9 +132,15 @@ class ActivityTask(Task):
                      datareader_ray_obj_ref=None,
                      cache=True,
                      only_with_lab_results=False,
-                     limit_train_frac=None):
+                     limit_train_frac=None,
+                     train_path=None,
+                     eval_path=None,
+                     test_path=None,
+                     backend="dask"):
         
         super(ActivityTask,self).__init__()
+        
+        self.backend = backend
         
         split_date = dataset_args.pop("split_date",None)
         eval_frac = dataset_args.pop("eval_frac",None)
@@ -114,58 +156,118 @@ class ActivityTask(Task):
         max_missing_days_in_window = dataset_args.get("max_missing_days_in_window",None)
         data_location = dataset_args.get("data_location",None)
         lab_results_reader = td.LabResultsReader()
+        
+        verify_backend(backend = backend,
+                       limit_train_frac = limit_train_frac,
+                       data_location = data_location,
+                       datareader_ray_obj_ref = datareader_ray_obj_ref,
+                       activity_level = activity_level)
 
-        if only_with_lab_results:
-            participant_ids = lab_results_reader.participant_ids
-        else: 
-            participant_ids = None
+        #### Original backend loads data on the fly with Dask ####
+        if self.backend == 'dask':
+            if only_with_lab_results:
+                participant_ids = lab_results_reader.participant_ids
+            else: 
+                participant_ids = None
 
-        if activity_level == "minute":
-            base_activity_reader = td.MinuteLevelActivityReader
-        else:
-            base_activity_reader = td.DayLevelActivityReader
+            if activity_level == "minute":
+                base_activity_reader = td.MinuteLevelActivityReader
+            else:
+                base_activity_reader = td.DayLevelActivityReader
 
-        if dataset_args.get("is_cached") and look_for_cached_datareader:
-            activity_reader = load_cached_activity_reader(self.get_name(),
-                                                          dataset_args=dataset_args,
-                                                          fail_if_mismatched=True)
-        elif datareader_ray_obj_ref:
-            activity_reader = ray.get(datareader_ray_obj_ref)
-        else:
-            add_features_path = dataset_args.pop("add_features_path",None)
-            activity_reader = base_activity_reader(min_date = min_date,
-                                                   participant_ids=participant_ids,
-                                                   max_date = max_date,
-                                                   day_window_size=day_window_size,
-                                                   max_missing_days_in_window=max_missing_days_in_window,
-                                                   add_features_path=add_features_path,
-                                                   data_location = data_location)
+            if dataset_args.get("is_cached") and look_for_cached_datareader:
+                activity_reader = load_cached_activity_reader(self.get_name(),
+                                                            dataset_args=dataset_args,
+                                                            fail_if_mismatched=True)
+            elif datareader_ray_obj_ref:
+                activity_reader = ray.get(datareader_ray_obj_ref)
+            else:
+                add_features_path = dataset_args.pop("add_features_path",None)
+                activity_reader = base_activity_reader(min_date = min_date,
+                                                    participant_ids=participant_ids,
+                                                    max_date = max_date,
+                                                    day_window_size=day_window_size,
+                                                    max_missing_days_in_window=max_missing_days_in_window,
+                                                    add_features_path=add_features_path,
+                                                    data_location = data_location)
 
-        if limit_train_frac:
-            train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac,
-                                                                                                     limit_train_frac=limit_train_frac,
-                                                                                                     by_participant=True)
+            if limit_train_frac:
+                train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac,
+                                                                                                        limit_train_frac=limit_train_frac,
+                                                                                                        by_participant=True)
 
-        else:
-            train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
+            else:
+                train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
+            
+
+            self.train_dataset = base_dataset(activity_reader, lab_results_reader,
+                            participant_dates = train_participant_dates,
+                            cache=cache,**dataset_args)
+            self.eval_dataset = base_dataset(activity_reader, lab_results_reader,
+                                participant_dates = eval_participant_dates,
+                                cache=cache,
+                                **dataset_args)
         
 
-        self.train_dataset = base_dataset(activity_reader, lab_results_reader,
-                        participant_dates = train_participant_dates,
-                        cache=cache,**dataset_args)
-        self.eval_dataset = base_dataset(activity_reader, lab_results_reader,
-                            participant_dates = eval_participant_dates,
-                            cache=cache,
-                            **dataset_args)
-    
+        ### Newer backend relies on petastorm and is faster, but requires more pre-processing:
+        elif self.backend == "petastorm":
+            #TODO make sure labler gets label for right day
+            #TODO ensure labler is serialized properly 
+            
+            self.train_path = train_path
+            self.eval_path = eval_path
+            self.test_path = test_path
+
+            self.train_url= url_from_path(train_path)
+            self.eval_url = url_from_path(eval_path)
+            self.test_url = url_from_path(test_path)
+
+            schema = infer_or_load_unischema(ParquetDataset(self.train_path,validate_schema=False))
+            fields = [k for k in schema.fields.keys()]
+            # features = [k for k in schema.fields.keys() if not k in ["start","end","participant_id"]]
+            
+            def _transform_row(row):
+                labler = self.get_labler()
+                start = pd.to_datetime(row.pop("start"))
+                #Because spark windows have and exclusive right boundary:
+                end = pd.to_datetime(row.pop("end")) - pd.to_timedelta("1ms")
+
+                participant_id = row.pop("participant_id")
+                
+                keys = sorted(row.keys())
+                result = np.vstack([row[k].T for k in keys]).T
+
+                label = int(labler(participant_id,start,end))
+                return {"inputs_embeds":result,
+                        "label": label}
+            
+            new_fields = [("inputs_embeds",np.float32,None,False),
+                          ("label",np.int_,None,False)]
+
+            self.transform = TransformSpec(_transform_row,removed_fields=fields,
+                                                      edit_fields= new_fields)
+
     def get_description(self):
         return self.__doc__
 
     def get_train_dataset(self):
-        return self.train_dataset
+        if self.backend == "dask":
+            return self.train_dataset
+        elif self.backend == "petastorm":
+            logger.info("Making train dataset reader")
+            return make_reader(self.train_url,transform_spec=self.transform,num_epochs=None)
+        else:
+            raise ValueError("Invalid backend")
+
 
     def get_eval_dataset(self):
-        return self.eval_dataset
+        if self.backend == "dask":
+            return self.eval_dataset
+        elif self.backend == "petastorm":
+            logger.info("Making eval dataset reader")
+            return make_reader(self.eval_url,transform_spec=self.transform)
+        else:
+            raise ValueError("Invalid backend")
     
 class GeqMeanSteps(ActivityTask, ClassificationMixin):
     """A dummy task to predict whether or not the total number of steps
@@ -197,8 +299,10 @@ class PredictFluPos(ActivityTask, ClassificationMixin):
 
     def __init__(self,dataset_args={}, activity_level = "minute",
                 **kwargs):
+        self.labler = FluPosLabler()
+        dataset_args["labeler"] = self.labler
 
-        ActivityTask.__init__(self,td.ActivtyDataset,dataset_args=dataset_args,
+        ActivityTask.__init__(self,td.CustomLabler,dataset_args=dataset_args,
                                  activity_level=activity_level,**kwargs)
         ClassificationMixin.__init__(self)
         
@@ -206,6 +310,8 @@ class PredictFluPos(ActivityTask, ClassificationMixin):
     def get_name(self):
         return "PredictFluPos"
     
+    def get_labler(self):
+        return self.labler
 
 class PredictTrigger(ActivityTask,ClassificationMixin):
     """Predict the whether a participant triggered the 
@@ -220,22 +326,6 @@ class PredictTrigger(ActivityTask,ClassificationMixin):
     def get_name(self):
         return "PredictTrigger"
 
-class Labler(object):
-    def __init__(self, survey_respones, clause):
-        self.clause = clause
-        self.survey_responses = survey_respones
-
-    def __call__(self,participant_id,start_date,end_date):
-        try:
-            participant_data = self.survey_responses.loc[participant_id]
-        except KeyError:
-            return 0
-        if isinstance(participant_data, pd.Series):
-            participant_data = pd.DataFrame(participant_data).T
-        on_date = participant_data[participant_data["timestamp"].dt.date == end_date]
-        meets_clause = on_date.query(self.clause)
-        return len(meets_clause) > 0
-
 class PredictSurveyClause(ActivityTask,ClassificationMixin):
     """Predict the whether a clause in the onehot
        encoded surveys is true for a given day. 
@@ -248,14 +338,14 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
     def __init__(self,dataset_args={},activity_level="minute", **kwargs):
         self.clause = dataset_args.pop("clause")
         self.survey_responses = load_processed_table("daily_surveys_onehot").set_index("participant_id")
-
-        dataset_args["labeler"] = self.get_labeler()
+        self.labler = ClauseLabler(self.survey_responses,self.clause)
+        dataset_args["labeler"] = self.labler
         ActivityTask.__init__(self, td.CustomLabler, dataset_args=dataset_args,
                              activity_level=activity_level, **kwargs)
         ClassificationMixin.__init__(self)
     
-    def get_labeler(self):
-        return Labler(self.survey_responses,self.clause)
+    def get_labler(self):
+        return self.labler
 
     def get_name(self):
         return f"PredictSurveyCol-{self.clause}"
@@ -263,11 +353,6 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
     def get_description(self):
         return self.__doc__
 
-    def get_train_dataset(self):
-        return self.train_dataset
-
-    def get_eval_dataset(self):
-        return self.eval_dataset
 
 class SingleWindowActivityTask(Task):
     """Base class for tasks that make predictions about single windows of data
@@ -356,6 +441,7 @@ class ClassifyObese(SingleWindowActivityTask, ClassificationMixin):
     
     def get_name(self):
         return "ClassifyObese"
+
 class EarlyDetection(ActivityTask):
     """Mimics the task used by Evidation Health"""
 

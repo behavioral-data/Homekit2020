@@ -1,13 +1,16 @@
 import json
 from random import choice
 import click
+import petastorm
 from src.utils import read_yaml
 from src.models.train_model import (train_cnn_transformer, train_neural_baseline,
                                     train_autoencoder, train_sand,
                                     train_bert, train_longformer)
 from src.models.baselines import train_xgboost
 
-def validate_dataset_args(ctx, param, value):
+def validate_yaml_or_json(ctx, param, value):
+    if value is None:
+        return
     try:
         return read_yaml(value)
     except FileNotFoundError:
@@ -39,12 +42,14 @@ nerual_options = [
 ]
 
 universal_options = [
+    click.Option(("--task_config",), type=str, help = "path to config yaml for task",callback=validate_yaml_or_json),
+    click.Option(("--task_name",), type=str, help = "name of task in src/models/tasks.py"),
     click.Option(("--model_path",), type=click.Path(file_okay=False,exists=True),
                   help = "path containing a checkpoint-X directory and a model_config.json"),
     click.Option(('--no_wandb',), is_flag=True),
     click.Option(('--tune',), is_flag=True),
     click.Option(('--notes',), type=str, default=None),
-    click.Option(('--dataset_args',), default=None,callback=validate_dataset_args),
+    click.Option(('--dataset_args',), default=None,callback=validate_yaml_or_json),
     click.Option(('--activity_level',),type=click.Choice(["day","minute"]), default="minute"),
     click.Option(('--data_location',), default=None,type=click.Path(exists=True)),
     click.Option(('--limit_train_frac',), default=None,type=float,help="Truncate the training data so <limit_train_frac>"),
@@ -52,7 +57,16 @@ universal_options = [
     click.Option(('--cached_task_path',),type=str),
     click.Option(('--datareader_ray_obj_ref',), default=None),
     click.Option(('--task_ray_obj_ref',), default=None),
-    click.Option(('--only_with_lab_results',),is_flag=True, default=None)
+    click.Option(('--only_with_lab_results',),is_flag=True, default=None),
+]
+
+petastorm_options = [
+    click.Option(("--train_path",), type=click.Path(file_okay=False,exists=True),
+                  help = "path containing petastorm dataset for training"),
+    click.Option(("--eval_path",), type=click.Path(file_okay=False,exists=True),
+                  help = "path containing petastorm dataset for evaluation"),
+    click.Option(("--test_path",), type=click.Path(file_okay=False,exists=True),
+                  help = "path containing petastorm dataset for testing"),
 ]
 
 loss_options = [
@@ -77,20 +91,18 @@ class CNNTransformer(NeuralCommand):
         cnn_transformer_params = [
             click.Option(("--reset_cls_params",),is_flag=True, help="Reset the parameters in a the classifcation layer after loading pretrained model"),
             click.Option(("--freeze_encoder",),is_flag=True, help="Freeze the encoder during training"),
-            click.Option(("--use_pl",),is_flag=True, help="Run the job with pytorch lightning rather than huggingface")
+            click.Option(("--use_huggingface",),is_flag=True, help="Run the job with huggingface rather than pytorch lightning")
         ]
-        self.params = self.params + loss_options + cnn_transformer_params
+        self.params = self.params + loss_options + cnn_transformer_params + petastorm_options
 
 
 @click.command(cls=CNNTransformer, name="train-cnn-transformer")
-@click.argument("task_name")
 def train_cnn_transformer_command(*args, **kwargs):
     train_cnn_transformer(*args,**kwargs)
 
 
 @click.command(cls=BaseCommand,name="train-neural-baseline")
 @click.argument("model_name")
-@click.argument("task_name")
 @click.option("--n_epochs", default=10)
 @click.option("--pos_class_weight", default=100)
 @click.option("--neg_class_weight", default=1)
@@ -102,28 +114,23 @@ def train_neural_baseline_command(*args,**kwargs):
 
 @click.command(cls=NeuralCommand,name="train-autoencoder")
 @click.argument("model_name")
-@click.argument("task_name")
 def train_autoencoder_command(*args, **kwargs):
     train_autoencoder(*args,**kwargs)
 
 @click.command(cls=NeuralCommand,name="train-sand")
-@click.argument("task_name")
 def train_sand_command(*args,**kwargs):
     train_sand(*args,**kwargs)
 
 
 @click.command(cls=NeuralCommand, name="train-bert")
-@click.argument("task_name")
 def train_bert_command(*args,**kwargs):
     train_bert(*args,**kwargs)
 
 @click.command(cls=NeuralCommand, name="train-longformer")
-@click.argument("task_name")
 def train_longformer_command(*args,**kwargs):
     train_longformer(*args,**kwargs)
 
 @click.command(cls=BaseCommand, name="train-xgboost")
-@click.argument("task_name")
 @click.option("--add_features_path", type = click.Path(dir_okay=False), default=None)
 def train_xgboost_command(*args,**kwargs):
     train_xgboost(*args,**kwargs)

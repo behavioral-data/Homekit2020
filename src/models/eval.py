@@ -7,6 +7,7 @@ from wandb.viz import CustomChart
 from wandb.data_types import Table
 
 import torch
+import torchmetrics
 from torchmetrics import Metric
 
 from scipy.special import softmax
@@ -65,7 +66,29 @@ def get_huggingface_classification_eval(threshold=0.5):
     
     return evaluator
 
+def wandb_pr_curve(preds,labels):
+    preds = preds.cpu().numpy()
+    probs = np.stack((1-preds,preds)).T
+    return wandb.plot.pr_curve(labels, probs,classes_to_plot=[1],labels = ["Negative","Positive"])
+    
 
+
+def wandb_roc_curve(preds,labels):
+    fpr, tpr, _ = torchmetrics.functional.roc(preds, labels, pos_label=1)
+    label_markers = ["Positive"] * len(fpr)
+    table = Table(columns= ["class","fpr","tpr"], data=list(zip(label_markers,fpr,tpr)))
+    plot = wandb.plot_table(
+        "wandb/area-under-curve/v0",
+        table,
+        {"x": "fpr", "y": "tpr", "class": "class"},
+        {
+            "title": "ROC",
+            "x-axis-title": "False positive rate",
+            "y-axis-title": "True positive rate",
+        },
+
+    )
+    return plot
 
 def autoencode_eval(pred, labels):
     # Remove indices with pad tokens
