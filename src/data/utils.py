@@ -2,6 +2,7 @@ import os
 import glob 
 import json
 import pickle
+from fsspec.registry import filesystem
 
 import pyarrow.parquet as pq
 import pandas as pd
@@ -112,7 +113,12 @@ def load_processed_table(name,fmt="df",path=None):
         raise ValueError("Unsupported fmt") 
 
 def write_pandas_to_parquet(df,path,write_metadata=True,
-                            partition_cols=[]):
+                            partition_cols=[],overwrite=False):
+    if os.path.exists(path):
+        files = glob.glob(os.path.join(path,'*parquet*'))
+        for file in files:
+            os.remove(file)
+
     table = pa.Table.from_pandas(df, preserve_index=False)
     
     pq.write_to_dataset(table, root_path=path,
@@ -283,3 +289,6 @@ def fill_missing_minutes(user_df):
     user_df["date"] = user_df.index.date
     user_df = user_df.fillna(0)
     return user_df
+def url_from_path(path,filesystem="file://"):
+    if path:
+        return filesystem + path

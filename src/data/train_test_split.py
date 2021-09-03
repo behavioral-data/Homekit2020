@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import dask.dataframe as dd
 
-from src.models.commands import validate_dataset_args
+from src.models.commands import validate_yaml_or_json
 from src.data.utils import get_dask_df, write_pandas_to_parquet, load_processed_table
 
 @click.command()
@@ -16,8 +16,10 @@ from src.data.utils import get_dask_df, write_pandas_to_parquet, load_processed_
 @click.option("--eval_frac",default=None)
 @click.option("--test_frac", default=0.5, help="Fraction of eval set that's reserved for testing")
 @click.option("--activity_level", type=click.Choice(["day","minute"]), default="minute")
+@click.option("--separate_train_and_eval", is_flag=True)
 def main(out_path, split_date=None, eval_frac=None,
-        test_frac = 0.5, activity_level="minute"):
+        test_frac = 0.5, activity_level="minute",
+        separate_train_and_eval=False):
     
     if activity_level == "minute":
         df = get_dask_df("processed_fitbit_minute_level_activity").compute()
@@ -35,33 +37,51 @@ def main(out_path, split_date=None, eval_frac=None,
         in_test_frac_mask = df["participant_id"].isin(test_participants) & past_date_mask
 
     elif eval_frac:
-        participant_ids = df["participant_id"].unique().sample(frac=1).values
+        participant_ids = df["participant_id"].unique().values
         np.random.shuffle(participant_ids)
-        test_participants = participant_ids[:int(test_frac*eval_frac*len(participant_ids))]
+        test_index = int(test_frac*eval_frac*len(participant_ids))
+        eval_index = int(eval_frac*len(participant_ids))
+        test_participants = participant_ids[:test_index]
+        eval_participants = participant_ids[test_index:eval_index]
         in_test_frac_mask  = df["participant_id"].isin(test_participants)
     
     train_eval = df[~in_test_frac_mask]
     test = df[in_test_frac_mask]
+    test_path = os.path.join(out_path,f"test_{activity_level}")
+    
+    to_write_dfs = [test]
+    to_write_paths =[test_path]
+    
+    if separate_train_and_eval:
+        if split_date:
+            train = train_eval[train_eval[timestamp_col] < pd.to_datetime(split_date)]
+            eval = train_eval[train_eval[timestamp_col] >= pd.to_datetime(split_date)]
+        elif eval_frac:
+            eval_mask = train_eval["participant_id"].isin(eval_participants)
+            train = train_eval[~eval_mask]
+            eval = train_eval[eval_mask]
+        train_path = os.path.join(out_path,f"train_{activity_level}")
+        eval_path = os.path.join(out_path,f"eval_{activity_level}")
+
+        to_write_dfs = to_write_dfs + [train,eval]
+        to_write_paths = to_write_paths + [train_path,eval_path]
+    else:
+        train_eval_path = os.path.join(out_path,f"train_eval_{activity_level}")
+        
+        to_write_dfs += [train_eval]
+        to_write_paths += [train_eval_path]
 
 
     if not os.path.exists(out_path):
         os.mkdir(out_path)
-    
-    train_eval_path = os.path.join(out_path,f"train_eval_{activity_level}")
-    test_path = os.path.join(out_path,f"test_{activity_level}")
-    
+
     if activity_level == "minute":
-        write_pandas_to_parquet(train_eval,train_eval_path, partition_cols=["date"])
-        write_pandas_to_parquet(test,test_path, partition_cols=["date"])
+        for df, path in zip(to_write_dfs,to_write_paths):
+            write_pandas_to_parquet(df,path, partition_cols=["date"],overwrite=True)
 
     else:
-        test.to_csv(test_path + ".csv",index=False)
-        train_eval.to_csv(train_eval_path + ".csv",index=False)
+        for df, path in zip(to_write_dfs,to_write_paths):
+            df.to_csv(path + ".csv",index=False)
         
-
-
-
-    
-
 if __name__ == "__main__":
     main()

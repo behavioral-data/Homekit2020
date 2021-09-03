@@ -11,10 +11,12 @@ from distributed import Client
 import dask
 from dask.diagnostics import ProgressBar
 import dask.dataframe as dd
+
+from dask_ml.preprocessing import StandardScaler
 import xgboost as xgb
 dask.config.set({"distributed.comm.timeouts.connect": "60"})
+from sklearn.preprocessing import MinMaxScaler
 
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import train_test_split
 from methodtools import lru_cache
 
@@ -96,7 +98,8 @@ class DayLevelActivityReader(object):
         
         if not participant_ids is None:
             df = df[df["participant_id"].isin(participant_ids)]
-            
+        
+        # Need to add metadata to get to run only once
         valid_participant_dates = df.groupby("participant_id").apply(self.get_valid_dates)
         self.daily_data = df.set_index(["participant_id","date"])
 
@@ -190,7 +193,7 @@ class MinuteLevelActivityReader(object):
         pbar.register()
         
         #pylint:disable=unused-variable 
-        with Client(n_workers=min(n_cores,16), threads_per_worker=1) as client:
+        with Client(n_workers=min(n_cores,16)) as client:
             dask_df = get_dask_df("processed_fitbit_minute_level_activity",
                                     path = data_location)
     
@@ -224,19 +227,24 @@ class MinuteLevelActivityReader(object):
             self.activity_data = dask_df
         
             logger.info("Using Dask to pre-process data:")
+            if self.scaler:
+                logger.info("Scaling Data...")
+                scale_model = self.scaler()
+                numeric = self.activity_data.select_dtypes(include=['float64'])
+                self.activity_data[list(numeric.columns.values)] = scale_model.fit_transform(numeric)
+
             valid_participant_dates, self.activity_data = dask.compute(valid_participant_dates,self.activity_data)
             logger.info("Setting index...")
             self.activity_data = self.activity_data.set_index(["participant_id","timestamp"]).drop(columns=["date"])
             self.participant_dates = list(valid_participant_dates.dropna().apply(pd.Series).stack().droplevel(-1).items())
         
-        if self.scaler:
-            logger.info("Scaling Data...")
-            scale_model = self.scaler()
-            self.activity_data[self.activity_data.columns] = scale_model.fit_transform(self.activity_data)
-        
-        logger.info("Sorting Index...")
-        self.activity_data = self.activity_data.sort_index()
-
+       
+            
+        self.activity_data = self.activity_data.astype(np.float32)
+        if not self.activity_data.index.is_monotonic:
+            logger.info("Sorting Index...")
+            self.activity_data = self.activity_data.sort_index()
+            
     def get_valid_dates(self, partition):
         dates_with_data = pd.DatetimeIndex(partition[~partition["missing_heartrate"]]["timestamp"].dt.date.unique())
         min_days_with_data = self.day_window_size - self.max_missing_days_in_window
@@ -366,6 +374,7 @@ class ActivtyDataset(Dataset):
             return self.activity_data.iloc[start_ix:end_ix]
 
     def get_label(self,participant_id,start_date,end_date):
+        raise NotImplementedError
         try:
             participant_results = self.lab_results_reader.results.loc[participant_id]
         except KeyError:
@@ -412,7 +421,7 @@ class ActivtyDataset(Dataset):
         if self.return_dict:
             
             item = {}
-            embeds = activity_data.values.astype(np.float32)        
+            embeds = activity_data.values
             
             if self.add_cls:
                 embeds = np.concatenate([self.cls_init,embeds],axis=0)

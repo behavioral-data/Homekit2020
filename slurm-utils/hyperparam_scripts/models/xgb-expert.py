@@ -10,12 +10,12 @@ import ray
 from ray.tune.integration.wandb import wandb_mixin
 from ray import tune
 from src.models.baselines import train_xgboost
-from src.models.commands import validate_dataset_args
+from src.models.commands import validate_yaml_or_json
 from src.utils import get_logger
 
 
 def train_fn(config,checkpoint_dir=None):
-    dataset_args = validate_dataset_args(None,None,"/gscratch/bdata/mikeam/SeattleFluStudy/src/data/dataset_configs/PredictFatigue.yaml")
+    dataset_args = validate_yaml_or_json(None,None,"/gscratch/bdata/mikeam/SeattleFluStudy/src/data/dataset_configs/PredictFatigue.yaml")
     train_xgboost("PredictSurveyClause",
                     dataset_args=dataset_args,
                     task_ray_obj_ref = config["obj_ref"],                    
