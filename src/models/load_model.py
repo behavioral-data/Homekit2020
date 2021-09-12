@@ -10,7 +10,6 @@ from src.models.models import CNNToTransformerEncoder
 
 def get_most_recent_checkpoint(checkpoint_dir):
     subfolders = [ f.path for f in os.scandir(checkpoint_dir) if f.is_dir() ]
-    print(subfolders)
     checkpoint_paths = [x for x in subfolders if "checkpoint-" in x]
     checkpoint_number = [int(x.split("checkpoint-")[-1]) for x in checkpoint_paths]
     return checkpoint_paths[np.argmax(checkpoint_number)]
