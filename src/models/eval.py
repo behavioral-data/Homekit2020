@@ -20,6 +20,9 @@ from sklearn.metrics import (accuracy_score,precision_recall_fscore_support, roc
 from functools import partial
 from src.utils import check_for_wandb_run
 
+
+def get_wandb_plots():
+    ...
 def classification_eval(logits, labels, threshold = 0.5, prefix=None):
 
     # Remove indices with pad tokens

@@ -297,9 +297,6 @@ def fill_missing_minutes(user_df):
     # This works because the data was pre-cleaned so that the
     # last day ends just before midnight
 
-    #Have to do this so that dask doesnt complain about column order:
-    order = list(user_df.columns)
-
     assert len(set(user_df["participant_id"])) == 1
     assert user_df["timestamp"].is_unique
     min_date = user_df["timestamp"].min()
@@ -308,12 +305,13 @@ def fill_missing_minutes(user_df):
                                 name = "timestamp")
     user_df = user_df.set_index("timestamp").reindex(new_index)
     assert user_df.index.is_unique
-    user_df["missing_heartrate"] = user_df["missing_heartrate"].fillna(True)
+    user_df["missing_heart_rate"] = user_df["missing_heart_rate"].fillna(True)
     user_df["missing_steps"] = user_df["missing_steps"].fillna(True)
     user_df["steps"] = user_df["steps"].fillna(0)
+    user_df["heart_rate"] = user_df["steps"].fillna(0)
     user_df["date"] = user_df.index.date
-    user_df = user_df.fillna(0)
-    return user_df.reset_index()[order]
+    # user_df = user_df.add_cate.fillna(0)
+    return user_df.reset_index()
 
 
 
@@ -329,8 +327,8 @@ def process_minute_level_pandas(minute_level_path=None, minute_level_df=None,
 
     logger.info("Processing minute-level fitbit activity data. This will take a while...")
     # Add missing flag to heart rate
-    missing_heartrate = (minute_level_df.heart_rate.isnull()) | (minute_level_df.heart_rate == 0)
-    minute_level_df["missing_heartrate"] = missing_heartrate
+    missing_heart_rate = (minute_level_df.heart_rate.isnull()) | (minute_level_df.heart_rate == 0)
+    minute_level_df["missing_heart_rate"] = missing_heart_rate
     minute_level_df["heart_rate"] = minute_level_df["heart_rate"].fillna(0)
     # Properly encode heart rate
     minute_level_df["heart_rate"] = minute_level_df["heart_rate"].astype(int)
@@ -353,12 +351,11 @@ def process_minute_level_pandas(minute_level_path=None, minute_level_df=None,
     minute_level_df["date"] = minute_level_df["timestamp"].dt.date
 
     #Sorting will speed up dask queries later
-    minute_level_df = minute_level_df.sort_values("participant_id")
-    logger.info("Filling missing minutes...")
-    tqdm.pandas(desc="Processing minute level...")  
+    # minute_level_df = minute_level_df.sort_values("participant_id")
+    tqdm.pandas(desc="Filling missing minutes...")
     minute_level_df = minute_level_df.groupby("participant_id").progress_apply(fill_missing_minutes)
     del minute_level_df["participant_id"]
-    minute_level_df = minute_level_df.reset_index()
+    minute_level_df = minute_level_df.reset_index(drop=True)
 
     minute_level_df["sleep_classic_0"] = minute_level_df["sleep_classic_0"].astype(bool)
     minute_level_df["sleep_classic_1"] = minute_level_df["sleep_classic_1"].astype(bool)
