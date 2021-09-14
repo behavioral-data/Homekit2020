@@ -24,6 +24,7 @@ import dask.dataframe as dd
 
 from dotenv import dotenv_values
 
+
 config = dotenv_values(".env")
 logger = get_logger(__name__)
 
@@ -314,7 +315,6 @@ def fill_missing_minutes(user_df):
     return user_df.reset_index()
 
 
-
 def process_minute_level_pandas(minute_level_path=None, minute_level_df=None,
                 out_path =None, participant_ids=None, random_state=42):
     if minute_level_df is None:
@@ -370,8 +370,8 @@ def process_minute_level_pandas(minute_level_path=None, minute_level_df=None,
     pq.write_to_dataset(table, root_path=out_path,
                     partition_cols=['date'])
 
-    paths = glob.glob(os.path.join(out_path,"*","*.parquet"))
-    dd.io.parquet.create_metadata_file(paths)
+    # paths = glob.glob(os.path.join(out_path,"*","*.parquet"))
+    # dd.io.parquet.create_metadata_file(paths)
 
 def url_from_path(path,filesystem="file://"):
     if path:
