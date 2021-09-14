@@ -100,7 +100,7 @@ def read_raw_dask(path):
 def read_raw_pandas(path):
     df = pd.read_parquet(path,engine='pyarrow')
     df["id_participant_external"] = df["id_participant_external"].astype("category")
-    return df.dropna().head(10000)
+    return df.dropna()
 
 @click.command()
 @click.argument("sleep_in_path", type=click.Path(exists=True))
@@ -111,52 +111,7 @@ def main(sleep_in_path: str, steps_in_path: str,
          heart_rate_in_path: str, out_path: str) -> None:
     
 
-    # with dask.config.set({  "distributed.memory.target": 0.95,  # target fraction to stay below
-    #                         "distributed.memory.spill": False, # fraction at which we spill to disk
-    #                         "distributed.memory.pause": False,  # fraction at which we pause worker threads
-    #                         "distributed.memory.terminate": False}):
-    #     print(dask.config.get("distributed.memory.spill"))
-    #     # cluster = LocalCluster(n_workers=8, 
-    #     #                         threads_per_worker=8,
-    #     #                         memory_limit='256GB',
-    #     #                         local_directory="/projects/bdata/mikeam_scratch")
-    #     cluster = LocalCluster(local_directory="/tmp")
-        
-    #     client = Client(cluster)
-        # def enable_fault_handler():
-        #     import faulthandler
-        #     faulthandler.enable()
-        #     print('enabled fault handler')
 
-        # # run it locally
-        # enable_fault_handler()
-
-        # # run it on all workers
-        # client.run(enable_fault_handler)
-
-        # # run it on the scheduler (might fail, but no problem)
-        # client.run_on_scheduler(enable_fault_handler)
-
-        # sleep = read_raw(sleep_in_path).compute()
-        # hr = read_raw(heart_rate_in_path).compute()
-        # steps = read_raw(steps_in_path).compute()
-        # # print(f"Raw divisions are: {steps.known_divisions}")
-        # keys = ["id_participant_external","dt"]
-        # sleep_and_hr = sleep.merge(hr, on=keys, how = "outer",suffixes = ["sleep","hr"])
-        # all_streams = sleep_and_hr.merge(steps, on=keys, how = "outer")
-        
-        # print(f"Merged divisions are: {all_streams.known_divisions}")
-        # dd.to_parquet(all_streams, out_path, partition_on=["dt"], write_metadata_file=False, overwrite=True)
-    # sleep_and_hr = exploded_sleep.merge(exploded_hr,
-    #                                     left_on = keys,
-    #                                     right_on = keys,
-    #                                     how = "outer")
-
-    #                                                     gather_statistics=True,aggregate_files=True,
-    #                                                     engine='pyarrow-legacy'),#.repartition(partition_size=PARTITION_SIZE),
-    #                             target_col = "minute_level_str",
-    #                             rename_target_column="steps")
-    start = time.time()
     logger.info("Loading sleep...")
     exploded_sleep = explode_str_column(read_raw_pandas(sleep_in_path),
                                     target_col = "minute_level_str",
