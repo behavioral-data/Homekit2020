@@ -14,7 +14,7 @@ from scipy.special import softmax
 from scipy.stats import pearsonr, spearmanr
 
 from sklearn.metrics import (accuracy_score,precision_recall_fscore_support, roc_auc_score,
-                            mean_absolute_error)
+                            mean_absolute_error, det_curve)
 
 
 from functools import partial
@@ -72,11 +72,44 @@ def wandb_pr_curve(preds,labels):
     return wandb.plot.pr_curve(labels, probs,classes_to_plot=[1],labels = ["Negative","Positive"])
     
 
+def wandb_detection_error_tradeoff_curve(preds,labels,return_table=False,limit=9999):
+    preds = preds.cpu().numpy()
+    # probs = np.stack((1-preds,preds)).T
+  
+    fpr, fnr, _ = det_curve(labels, preds)
+    if limit and limit < len(fpr):
+        inds = np.random.choice(len(fpr), size=limit,replace=False)
+        fpr = fpr[inds]
+        fnr = fnr[inds]
+        
+    label_markers = ["Positive"] * len(fpr)
+    table = Table(columns= ["class","fpr","fnr"], data=list(zip(label_markers,fpr,fnr)))
+    if return_table:
+        return table
+    plot = wandb.plot_table(
+        "wandb/error-tradeoff-curve/v0",
+        table,
+        {"x": "fpr", "y": "fnr", "class": "class"},
+        {
+            "title": "ROC",
+            "x-axis-title": "False positive rate",
+            "y-axis-title": "False negative rate",
+        },
 
-def wandb_roc_curve(preds,labels):
+    )
+    return plot
+
+def wandb_roc_curve(preds,labels, return_table=False,limit=None):
     fpr, tpr, _ = torchmetrics.functional.roc(preds, labels, pos_label=1)
+    if limit and limit < len(fpr):
+        inds = np.random.choice(len(fpr), size=limit,replace=False)
+        fpr = fpr[inds]
+        tpr = tpr[inds]
+
     label_markers = ["Positive"] * len(fpr)
     table = Table(columns= ["class","fpr","tpr"], data=list(zip(label_markers,fpr,tpr)))
+    if return_table:
+        return table
     plot = wandb.plot_table(
         "wandb/area-under-curve/v0",
         table,
