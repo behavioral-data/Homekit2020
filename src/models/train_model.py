@@ -737,16 +737,19 @@ def run_pytorch_lightning(model, task,
         #                       entity="mikeamerrill",
         #                       notes=notes,
         #                       reinit=True)
-        logger = WandbLogger(project="flu",
+        local_rank = os.environ.get("LOCAL_RANK",0)
+        if local_rank == 0:
+            logger = WandbLogger(project="flu",
                               entity="mikeamerrill",
                               notes=notes,
                               log_model=True,
-                              reinit=True)
-        if not isinstance(logger.experiment, DummyExperiment):                     
+                              reinit=True)                     
             logger.experiment.summary["task"] = task.get_name()
             logger.experiment.summary["model"] = model.base_model_prefix
             logger.experiment.config.update(model.hparams)
-
+        else:
+            logger = True
+            
         checkpoint_callback = ModelCheckpoint(
                             # dirpath=logger.experiment.dir,
                             filename='{epoch}-',
