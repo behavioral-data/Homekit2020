@@ -252,6 +252,7 @@ def train_cnn_transformer(
                 train_path=None,
                 eval_path=None,
                 test_path=None,
+                val_epochs=10,
                 **model_specific_kwargs):
 
     logger.info(f"Training CNNTransformer")
@@ -349,7 +350,7 @@ def train_cnn_transformer(
     if not use_huggingface:
         pl_training_args = dict(
             max_epochs = n_epochs,
-            check_val_every_n_epoch=10,
+            check_val_every_n_epoch=val_epochs,
             auto_scale_batch_size="binsearch"
         )
         run_pytorch_lightning(model,task,training_args=pl_training_args,backend=backend)
@@ -749,7 +750,7 @@ def run_pytorch_lightning(model, task,
             logger.experiment.config.update(model.hparams)
         else:
             logger = True
-            
+
         checkpoint_callback = ModelCheckpoint(
                             # dirpath=logger.experiment.dir,
                             filename='{epoch}-',
