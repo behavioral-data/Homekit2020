@@ -91,7 +91,7 @@ def wandb_detection_error_tradeoff_curve(preds,labels,return_table=False,limit=9
         table,
         {"x": "fpr", "y": "fnr", "class": "class"},
         {
-            "title": "ROC",
+            "title": "Error Tradeoff Curve",
             "x-axis-title": "False positive rate",
             "y-axis-title": "False negative rate",
         },
