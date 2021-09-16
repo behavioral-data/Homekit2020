@@ -1,6 +1,7 @@
 import gc
 from copy import copy
 from typing import Dict, Union
+import os
 
 import numpy as np
 import pytorch_lightning as pl
@@ -194,7 +195,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.eval_probs = []
         self.eval_labels = []
     
-    def on_validation_epoch_end(self,):
+    def on_validation_epoch_end(self):
 
         eval_preds = torch.cat(self.eval_probs, dim=0)
         eval_labels = torch.cat(self.eval_labels, dim=0)
@@ -203,7 +204,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         results["eval/roc_auc"] = eval_auc
         
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
-        if not isinstance(self.logger.experiment, DummyExperiment):
+        if os.environ["LOCAL_RANK"] == "0":
             self.logger.experiment.log({"eval/roc": wandb_roc_curve(eval_preds,eval_labels, limit = 9999)}, commit=False)
             self.logger.experiment.log({"eval/pr": wandb_pr_curve(eval_preds,eval_labels)}, commit=False)
             self.logger.experiment.log({"eval/det": wandb_detection_error_tradeoff_curve(eval_preds,eval_labels, limit=9999)}, commit=False)
