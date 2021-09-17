@@ -31,7 +31,7 @@ from src.models.neural_baselines import create_neural_model
 from src.models.models import CNNToTransformerEncoder
 from src.models.trainer import FluTrainer
 from src.SAnD.core.model import SAnD
-from src.utils import get_logger, render_network_plot
+from src.utils import get_logger, render_network_plot, set_gpus_automatically
 from src.data.utils import write_dict_to_json
 from src.models.load_model import load_model_from_checkpoint
 
@@ -51,6 +51,7 @@ from PIL import Image
 import torch
 
 logger = get_logger(__name__)
+
 
 def train_neural_baseline(model_name,task_name,
                          model_path=None,
@@ -158,8 +159,11 @@ def train_autoencoder(model_name,
                 look_for_cached_datareader=False,
                 datareader_ray_obj_ref=None,
                 data_location=None,
-                no_eval_during_training=False):
-    
+                no_eval_during_training=False,
+                auto_set_gpu=None):
+    if auto_set_gpu:
+        set_gpus_automatically(auto_set_gpu)
+
     if model_path:
         raise NotImplementedError()
 
@@ -253,7 +257,12 @@ def train_cnn_transformer(
                 eval_path=None,
                 test_path=None,
                 val_epochs=10,
+                auto_set_gpu=None,
+                dropout_rate=0.5,
                 **model_specific_kwargs):
+
+    if auto_set_gpu:
+        set_gpus_automatically(auto_set_gpu)
 
     logger.info(f"Training CNNTransformer")
     if task_config:
@@ -306,7 +315,7 @@ def train_cnn_transformer(
                                         learning_rate =learning_rate,
                                         warmup_steps = warmup_steps,
                                         inital_batch_size=train_batch_size,
-                                        dropout_rate=0.5,
+                                        dropout_rate=dropout_rate,
                                         kernel_sizes=kernel_sizes,
                                         stride_sizes=stride_sizes,
                                         out_channels=out_channels,
@@ -408,6 +417,7 @@ def train_sand( task_config=None,
                 datareader_ray_obj_ref=None,
                 data_location=None,
                 no_eval_during_training=False,
+                auto_set_gpu=None,
                 **_):
     
     if model_path:
@@ -501,8 +511,12 @@ def train_bert(task_config=None,
                 look_for_cached_datareader=False,
                 datareader_ray_obj_ref=None,
                 no_eval_during_training=False,
+                auto_set_gpu=None,
                 data_location=None):
     
+    if auto_set_gpu:
+        set_gpus_automatically(auto_set_gpu)
+
     if model_path:
         raise NotImplementedError()
     if task_config:
@@ -602,8 +616,11 @@ def train_longformer(task_config=None,
                     look_for_cached_datareader=False,
                     datareader_ray_obj_ref=None,
                     no_eval_during_training=False,
-                    data_location=None):
-    
+                    data_location=None,
+                    auto_set_gpu=None):
+    if auto_set_gpu:
+        set_gpus_automatically(auto_set_gpu)
+        
     if model_path:
         raise NotImplementedError()
     

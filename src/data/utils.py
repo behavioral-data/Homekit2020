@@ -19,7 +19,7 @@ import dask
 dask.config.set({"distributed.comm.timeouts.connect": "60"})
 
 import dask.dataframe as dd
-
+import torch
 from dotenv import dotenv_values
 
 config = dotenv_values(".env")
@@ -289,6 +289,8 @@ def fill_missing_minutes(user_df):
     user_df["date"] = user_df.index.date
     user_df = user_df.fillna(0)
     return user_df
+
 def url_from_path(path,filesystem="file://"):
     if path:
         return filesystem + path
+

@@ -7,7 +7,10 @@ import dotenv
 import yaml
 import numpy as np
 from PIL import Image
+import torch
+import pynvml
 from torchviz import make_dot
+import subprocess
 
 def load_dotenv():
     project_dir = os.path.join(os.path.dirname(__file__), os.pardir)
@@ -57,3 +60,24 @@ def render_network_plot(var,dir,filename="model",params=None):
     graph = make_dot(var,params=None)
     graph.format = "png"
     return graph.render(filename=filename,directory=dir)
+
+def get_gpu_memory(gpu_index):
+    pynvml.nvmlInit()
+    handle = pynvml.nvmlDeviceGetHandleByIndex(int(gpu_index))
+    mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+    return mem_info.used
+
+def get_unused_gpus():
+    result=subprocess.getoutput("nvidia-smi -q -d PIDS |grep -A4 GPU | grep Processes").split("\n")
+    return [str(i) for i in range(len(result)) if "None" in result[i]]
+
+def set_gpus_automatically(n):
+    free_devices = get_unused_gpus()
+    n_free = len(free_devices)
+    if n_free < n:
+        raise ValueError(f"Insufficent GPUs available for automatic allocation: {n_free} available, {n} requested.")     
+    devices = free_devices[:n]
+
+    logger = get_logger(__name__)
+    logger.info(f"Auto setting gpus to: {devices}")
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(devices)
