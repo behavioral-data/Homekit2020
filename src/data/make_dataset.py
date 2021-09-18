@@ -153,6 +153,7 @@ def main(sleep_in_path: str, steps_in_path: str,
          heart_rate_in_path: str, out_path: str) -> None:
     
     dask.config.set(scheduler='single-threaded')
+
     client = Client(n_workers=8)
     logger.info("Loading sleep...")
     exploded_sleep = explode_str_column_dask(read_raw_dask(sleep_in_path),

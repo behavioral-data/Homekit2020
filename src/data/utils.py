@@ -23,7 +23,7 @@ dask.config.set({"distributed.comm.timeouts.connect": "60"})
 from tqdm import tqdm
 
 import dask.dataframe as dd
-
+import torch
 from dotenv import dotenv_values
 
 
@@ -395,6 +395,22 @@ def process_minute_level_pandas(minute_level_path=None, minute_level_df=None,
     # paths = glob.glob(os.path.join(out_path,"*","*.parquet"))
     # dd.io.parquet.create_metadata_file(paths)
 
+def fill_missing_minutes(user_df):
+    # This works because the data was pre-cleaned so that the
+    # last day ends just before midnight
+    min_date = user_df["timestamp"].min()
+    max_date = user_df["timestamp"].max()
+    new_index = pd.DatetimeIndex(pd.date_range(start=min_date,end=max_date,freq="1min"),
+                                name = "timestamp")
+    user_df = user_df.set_index("timestamp").reindex(new_index)
+    user_df["missing_heartrate"] = user_df["missing_heartrate"].fillna(True)
+    user_df["missing_steps"] = user_df["missing_steps"].fillna(True)
+    user_df["steps"] = user_df["steps"].fillna(0)
+    user_df["date"] = user_df.index.date
+    user_df = user_df.fillna(0)
+    return user_df
+
 def url_from_path(path,filesystem="file://"):
     if path:
         return filesystem + path
+

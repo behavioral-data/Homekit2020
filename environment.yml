@@ -34,6 +34,7 @@ dependencies:
   - torchmetrics
   - tensorboardx
   - dask-ml
+  - pyspark
   - pip:
     - torchviz
     - pyyaml==5.4.1
@@ -42,5 +43,7 @@ dependencies:
     - tensorboard
     - ray[default]
     - tabulate
+    - petastorm
+    - methodtools
 variables:
   USE_TORCH: 1

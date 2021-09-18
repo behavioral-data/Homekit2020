@@ -21,6 +21,7 @@ def validate_yaml_or_json(ctx, param, value):
 
 nerual_options = [
         click.Option(('--n_epochs',), default = 10, help='Number of training epochs'),
+        click.Option(('--val_epochs',), default=10, help="Run validation every n epochs"),
         click.Option(('--hidden_size',), default = 768),
         click.Option(('--num_attention_heads',), default = 4),
         click.Option(('--num_hidden_layers',), default = 4),
@@ -39,6 +40,9 @@ nerual_options = [
         click.Option(('--sinu_position_encoding',), is_flag=True, default=False),
         click.Option(('--classification_threshold',), default = 0.5),
         click.Option(('--no_eval_during_training',), is_flag=True, default = False),
+        click.Option(('--auto_set_gpu',), type=int, default = None, help="Try to find n GPUs, and use them"),
+        click.Option(('--dropout_rate',), type=float, default = 0.5)
+     
 ]
 
 universal_options = [

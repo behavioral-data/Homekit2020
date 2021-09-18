@@ -1,6 +1,7 @@
 import gc
 from copy import copy
 from typing import Dict, Union
+import os
 
 import numpy as np
 import pytorch_lightning as pl
@@ -12,11 +13,12 @@ from petastorm.pytorch import BatchedDataLoader
 from petastorm.pytorch import DataLoader as PetaDataLoader
 from petastorm.reader import Reader
 from pytorch_lightning.core.step_result import Result
+from pytorch_lightning.loggers.base import DummyExperiment
 from wandb import plot
 from src.models.losses import build_loss_fn
 from src.SAnD.core import modules
 from src.utils import check_for_wandb_run
-from src.models.eval import wandb_roc_curve, wandb_pr_curve
+from src.models.eval import wandb_roc_curve, wandb_pr_curve, wandb_detection_error_tradeoff_curve
 from torch import Tensor
 from torch.nn.modules import dropout
 from torch.utils.data.dataloader import DataLoader
@@ -174,9 +176,9 @@ class CNNToTransformerEncoder(pl.LightningModule):
         loss,logits = self.forward(x,y)
         
     
-        self.log("train/loss", loss.item(),on_step=True, sync_dist=True)
+        self.log("train/loss", loss.item(), on_step=True, sync_dist=True)
 
-        probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
+        # probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
         # self.train_probs.append(probs.detach().cpu())
         # self.train_labels.append(y.detach().cpu())
         return {"loss":loss, "preds": logits, "labels":y}
@@ -186,45 +188,28 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.train_labels = []
         super().on_train_epoch_start()
     
-    # def on_train_epoch_end(self):
-    #     self.train_probs = []
-    #     self.train_labels = []
-
-    def on_train_end(self):
-        # train_preds = torch.cat(self.train_probs, dim=0)
-        # train_labels = torch.cat(self.train_labels, dim=0)
-        # train_auc = torchmetrics.functional.auroc(train_preds,train_labels,pos_label=1)
-    
-        eval_preds = torch.cat(self.eval_probs, dim=0)
-        eval_labels = torch.cat(self.eval_labels, dim=0)
-        
-        # fpr, tpr, _ = torchmetrics.functional.roc(eval_preds, eval_labels, pos_label=1)
-        # eval_auc = torchmetrics.functional.auroc(eval_preds,eval_labels,pos_label=1)
-
-
-        results = {}
-
-        if check_for_wandb_run():
-            results["eval/roc"] = wandb_roc_curve(eval_preds,eval_labels)
-            results["eval/pr"] = wandb_pr_curve(eval_preds,eval_labels)
-
-            wandb.log(results,commit=False)
-
-        super().on_train_end()
-
 
     def on_validation_epoch_start(self):
+        #Not sure why I have to explicitly do this, but model fails otherwise
+        torch.cuda.empty_cache()
         self.eval_probs = []
         self.eval_labels = []
     
     def on_validation_epoch_end(self):
+
         eval_preds = torch.cat(self.eval_probs, dim=0)
         eval_labels = torch.cat(self.eval_labels, dim=0)
         eval_auc = torchmetrics.functional.auroc(eval_preds,eval_labels,pos_label=1)
-        # self.eval_probs = []
-        # self.eval_labels = []
-    
-        self.log_dict({"eval/roc_auc":eval_auc})
+        results = {}
+        results["eval/roc_auc"] = eval_auc
+        
+        # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
+        if os.environ["LOCAL_RANK"] == "0":
+            self.logger.experiment.log({"eval/roc": wandb_roc_curve(eval_preds,eval_labels, limit = 9999)}, commit=False)
+            self.logger.experiment.log({"eval/pr": wandb_pr_curve(eval_preds,eval_labels)}, commit=False)
+            self.logger.experiment.log({"eval/det": wandb_detection_error_tradeoff_curve(eval_preds,eval_labels, limit=9999)}, commit=False)
+        
+        self.log_dict(results)
         super().on_validation_epoch_end()
 
     def validation_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
