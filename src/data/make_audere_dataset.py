@@ -6,7 +6,6 @@ functions (e.g. "load_processed_table") to load data. All datasets besides
 the audere dataset (/projects/bdata/datasets/gatesfoundation/audere) should 
 use make_dataset.py
 """
-from src.data.make_dataset import process_minute_level
 import click
 import pandas as pd
 import pyarrow as pa

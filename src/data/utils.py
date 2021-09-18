@@ -20,9 +20,12 @@ import wandb
 import dask
 dask.config.set({"distributed.comm.timeouts.connect": "60"})
 
+from tqdm import tqdm
+
 import dask.dataframe as dd
 import torch
 from dotenv import dotenv_values
+
 
 config = dotenv_values(".env")
 logger = get_logger(__name__)
@@ -370,10 +373,11 @@ def process_minute_level_pandas(minute_level_path=None, minute_level_df=None,
     minute_level_df["date"] = minute_level_df["timestamp"].dt.date
 
     #Sorting will speed up dask queries later
-    minute_level_df = minute_level_df.sort_values("participant_id")
-    minute_level_df = minute_level_df.groupby("participant_id").apply(fill_missing_minutes)
+    # minute_level_df = minute_level_df.sort_values("participant_id")
+    tqdm.pandas(desc="Filling missing minutes...")
+    minute_level_df = minute_level_df.groupby("participant_id").progress_apply(fill_missing_minutes)
     del minute_level_df["participant_id"]
-    minute_level_df = minute_level_df.reset_index()
+    minute_level_df = minute_level_df.reset_index(drop=True)
 
     minute_level_df["sleep_classic_0"] = minute_level_df["sleep_classic_0"].astype(bool)
     minute_level_df["sleep_classic_1"] = minute_level_df["sleep_classic_1"].astype(bool)
@@ -388,8 +392,8 @@ def process_minute_level_pandas(minute_level_path=None, minute_level_df=None,
     pq.write_to_dataset(table, root_path=out_path,
                     partition_cols=['date'])
 
-    paths = glob.glob(os.path.join(out_path,"*","*.parquet"))
-    dd.io.parquet.create_metadata_file(paths)
+    # paths = glob.glob(os.path.join(out_path,"*","*.parquet"))
+    # dd.io.parquet.create_metadata_file(paths)
 
 def fill_missing_minutes(user_df):
     # This works because the data was pre-cleaned so that the
