@@ -2,10 +2,12 @@ import os
 import glob 
 import json
 import pickle
+from re import M
 from fsspec.registry import filesystem
 
 import pyarrow.parquet as pq
 import pandas as pd
+from pandas.api.types import CategoricalDtype
 from scipy.special import softmax
 import pyarrow as pa
 from torch.utils import data
@@ -220,18 +222,132 @@ def split_by_participant(df,frac):
     return left, right
 
 
-def process_minute_level(minute_level_path=None, out_path =None, participant_ids=None, random_state=42):
-    if minute_level_path is None:
-        minute_level_df = load_raw_table("fitbit_minute_level_activity")
-    else: 
-        minute_level_path = dd.read_parquet(minute_level_path)
-    if not participant_ids is None:
-        minute_level_df = minute_level_df[minute_level_df["participant_id"].isin(participant_ids)]                                                     
-        
+def process_minute_level(minute_level_path=None, 
+                        minute_level_df=None,
+                        out_path =None, 
+                        participant_ids=None, 
+                        random_state=42):
+    if minute_level_df is None:
+        if minute_level_path is None:
+            minute_level_df = load_raw_table("fitbit_minute_level_activity")
+        else: 
+            minute_level_path = dd.read_parquet(minute_level_path)
+        if not participant_ids is None:
+            minute_level_df = minute_level_df[minute_level_df["participant_id"].isin(participant_ids)]                                                     
+    
+    
+    minute_level_df["timestamp"] = dd.to_datetime(minute_level_df["timestamp"])
     logger.info("Processing minute-level fitbit activity data. This will take a while...")
     # Add missing flag to heart rate
-    missing_heartrate = (minute_level_df.heart_rate.isnull()) | (minute_level_df.heart_rate == 0)
-    minute_level_df["missing_heartrate"] = missing_heartrate
+    missing_heart_rate = (minute_level_df["heart_rate"].isnull()) | (minute_level_df["heart_rate"] == 0)
+    minute_level_df["missing_heart_rate"] = missing_heart_rate
+    minute_level_df["heart_rate"] = minute_level_df["heart_rate"].fillna(0)
+    # Properly encode heart rate
+
+    minute_level_df['missing_steps'] = minute_level_df["steps"].isnull()
+    # minute_level_df.loc[minute_level_df.steps.isnull(),'missing_steps'] = True
+    minute_level_df["steps"] = minute_level_df["steps"].fillna(0)
+    minute_level_df['missing_steps'] = minute_level_df['missing_steps'].astype(bool)
+    minute_level_df["sleep_classic"] = minute_level_df["sleep_classic"].fillna(0)
+    minute_level_df =  minute_level_df[["timestamp", "sleep_classic", "heart_rate", "steps", "missing_heart_rate", "missing_steps"]]
+    # minute_level_df["sleep_classic"] = minute_level_df["sleep_classic"].astype(CategoricalDtype(categories=list(range(4))))
+    minute_level_df = minute_level_df.categorize(columns="sleep_classic",meta = [  ('sleep_classic', "category"),
+                                                                                    ('heart_rate', "Int64"),
+                                                                                    ('timestamp', "datetime64[ns]"),
+                                                                                    ('steps', "Int64"),
+                                                                                    ('missing_heart_rate', "bool"),
+                                                                                    ('missing_steps', "bool")])
+
+    # minute_level_df = minute_level_df[["timestamp","heart_rate","steps","missing_heart_rate","missing_steps" ,"sleep_classic_0","sleep_classic_2"," sleep_classic_3"]]
+    minute_level_df = dd.get_dummies(minute_level_df,prefix = 'sleep_classic', columns = ['sleep_classic'], dtype = bool)
+
+    # minute_level_df = pd.get_dummies(minute_level_df ,prefix = 'sleep_classic', columns = ['sleep_classic'], dtype = bool)
+                                        
+    
+    minute_level_df["date"] = minute_level_df["timestamp"].dt.date
+
+    #Sorting will speed up dask queries later
+    
+    # print(timestamps.value_counts().sort_values(ascending=False))
+    # assert  timestamps.is_uniqu
+    # pd_df = minute_level_df.compute()
+    # assert len(pd_df.drop_duplicates(subset=["timestamp","participant_id"])) == len(pd_df)
+    # print(minute_level_df)
+
+    minute_level_df = minute_level_df.map_partitions(lambda x: x.groupby("participant_id")\
+                                                                .apply(fill_missing_minutes)\
+                                                                .reset_index(drop=True),
+                                                                meta = [("timestamp", "datetime64[ns]"),
+                                                                        ("heart_rate", "Int64"),
+                                                                        ("steps", "Int64"),
+                                                                        ("missing_heart_rate", "bool"),
+                                                                        ("missing_steps", "bool"),
+                                                                        ("sleep_classic_3", "bool"),
+                                                                        ("sleep_classic_2", "bool"),
+                                                                        ("sleep_classic_1", "bool"),
+                                                                        ("sleep_classic_0", "bool"),
+                                                                        ("date", "datetime64[ns]"),])
+    # minute_level_df = minute_level_df.drop("participant_id", axis=1)
+    # minute_level_df = minute_level_df.reset_index()
+
+    # minute_level_df["sleep_classic_0"] = minute_level_df["sleep_classic_0"].astype(bool)
+    # minute_level_df["sleep_classic_1"] = minute_level_df["sleep_classic_1"].astype(bool)
+    # minute_level_df["sleep_classic_2"] = minute_level_df["sleep_classic_2"].astype(bool)
+    # minute_level_df["sleep_classic_3"] = minute_level_df["sleep_classic_3"].astype(bool)
+    # minute_level_df.to_csv("data/interim/processed_fitbit_minute_level_activity.csv")
+    # table = pa.Table.from_pandas(minute_level_df, preserve_index=False)
+    # timestamps = df["timestamp"].compute()
+   
+    if out_path is None:
+        out_path = get_processed_dataset_path("processed_fitbit_minute_level_activity")
+
+    # pq.write_to_dataset(table, root_path=out_path,
+    #                 partition_cols=['date'])
+    # print(minute_level_df.columns)
+    # print("index named ",minute_level_df.index.name)
+    minute_level_df.compute(rerun_exceptions_locally=True)
+    # dd.to_parquet(minute_level_df.reset_index(), out_path, partition_on=["date"],engine='pyarrow-legacy',
+    #              write_metadata_file=True)
+    # paths = glob.glob(os.path.join(out_path,"*","*.parquet"))
+    # dd.io.parquet.create_metadata_file(paths)
+
+def fill_missing_minutes(user_df):
+    # This works because the data was pre-cleaned so that the
+    # last day ends just before midnight
+    order = user_df.columns
+    # assert len(set(user_df["participant_id"])) == 1
+    assert user_df["timestamp"].is_unique
+    min_date = user_df["timestamp"].min()
+    max_date = user_df["timestamp"].max()
+    new_index = pd.DatetimeIndex(pd.date_range(start=min_date,end=max_date,freq="1min"),
+                                name = "timestamp")
+    user_df = user_df.set_index("timestamp").reindex(new_index)
+    assert user_df.index.is_unique
+    user_df = user_df.reset_index()
+    user_df["missing_heart_rate"] = user_df["missing_heart_rate"].fillna(True)
+    user_df["missing_steps"] = user_df["missing_steps"].fillna(True)
+    user_df["steps"] = user_df["steps"].fillna(0)
+    user_df["heart_rate"] = user_df["steps"].fillna(0)
+    # user_df["date"] = user_df["timestamp"].date
+    user_df = user_df[order]
+    # user_df = user_df.add_cate.fillna(0)
+    return user_df
+
+
+def process_minute_level_pandas(minute_level_path=None, minute_level_df=None,
+                out_path =None, participant_ids=None, random_state=42):
+    if minute_level_df is None:
+        if minute_level_path is None:
+            minute_level_df = load_raw_table("fitbit_minute_level_activity")
+        else: 
+            minute_level_path = dd.read_parquet(minute_level_path)
+        if not participant_ids is None:
+            minute_level_df = minute_level_df[minute_level_df["participant_id"].isin(participant_ids)]                                                     
+
+    logger.info("Processing minute-level fitbit activity data. This will take a while...")
+    # Add missing flag to heart rate
+    missing_heart_rate = (minute_level_df.heart_rate.isnull()) | (minute_level_df.heart_rate == 0)
+    minute_level_df["missing_heart_rate"] = missing_heart_rate
     minute_level_df["heart_rate"] = minute_level_df["heart_rate"].fillna(0)
     # Properly encode heart rate
     minute_level_df["heart_rate"] = minute_level_df["heart_rate"].astype(int)
