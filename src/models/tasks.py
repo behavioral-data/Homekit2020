@@ -221,8 +221,19 @@ class ActivityTask(Task):
             self.train_url= url_from_path(train_path)
             self.eval_url = url_from_path(eval_path)
             self.test_url = url_from_path(test_path)
+            
+            infer_schema_path = None
+            for path in [self.train_path,self.eval_path,self.test_path]:
+                if path: 
+                    infer_schema_path = path
+                    break
 
-            schema = infer_or_load_unischema(ParquetDataset(self.train_path,validate_schema=False))
+            if not infer_schema_path:
+                raise ValueError("Must provide at least one of {}"
+                                 "train_path, eval_path, or test_path"
+                                 "to use the petatstorm backend")
+        
+            schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
             fields = [k for k in schema.fields.keys()]
             # features = [k for k in schema.fields.keys() if not k in ["start","end","participant_id"]]
             
