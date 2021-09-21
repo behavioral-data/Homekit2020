@@ -317,11 +317,11 @@ def fill_missing_minutes(user_df):
     order = user_df.columns
     # assert len(set(user_df["participant_id"])) == 1
     # assert user_df["timestamp"].is_unique
-    min_date = user_df.index.get_level_values(1).min()
-    max_date = user_df.index.get_level_values(1).max()
+    min_date = user_df.index.get_level_values(0).min()
+    max_date = user_df.index.get_level_values(0).max()
     new_index = pd.DatetimeIndex(pd.date_range(start=min_date,end=max_date,freq="1min"),
                                 name = "timestamp")
-    user_df = user_df.reindex(new_index, level=1)
+    user_df = user_df.reindex(new_index)
     # assert user_df.index.is_unique
     
     # user_df = user_df.reset_index()
@@ -336,7 +336,8 @@ def fill_missing_minutes(user_df):
 
 
 def process_minute_level_pandas(minute_level_path=None, minute_level_df=None,
-                out_path =None, participant_ids=None, random_state=42):
+                out_path =None, participant_ids=None, single_user_mode = False,
+                return_df = False, random_state=42):
     if minute_level_df is None:
         if minute_level_path is None:
             minute_level_df = load_raw_table("fitbit_minute_level_activity")
@@ -345,7 +346,7 @@ def process_minute_level_pandas(minute_level_path=None, minute_level_df=None,
         if not participant_ids is None:
             minute_level_df = minute_level_df[minute_level_df["participant_id"].isin(participant_ids)]                                                     
 
-    logger.info("Processing minute-level fitbit activity data. This will take a while...")
+    # logger.info("Processing minute-level fitbit activity data. This will take a while...")
     # Add missing flag to heart rate
     missing_heart_rate = (minute_level_df.heart_rate.isnull()) | (minute_level_df.heart_rate == 0)
     minute_level_df["missing_heart_rate"] = missing_heart_rate
@@ -367,28 +368,30 @@ def process_minute_level_pandas(minute_level_path=None, minute_level_df=None,
                                     dtype = bool)
                                         
     
-    minute_level_df["date"] = minute_level_df.index.get_level_values(1).date
+    minute_level_df["date"] = minute_level_df.index.date
 
     #Sorting will speed up dask queries later
-    minute_level_df = minute_level_df.groupby(level=0).apply(fill_missing_minutes)
+    minute_level_df = fill_missing_minutes(minute_level_df)
     # del minute_level_df["participant_id"]
     minute_level_df = minute_level_df.reset_index()
 
-    # minute_level_df["sleep_classic_0"] = minute_level_df["sleep_classic_0"].astype(bool)
-    # minute_level_df["sleep_classic_1"] = minute_level_df["sleep_classic_1"].astype(bool)
-    # minute_level_df["sleep_classic_2"] = minute_level_df["sleep_classic_2"].astype(bool)
-    # minute_level_df["sleep_classic_3"] = minute_level_df["sleep_classic_3"].astype(bool)
-    # minute_level_df.to_csv("data/interim/processed_fitbit_minute_level_activity.csv")
-    table = pa.Table.from_pandas(minute_level_df, preserve_index=True)
+    # minute_level_df["sleep_classic_0"] = minute_level_df["sleep_classic_0"].fillna(False)
+    # minute_level_df["sleep_classic_1"] = minute_level_df["sleep_classic_1"].fillna(False)
+    # minute_level_df["sleep_classic_2"] = minute_level_df["sleep_classic_2"].fillna(False)
+    # minute_level_df["sleep_classic_3"] = minute_level_df["sleep_classic_3"].fillna(False)
+    # # minute_level_df.to_csv("data/interim/processed_fitbit_minute_level_activity.csv")
+    
+    return minute_level_df
+    # table = pa.Table.from_pandas(minute_level_df, preserve_index=True)
 
-    if out_path is None:
-        out_path = get_processed_dataset_path("processed_fitbit_minute_level_activity")
+    # if out_path is None:
+    #     out_path = get_processed_dataset_path("processed_fitbit_minute_level_activity")
 
-    pq.write_to_dataset(table, root_path=out_path,
-                    partition_cols=['date'])
+    # pq.write_to_dataset(table, root_path=out_path,
+    #                 partition_cols=['date'])
 
-    paths = glob.glob(os.path.join(out_path,"*","*.parquet"))
-    dd.io.parquet.create_metadata_file(paths)
+    # paths = glob.glob(os.path.join(out_path,"*","*.parquet"))
+    # dd.io.parquet.create_metadata_file(paths)
 
 # def fill_missing_minutes(user_df):
 #     # This works because the data was pre-cleaned so that the

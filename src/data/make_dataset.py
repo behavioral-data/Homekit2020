@@ -2,6 +2,11 @@ from asyncio.tasks import gather
 from typing import Optional
 import datetime as dt
 import gc
+import glob
+import os
+
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 from distributed import client
 from distributed.utils import cli_keywords
@@ -70,7 +75,7 @@ def explode_str_column_dask(df: dd, target_col: str,
     df.index = df.index.rename(rename_participant_id_column)
     return df
 
-def explode_str_column(df: dd, target_col: str,
+def explode_str_column(df: pd.DataFrame, target_col: str,
                    freq: str = "min", dur: str = "1D",
                    sep_char: str = " ", date_col: str = "dt",
                    dtype: str  = "Int32", participant_col: str = "id_participant_external",
@@ -80,9 +85,15 @@ def explode_str_column(df: dd, target_col: str,
                    dur_col: Optional[str] = None,
                    clip_max: int = 200) -> dict:
 
-    tqdm.pandas(desc="Getting new indices...")
+    # tqdm.pandas(desc="Getting new indices...")
     # logger.info("Getting new indices....")
-    df["timestamp"] = df.progress_apply(get_new_index,target_column = target_col,
+    val_col_name = rename_target_column if rename_target_column else target_col
+    pid_col_name = rename_participant_id_column if rename_participant_id_column else participant_col
+
+    if df.empty:
+        return pd.DataFrame(columns=["timestamp",val_col_name],index=pd.DatetimeIndex([])).set_index("timestamp")
+
+    df["timestamp"] = df.apply(get_new_index,target_column = target_col,
                                     start_col=start_col,
                                     dur_col=dur_col,
                                     freq=freq,
@@ -94,7 +105,7 @@ def explode_str_column(df: dd, target_col: str,
     # mapper = lambda x: str_col_to_list(x, sep_char=sep_char, default_len=default_len)                                        
     df["val"] = df[target_col].str.split(sep_char)
     logger.info("Exploding column...")
-    df = df[[participant_col,"timestamp","val"]].explode(["timestamp","val"])
+    df = df[["timestamp","val"]].explode(["timestamp","val"])
     # timestamps = df["timestamp"].compute()
     # pd_df = df.compute()
     # # print(timestamps.value_counts().sort_values(ascending=False))
@@ -104,13 +115,11 @@ def explode_str_column(df: dd, target_col: str,
     # https://stackoverflow.com/questions/39173813/pandas-convert-dtype-object-to-int
     df["val"] = pd.to_numeric(df["val"],downcast="unsigned").clip(upper=clip_max)
     
-    val_col_name = rename_target_column if rename_target_column else target_col
-    pid_col_name = rename_participant_id_column if rename_participant_id_column else participant_col
+    
 
-    df = df.rename(columns={"val":val_col_name,
-                            participant_col:pid_col_name})
+    df = df.rename(columns={"val":val_col_name})
     logger.info("Setting index...")
-    return df.set_index(["participant_id","timestamp"]).sort_index()
+    return df.set_index("timestamp").sort_index()
     
 
 def get_new_index(item: dict, target_column: str,
@@ -147,8 +156,13 @@ def read_raw_pandas(path,set_dtypes=None):
         for k,v in set_dtypes.items():
             df[k] = df[k].astype(v)
             
-    return df.dropna()
+    return df.dropna().set_index("id_participant_external")
 
+def safe_loc(df,ind):
+    try:
+        return df.loc[[ind]]
+    except KeyError:
+        return pd.DataFrame(columns=df.columns)
 
 @click.command()
 @click.argument("sleep_in_path", type=click.Path(exists=True))
@@ -163,46 +177,72 @@ def main(sleep_in_path: str, steps_in_path: str,
     # dask.config.set({"distributed.comm.timeouts.connect": "120s"})
 
     # client = Client(lifetime="1 hour",lifetime_restart =True, lifetime_stagger = "5 minutes")
+
     logger.info("Loading sleep...")
-    exploded_sleep = explode_str_column(read_raw_pandas(sleep_in_path),
-                                    target_col = "minute_level_str",
-                                    rename_target_column="sleep_classic",
-                                    start_col="main_start_time",
-                                    dur_col = "main_in_bed_minutes",
-                                    dtype=pd.Int8Dtype())#.set_index(["participant_id","timestamp"])
+    sleep = read_raw_pandas(sleep_in_path)
+    # explode_str_column(read_raw_pandas(sleep_in_path),
+    #                                 target_col = "minute_level_str",
+    #                                 rename_target_column="sleep_classic",
+    #                                 start_col="main_start_time",
+    #                                 dur_col = "main_in_bed_minutes",
+    #                                 dtype=pd.Int8Dtype())#.set_index(["participant_id","timestamp"])
     # exploded_sleep["sleep_classic"] = exploded_sleep["sleep_classic"].astype("category")
-    keys = ["participant_id","timestamp"]
+
     logger.info("Loading heart rate...") 
-    exploded_hr = explode_str_column(read_raw_pandas(heart_rate_in_path),
-                                target_col = "minute_level_str",
-                                rename_target_column="heart_rate",
-                                dtype=pd.Int16Dtype())
+    hr = read_raw_pandas(heart_rate_in_path)
+    # exploded_hr = explode_str_column(read_raw_pandas(heart_rate_in_path),
+    #                             target_col = "minute_level_str",
+    #                             rename_target_column="heart_rate",
+    #                             dtype=pd.Int16Dtype())
 
 
     # sleep_and_hr = exploded_sleep.merge(exploded_hr,
     #                                     left_on = keys,
     #                                     right_on = keys,
     #                                     how = "outer")                                
-    logger.info("Merging Sleep and HR...")
-    sleep_and_hr = exploded_sleep.merge(exploded_hr,how = "outer", left_index=True, right_index=True) 
-    del exploded_sleep 
-    del exploded_hr
 
+    
+    # logger.info("Merging Sleep and HR...")
     logger.info("Loading steps...") 
-    exploded_steps = explode_str_column(read_raw_pandas(steps_in_path),
-                                target_col = "minute_level_str",
-                                rename_target_column="steps",
-                                dtype=pd.Int16Dtype())#.set_index(["participant_id","timestamp"])
-                                    
-   
-    # dask.compute(exploded_hr,exploded_sleep,exploded_steps)
-    logger.info("Merging steps...")
-    all_streams = sleep_and_hr.merge(exploded_steps,how = "outer", left_index=True, right_index=True)
-    del exploded_steps
+    steps = read_raw_pandas(steps_in_path)
 
+    users_with_steps = steps.index.unique()
+
+    logger.info("Processing users...")               
+    completed_dfs = []
+    for user in tqdm(users_with_steps.values):
+        exploded_sleep = explode_str_column(safe_loc(sleep,user),
+                                    target_col = "minute_level_str",
+                                    rename_target_column="sleep_classic",
+                                    start_col="main_start_time",
+                                    dur_col = "main_in_bed_minutes",
+                                    dtype=pd.Int8Dtype())
+        exploded_hr =  explode_str_column(safe_loc(hr,user),
+                                          target_col = "minute_level_str",
+                                          rename_target_column="heart_rate",
+                                          dtype=pd.Int8Dtype())
+        exploded_steps = explode_str_column(safe_loc(steps,user),
+                                            target_col="minute_level_str",
+                                            rename_target_column="steps",
+                                            dtype=pd.Int8Dtype())
+        steps_and_hr = exploded_steps.join(exploded_hr,how = "left") 
+        merged = steps_and_hr.join(exploded_sleep,how="left")                        
+
+        merged["participant_id"] = user
+        processed = process_minute_level_pandas(minute_level_df = merged)
+        completed_dfs.append(processed)
+                                    #.set_index(["participant_id","timestamp"])
     # all_streams = pd.concat([exploded_hr,exploded_steps,exploded_sleep],axis=1)
     # all_streams["participant_id"] = all_streams["participant_id"].astype("category")
-    process_minute_level_pandas(minute_level_df=all_streams, out_path=out_path)
+    all_results = pd.concat(completed_dfs)
+    all_results["sleep_classic_0"] = all_results["sleep_classic_0"].fillna(False)
+    all_results["sleep_classic_1"] = all_results["sleep_classic_1"].fillna(False)
+    all_results["sleep_classic_2"] = all_results["sleep_classic_2"].fillna(False)
+    all_results["sleep_classic_3"] = all_results["sleep_classic_3"].fillna(False)
+    table = pa.Table.from_pandas(all_results, preserve_index=True)
+    pq.write_to_dataset(table, root_path=out_path)
+    paths = glob.glob(os.path.join(out_path,"*","*.parquet"))
+    dd.io.parquet.create_metadata_file(paths)
     end = time.time()
     print("Time elapsed",end-start)
 if __name__ == "__main__":
