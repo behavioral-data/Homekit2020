@@ -96,7 +96,9 @@ dask-worker-space/dask-worker-space/*
 
 #wandb
 wandb/*
+models/*
 results/*
+new_dataset/*
 logs/*
 dask-worker-space/global.lock
 .gitignore
