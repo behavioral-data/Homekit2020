@@ -20,9 +20,12 @@ import wandb
 import dask
 dask.config.set({"distributed.comm.timeouts.connect": "60"})
 
+from tqdm import tqdm
+
 import dask.dataframe as dd
 import torch
 from dotenv import dotenv_values
+
 
 config = dotenv_values(".env")
 logger = get_logger(__name__)
