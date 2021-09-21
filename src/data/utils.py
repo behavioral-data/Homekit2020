@@ -305,9 +305,9 @@ def process_minute_level(minute_level_path=None,
     #                 partition_cols=['date'])
     # print(minute_level_df.columns)
     # print("index named ",minute_level_df.index.name)
-    minute_level_df.compute(rerun_exceptions_locally=True)
-    # dd.to_parquet(minute_level_df.reset_index(), out_path, partition_on=["date"],engine='pyarrow-legacy',
-    #              write_metadata_file=True)
+    # minute_level_df.compute(rerun_exceptions_locally=True)
+    dd.to_parquet(minute_level_df.reset_index(), out_path, partition_on=["date"],engine='pyarrow-legacy',
+                 write_metadata_file=True)
     # paths = glob.glob(os.path.join(out_path,"*","*.parquet"))
     # dd.io.parquet.create_metadata_file(paths)
 
@@ -316,20 +316,21 @@ def fill_missing_minutes(user_df):
     # last day ends just before midnight
     order = user_df.columns
     # assert len(set(user_df["participant_id"])) == 1
-    assert user_df["timestamp"].is_unique
-    min_date = user_df["timestamp"].min()
-    max_date = user_df["timestamp"].max()
+    # assert user_df["timestamp"].is_unique
+    min_date = user_df.index.get_level_values(1).min()
+    max_date = user_df.index.get_level_values(1).max()
     new_index = pd.DatetimeIndex(pd.date_range(start=min_date,end=max_date,freq="1min"),
                                 name = "timestamp")
-    user_df = user_df.set_index("timestamp").reindex(new_index)
-    assert user_df.index.is_unique
-    user_df = user_df.reset_index()
+    user_df = user_df.reindex(new_index, level=1)
+    # assert user_df.index.is_unique
+    
+    # user_df = user_df.reset_index()
     user_df["missing_heart_rate"] = user_df["missing_heart_rate"].fillna(True)
     user_df["missing_steps"] = user_df["missing_steps"].fillna(True)
     user_df["steps"] = user_df["steps"].fillna(0)
-    user_df["heart_rate"] = user_df["steps"].fillna(0)
+    user_df["heart_rate"] = user_df["heart_rate"].fillna(0)
     # user_df["date"] = user_df["timestamp"].date
-    user_df = user_df[order]
+    # user_df = user_df[order]
     # user_df = user_df.add_cate.fillna(0)
     return user_df
 
@@ -348,9 +349,9 @@ def process_minute_level_pandas(minute_level_path=None, minute_level_df=None,
     # Add missing flag to heart rate
     missing_heart_rate = (minute_level_df.heart_rate.isnull()) | (minute_level_df.heart_rate == 0)
     minute_level_df["missing_heart_rate"] = missing_heart_rate
-    minute_level_df["heart_rate"] = minute_level_df["heart_rate"].fillna(0)
+    # minute_level_df["heart_rate"] = minute_level_df["heart_rate"].fillna(0)
     # Properly encode heart rate
-    minute_level_df["heart_rate"] = minute_level_df["heart_rate"].astype(int)
+    # minute_level_df["heart_rate"] = minute_level_df["heart_rate"].astype(int)
     
 
     minute_level_df['missing_steps'] = False
@@ -365,22 +366,20 @@ def process_minute_level_pandas(minute_level_path=None, minute_level_df=None,
     minute_level_df = pd.get_dummies(minute_level_df ,prefix = 'sleep_classic', columns = ['sleep_classic'],
                                     dtype = bool)
                                         
-    minute_level_df.reset_index(drop = True, inplace = True)
     
-    minute_level_df["date"] = minute_level_df["timestamp"].dt.date
+    minute_level_df["date"] = minute_level_df.index.get_level_values(1).date
 
     #Sorting will speed up dask queries later
-    minute_level_df = minute_level_df.sort_values("participant_id")
-    minute_level_df = minute_level_df.groupby("participant_id").apply(fill_missing_minutes)
-    del minute_level_df["participant_id"]
+    minute_level_df = minute_level_df.groupby(level=0).apply(fill_missing_minutes)
+    # del minute_level_df["participant_id"]
     minute_level_df = minute_level_df.reset_index()
 
-    minute_level_df["sleep_classic_0"] = minute_level_df["sleep_classic_0"].astype(bool)
-    minute_level_df["sleep_classic_1"] = minute_level_df["sleep_classic_1"].astype(bool)
-    minute_level_df["sleep_classic_2"] = minute_level_df["sleep_classic_2"].astype(bool)
-    minute_level_df["sleep_classic_3"] = minute_level_df["sleep_classic_3"].astype(bool)
+    # minute_level_df["sleep_classic_0"] = minute_level_df["sleep_classic_0"].astype(bool)
+    # minute_level_df["sleep_classic_1"] = minute_level_df["sleep_classic_1"].astype(bool)
+    # minute_level_df["sleep_classic_2"] = minute_level_df["sleep_classic_2"].astype(bool)
+    # minute_level_df["sleep_classic_3"] = minute_level_df["sleep_classic_3"].astype(bool)
     # minute_level_df.to_csv("data/interim/processed_fitbit_minute_level_activity.csv")
-    table = pa.Table.from_pandas(minute_level_df, preserve_index=False)
+    table = pa.Table.from_pandas(minute_level_df, preserve_index=True)
 
     if out_path is None:
         out_path = get_processed_dataset_path("processed_fitbit_minute_level_activity")
@@ -391,20 +390,20 @@ def process_minute_level_pandas(minute_level_path=None, minute_level_df=None,
     paths = glob.glob(os.path.join(out_path,"*","*.parquet"))
     dd.io.parquet.create_metadata_file(paths)
 
-def fill_missing_minutes(user_df):
-    # This works because the data was pre-cleaned so that the
-    # last day ends just before midnight
-    min_date = user_df["timestamp"].min()
-    max_date = user_df["timestamp"].max()
-    new_index = pd.DatetimeIndex(pd.date_range(start=min_date,end=max_date,freq="1min"),
-                                name = "timestamp")
-    user_df = user_df.set_index("timestamp").reindex(new_index)
-    user_df["missing_heartrate"] = user_df["missing_heartrate"].fillna(True)
-    user_df["missing_steps"] = user_df["missing_steps"].fillna(True)
-    user_df["steps"] = user_df["steps"].fillna(0)
-    user_df["date"] = user_df.index.date
-    user_df = user_df.fillna(0)
-    return user_df
+# def fill_missing_minutes(user_df):
+#     # This works because the data was pre-cleaned so that the
+#     # last day ends just before midnight
+#     min_date = user_df["timestamp"].min()
+#     max_date = user_df["timestamp"].max()
+#     new_index = pd.DatetimeIndex(pd.date_range(start=min_date,end=max_date,freq="1min"),
+#                                 name = "timestamp")
+#     user_df = user_df.set_index("timestamp").reindex(new_index)
+#     user_df["missing_heartrate"] = user_df["missing_heartrate"].fillna(True)
+#     user_df["missing_steps"] = user_df["missing_steps"].fillna(True)
+#     user_df["steps"] = user_df["steps"].fillna(0)
+#     user_df["date"] = user_df.index.date
+#     user_df = user_df.fillna(0)
+#     return user_df
 
 def url_from_path(path,filesystem="file://"):
     if path:
