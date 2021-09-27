@@ -18,14 +18,63 @@ from petastorm.unischema import dict_to_spark_row, Unischema, UnischemaField, _n
 
 MINS_IN_DAY = 60*24
 
+
+from contextlib import contextmanager
+from pyspark.sql import SparkSession
+
+@contextmanager
+def spark_timezone(timezone: str):
+    """Context manager to temporarily set spark timezone during context manager
+    life time while preserving original timezone. This is especially
+    meaningful in conjunction with casting timestamps when automatic timezone
+    conversions are applied by spark.
+
+    Please be aware that the timezone property should be adjusted during DAG
+    creation and execution (including both spark transformations and actions).
+    Changing the timezone while adding filter/map tasks might not be
+    sufficient. Be sure to change the timezone when actually executing a spark
+    action like collect/save etc.
+
+    Parameters
+    ----------
+    timezone: str
+        Name of the timezone (e.g. 'UTC' or 'Europe/Berlin').
+
+    Examples
+    --------
+    >>> with spark_timezone("Europe/Berlin"):
+    >>>     df.select(df["ts_col"].cast("timestamp")).show()
+
+    """
+
+    spark = get_active_spark_context()
+    current = spark.conf.get("spark.sql.session.timeZone")
+    spark.conf.set("spark.sql.session.timeZone", timezone)
+
+    try:
+        yield None
+    finally:
+        spark.conf.set("spark.sql.session.timeZone", current)
+
+
+def get_active_spark_context() -> SparkSession:
+    """Helper function to return the currently active spark context.
+
+    """
+
+    return SparkSession.builder.getOrCreate()
+
+
+
 @click.command()
 @click.argument("input_path", type=click.Path(file_okay=False,exists=True))
 @click.argument("output_path", type=click.Path(file_okay=False,exists=False))
 @click.option("--max_missing_days_in_window", type=int, default=2)
 @click.option("--min_windows", type=int, default=1)
 @click.option("--day_window_size", type=int, default=4)
+@click.option("--parse_timestamp", is_flag=True)
 def main(input_path, output_path, max_missing_days_in_window, 
-                    min_windows, day_window_size):
+                    min_windows, day_window_size, parse_timestamp):
                 
     if not "file://" in output_path:
         output_path = "file://"+ output_path
@@ -61,14 +110,15 @@ def main(input_path, output_path, max_missing_days_in_window,
     # well as save petastorm specific metadata
     with materialize_dataset(spark, output_path, schema, rowgroup_size_mb):
 
-        # rows_rdd = \
-        #     .map(row_generator)\
-        #     .map(lambda x: dict_to_spark_row(schema, x))
-
-        df = spark.read.parquet(input_path)
+        df = spark.read.parquet(input_path,)
         dbl_cols = [f.name for f in df.schema.fields if isinstance(f.dataType, sql_types.DoubleType)]
         non_dbl_cols = [f.name for f in df.schema.fields if not isinstance(f.dataType, sql_types.DoubleType)]
-        # w = Window.partitionBy(input.id).orderBy(input.timestamp)
+        if parse_timestamp:
+            with spark_timezone("UTC"):
+                # Need to do this because otherwise Spark will use the system's timezone info
+                df = df.withColumn('timestamp', f.from_unixtime(df.timestamp/pow(10,9)))
+                df = df.withColumn('timestamp', f.to_timestamp(df.timestamp))
+
         assemblers = [VectorAssembler(inputCols=[col], outputCol=col + "_vec") for col in dbl_cols]
         scalers = [StandardScaler(inputCol=col + "_vec", outputCol=col + "_scaled") for col in dbl_cols]
         pipeline = Pipeline(stages=assemblers + scalers)
