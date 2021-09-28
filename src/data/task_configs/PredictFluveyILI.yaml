@@ -1,0 +1,12 @@
+task_name:
+  PredictEvidationILI
+dataset_args:  
+  day_window_size: 4
+  max_missing_days_in_window: 2
+  shuffle: 1
+  split_date: 2020-02-10
+task_args:
+  feather_path: data/raw/UW-flu-label-transfer/lsfs-day-level-labels.feather
+  ili_types: [1,2,3]
+  window_onset_min: -1
+  window_onset_max: 5
