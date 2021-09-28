@@ -245,7 +245,11 @@ class ActivityTask(Task):
 
                 participant_id = row.pop("participant_id")
                 
+                if hasattr(self,"keys"):
+                    keys = self.keys
+                else:
                 keys = sorted(row.keys())
+
                 result = np.vstack([row[k].T for k in keys]).T
 
                 label = int(labler(participant_id,start,end))
@@ -312,6 +316,14 @@ class PredictFluPos(ActivityTask, ClassificationMixin):
                 **kwargs):
         self.labler = FluPosLabler()
         dataset_args["labeler"] = self.labler
+        self.keys = ['heart_rate',
+                     'missing_heart_rate',
+                     'missing_steps',
+                     'sleep_classic_0',
+                     'sleep_classic_1',
+                     'sleep_classic_2',
+                     'sleep_classic_3', 
+                     'steps']
 
         ActivityTask.__init__(self,td.CustomLabler,dataset_args=dataset_args,
                                  activity_level=activity_level,**kwargs)
