@@ -108,7 +108,7 @@ def main(input_path, output_path, max_missing_days_in_window,
 
         np_dtype = field.numpy_dtype
         if np_dtype is np.float64:
-            new_fields.append(UnischemaField(name,np.float32,nullable=False,shape=(expected_length,)))
+            new_fields.append(UnischemaField(name,np.float16,nullable=False,shape=(expected_length,)))
         else:
             new_fields.append(UnischemaField(name,np_dtype,nullable=False,shape=(expected_length,)))
         
@@ -117,6 +117,7 @@ def main(input_path, output_path, max_missing_days_in_window,
 
     schema = Unischema("homekit",new_fields)
     rowgroup_size_mb = 256
+
     configuation_properties = [
     ("spark.master","local[95]"),
     ("spark.ui.port","4050"),
