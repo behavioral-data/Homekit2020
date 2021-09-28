@@ -16,6 +16,7 @@ from petastorm.codecs import ScalarCodec, CompressedImageCodec, NdarrayCodec
 from petastorm.etl.dataset_metadata import materialize_dataset
 from petastorm.unischema import dict_to_spark_row, Unischema, UnischemaField, _numpy_to_spark_mapping
 
+import pandas as pd
 MINS_IN_DAY = 60*24
 
 
@@ -73,13 +74,26 @@ def get_active_spark_context() -> SparkSession:
 @click.option("--min_windows", type=int, default=1)
 @click.option("--day_window_size", type=int, default=4)
 @click.option("--parse_timestamp", is_flag=True)
+@click.option("--min_date", type=str, default=None)
+@click.option("--max_date", type=str, default=None)
 def main(input_path, output_path, max_missing_days_in_window, 
-                    min_windows, day_window_size, parse_timestamp):
+                    min_windows, day_window_size, parse_timestamp,
+                    min_date=None, max_date=None):
                 
     if not "file://" in output_path:
         output_path = "file://"+ output_path
     
-    pyarrow_dataset = ParquetDataset(input_path)
+    filters = [] 
+    if min_date:
+        filters.append(("date",">=",min_date))
+    if max_date:
+        filters.append(("date","<=",max_date))
+
+    if len(filters) == 0:
+        filters=None
+
+    pyarrow_dataset = ParquetDataset(input_path,validate_schema=False,
+                                    filters=filters)
     schema = Unischema.from_arrow_schema(pyarrow_dataset)
     
     expected_length = day_window_size*MINS_IN_DAY
@@ -110,7 +124,10 @@ def main(input_path, output_path, max_missing_days_in_window,
     # well as save petastorm specific metadata
     with materialize_dataset(spark, output_path, schema, rowgroup_size_mb):
 
-        df = spark.read.parquet(input_path,)
+        df = spark.read.parquet(input_path)
+        if max_date and min_date:
+            df = df.where(df.date.between(pd.to_datetime(min_date),pd.to_datetime(max_date)))
+
         dbl_cols = [f.name for f in df.schema.fields if isinstance(f.dataType, sql_types.DoubleType)]
         non_dbl_cols = [f.name for f in df.schema.fields if not isinstance(f.dataType, sql_types.DoubleType)]
         if parse_timestamp:
