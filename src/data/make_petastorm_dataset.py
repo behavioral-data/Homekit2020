@@ -5,18 +5,21 @@ import click
 from pyarrow.parquet import ParquetDataset
 
 from pyspark.sql import SparkSession
+from pyspark.conf import SparkConf
+
 import pyspark.sql.types as sql_types
 from pyspark.sql import functions as f
 from pyspark.sql.window import Window
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import StandardScaler, VectorAssembler
-
+from pyspark import SparkContext
 
 from petastorm.codecs import ScalarCodec, CompressedImageCodec, NdarrayCodec
 from petastorm.etl.dataset_metadata import materialize_dataset
 from petastorm.unischema import dict_to_spark_row, Unischema, UnischemaField, _numpy_to_spark_mapping
 
 import pandas as pd
+
 MINS_IN_DAY = 60*24
 
 
@@ -114,11 +117,19 @@ def main(input_path, output_path, max_missing_days_in_window,
 
     schema = Unischema("homekit",new_fields)
     rowgroup_size_mb = 256
-    spark = SparkSession.builder.master("local[64]")\
-                                .config("spark.executor.memory", "32g")\
-                                .config("spark.driver.memory", "32g")\
-                                .appName("Petastorm Conversion").getOrCreate()
-    sc = spark.sparkContext
+    configuation_properties = [
+    ("spark.master","local[95]"),
+    ("spark.ui.port","4050"),
+    ("spark.executor.memory","750g"),
+    ('spark.driver.memory',  '2000g'),
+    ("spark.driver.maxResultSize", '0'), # unlimited
+    ("spark.network.timeout",            "10000001"),
+    ("spark.executor.heartbeatInterval", "10000000")]   
+    
+    conf = SparkConf().setAll(configuation_properties)
+    sc = SparkContext(conf=conf, appName="PetaStorm Conversion")
+    spark = SparkSession(sc)
+
 
     # Wrap dataset materialization portion. Will take care of setting up spark environment variables as
     # well as save petastorm specific metadata
