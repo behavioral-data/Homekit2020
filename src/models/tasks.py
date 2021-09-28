@@ -2,7 +2,7 @@
 import sys
 import datetime
 from warnings import WarningMessage
-import time
+import os
 
 from pyspark.sql.functions import transform
 from pyarrow.parquet import ParquetDataset
@@ -21,7 +21,7 @@ import src.data.task_datasets as td
 from src.models.eval import classification_eval, autoencode_eval
 from src.data.utils import load_processed_table, load_cached_activity_reader, url_from_path
 from src.utils import get_logger
-from src.models.lablers import FluPosLabler, ClauseLabler
+from src.models.lablers import FluPosLabler, ClauseLabler, EvidationILILabler
 
 logger = get_logger(__name__)
 
@@ -248,7 +248,7 @@ class ActivityTask(Task):
                 if hasattr(self,"keys"):
                     keys = self.keys
                 else:
-                keys = sorted(row.keys())
+                    keys = sorted(row.keys())
 
                 result = np.vstack([row[k].T for k in keys]).T
 
@@ -335,6 +335,56 @@ class PredictFluPos(ActivityTask, ClassificationMixin):
     
     def get_labler(self):
         return self.labler
+
+class PredictEvidationILI(ActivityTask, ClassificationMixin):
+    """Predict the whether a participant was positive
+       given a rolling window of minute level activity data.
+       We validate on data after split_date, but before
+       max_date, if provided"""
+
+    def __init__(self, feather_path,
+                       dataset_args={}, 
+                       activity_level = "minute",
+                       ili_types=[1,2,3],
+                       window_onset_min = -5,
+                       window_onset_max = 1,
+                       **kwargs):
+        
+        #TODO would be nice to have a task_args field in the task spec yaml
+        self.ili_types = ili_types
+        self.keys =  ['heart_rate',
+                     'missing_heart_rate',
+                     'missing_steps',
+                     'sleep_classic_0',
+                     'sleep_classic_1',
+                     'sleep_classic_2',
+                     'sleep_classic_3', 
+                     'steps']
+        
+        self.feather_path = feather_path,
+        self.filename = os.path.basename(feather_path)
+        self.window_onset_min = window_onset_min
+        self.window_onset_max = window_onset_max
+
+        self.labler = EvidationILILabler(feather_path,
+                                         ili_types = self.ili_types,
+                                         window_onset_min = self.window_onset_min,
+                                         window_onset_max = self.window_onset_max)
+
+        dataset_args["labeler"] = self.labler
+
+        ActivityTask.__init__(self,td.CustomLabler,dataset_args=dataset_args,
+                                 activity_level=activity_level,**kwargs)
+        ClassificationMixin.__init__(self)
+        
+
+    def get_name(self):
+        return f"PredictEvidationILI-types:{self.ili_types}-window_onset_min:{self.window_onset_min}"\
+               f"-window_onset_max:{self.window_onset_max}-file:{self.filename}"
+    
+    def get_labler(self):
+        return self.labler
+
 
 class PredictTrigger(ActivityTask,ClassificationMixin):
     """Predict the whether a participant triggered the 
