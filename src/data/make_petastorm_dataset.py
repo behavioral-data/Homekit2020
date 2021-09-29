@@ -79,13 +79,16 @@ def get_active_spark_context() -> SparkSession:
 @click.option("--parse_timestamp", is_flag=True)
 @click.option("--min_date", type=str, default=None)
 @click.option("--max_date", type=str, default=None)
+@click.option("--rename", type=str, multiple=True)
 def main(input_path, output_path, max_missing_days_in_window, 
                     min_windows, day_window_size, parse_timestamp,
-                    min_date=None, max_date=None):
+                    min_date=None, max_date=None, rename=None):
+
                 
     if not "file://" in output_path:
         output_path = "file://"+ output_path
     
+    rename = {x.split(":")[0] : x.split(":")[1] for x in rename}
     filters = [] 
     if min_date:
         filters.append(("date",">=",min_date))
@@ -99,16 +102,18 @@ def main(input_path, output_path, max_missing_days_in_window,
                                     filters=filters)
     schema = Unischema.from_arrow_schema(pyarrow_dataset)
     
+   
     expected_length = day_window_size*MINS_IN_DAY
     new_fields = []
     for field in schema.fields.values():
         name = field.name
         if name in ["date","timestamp"]:
             continue
-
+        if name in rename:
+            name = rename[name]
         np_dtype = field.numpy_dtype
         if np_dtype is np.float64:
-            new_fields.append(UnischemaField(name,np.float16,nullable=False,shape=(expected_length,)))
+            new_fields.append(UnischemaField(name,np.float32,nullable=False,shape=(expected_length,)))
         else:
             new_fields.append(UnischemaField(name,np_dtype,nullable=False,shape=(expected_length,)))
         
@@ -137,9 +142,11 @@ def main(input_path, output_path, max_missing_days_in_window,
     with materialize_dataset(spark, output_path, schema, rowgroup_size_mb):
 
         df = spark.read.parquet(input_path)
+        if rename:
+            df = rename_columns(df,rename)
         if max_date and min_date:
             df = df.where(df.date.between(pd.to_datetime(min_date),pd.to_datetime(max_date)))
-
+        
         dbl_cols = [f.name for f in df.schema.fields if isinstance(f.dataType, sql_types.DoubleType)]
         non_dbl_cols = [f.name for f in df.schema.fields if not isinstance(f.dataType, sql_types.DoubleType)]
         if parse_timestamp:
