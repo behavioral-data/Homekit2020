@@ -204,7 +204,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         results["eval/roc_auc"] = eval_auc
         
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
-        if os.environ["LOCAL_RANK"] == "0":
+        if os.environ.get("LOCAL_RANK","0") == "0":
             self.logger.experiment.log({"eval/roc": wandb_roc_curve(eval_preds,eval_labels, limit = 9999)}, commit=False)
             self.logger.experiment.log({"eval/pr": wandb_pr_curve(eval_preds,eval_labels)}, commit=False)
             self.logger.experiment.log({"eval/det": wandb_detection_error_tradeoff_curve(eval_preds,eval_labels, limit=9999)}, commit=False)
