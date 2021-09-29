@@ -269,9 +269,9 @@ def train_cnn_transformer(
     logger.info(f"Training CNNTransformer")
     
     if task_config:
-        task_name = task_config["task_name"]
-        task_args = task_config["task_args"]
-        dataset_args = task_config["dataset_args"]
+        task_name = task_config.get("task_name")
+        task_args = task_config.get("task_args",{})
+        dataset_args = task_config.get("dataset_args",{})
     else:
         task_name = None
         task_args = None
