@@ -35,7 +35,7 @@ from src.models.trainer import FluTrainer
 from src.SAnD.core.model import SAnD
 from src.utils import get_logger, render_network_plot, set_gpus_automatically
 from src.data.utils import write_dict_to_json
-from src.models.load_model import load_model_from_checkpoint
+from src.models.load_model import load_model_from_huggingface_checkpoint
 
 from transformers import (BertForSequenceClassification, Trainer, 
                          TrainingArguments, BertConfig, 
@@ -329,7 +329,11 @@ def train_cnn_transformer(
                                         out_channels=out_channels,
                                         **model_specific_kwargs)
     else:
-        model = load_model_from_checkpoint(model_path)
+        if use_huggingface:
+            model = load_model_from_huggingface_checkpoint(model_path)
+        else:
+            model = CNNToTransformerEncoder.load_from_checkpoint(model_path, **model_specific_kwargs)
+
         if reset_cls_params and hasattr(model,"clf"):
             model.clf.reset_parameters()
 

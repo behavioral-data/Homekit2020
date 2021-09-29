@@ -48,7 +48,7 @@ nerual_options = [
 universal_options = [
     click.Option(("--task_config",), type=str, help = "path to config yaml for task",callback=validate_yaml_or_json),
     click.Option(("--task_name",), type=str, help = "name of task in src/models/tasks.py"),
-    click.Option(("--model_path",), type=click.Path(file_okay=False,exists=True),
+    click.Option(("--model_path",), type=click.Path(exists=True),
                   help = "path containing a checkpoint-X directory and a model_config.json"),
     click.Option(('--no_wandb',), is_flag=True),
     click.Option(('--tune',), is_flag=True),

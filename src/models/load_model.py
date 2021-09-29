@@ -14,7 +14,7 @@ def get_most_recent_checkpoint(checkpoint_dir):
     checkpoint_number = [int(x.split("checkpoint-")[-1]) for x in checkpoint_paths]
     return checkpoint_paths[np.argmax(checkpoint_number)]
 
-def load_model_from_checkpoint(path):
+def load_model_from_huggingface_checkpoint(path):
     config_path = os.path.join(path,"model_config.json")
     config = load_json(config_path)
     base_class = globals()[config.pop("model_base_class")]
