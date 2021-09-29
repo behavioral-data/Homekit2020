@@ -5,18 +5,70 @@ import click
 from pyarrow.parquet import ParquetDataset
 
 from pyspark.sql import SparkSession
+from pyspark.conf import SparkConf
+
 import pyspark.sql.types as sql_types
 from pyspark.sql import functions as f
 from pyspark.sql.window import Window
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import StandardScaler, VectorAssembler
-
+from pyspark import SparkContext
 
 from petastorm.codecs import ScalarCodec, CompressedImageCodec, NdarrayCodec
 from petastorm.etl.dataset_metadata import materialize_dataset
 from petastorm.unischema import dict_to_spark_row, Unischema, UnischemaField, _numpy_to_spark_mapping
 
+import pandas as pd
+
 MINS_IN_DAY = 60*24
+
+
+from contextlib import contextmanager
+from pyspark.sql import SparkSession
+
+@contextmanager
+def spark_timezone(timezone: str):
+    """Context manager to temporarily set spark timezone during context manager
+    life time while preserving original timezone. This is especially
+    meaningful in conjunction with casting timestamps when automatic timezone
+    conversions are applied by spark.
+
+    Please be aware that the timezone property should be adjusted during DAG
+    creation and execution (including both spark transformations and actions).
+    Changing the timezone while adding filter/map tasks might not be
+    sufficient. Be sure to change the timezone when actually executing a spark
+    action like collect/save etc.
+
+    Parameters
+    ----------
+    timezone: str
+        Name of the timezone (e.g. 'UTC' or 'Europe/Berlin').
+
+    Examples
+    --------
+    >>> with spark_timezone("Europe/Berlin"):
+    >>>     df.select(df["ts_col"].cast("timestamp")).show()
+
+    """
+
+    spark = get_active_spark_context()
+    current = spark.conf.get("spark.sql.session.timeZone")
+    spark.conf.set("spark.sql.session.timeZone", timezone)
+
+    try:
+        yield None
+    finally:
+        spark.conf.set("spark.sql.session.timeZone", current)
+
+
+def get_active_spark_context() -> SparkSession:
+    """Helper function to return the currently active spark context.
+
+    """
+
+    return SparkSession.builder.getOrCreate()
+
+
 
 @click.command()
 @click.argument("input_path", type=click.Path(file_okay=False,exists=True))
@@ -24,13 +76,27 @@ MINS_IN_DAY = 60*24
 @click.option("--max_missing_days_in_window", type=int, default=2)
 @click.option("--min_windows", type=int, default=1)
 @click.option("--day_window_size", type=int, default=4)
+@click.option("--parse_timestamp", is_flag=True)
+@click.option("--min_date", type=str, default=None)
+@click.option("--max_date", type=str, default=None)
 def main(input_path, output_path, max_missing_days_in_window, 
-                    min_windows, day_window_size):
+                    min_windows, day_window_size, parse_timestamp,
+                    min_date=None, max_date=None):
                 
     if not "file://" in output_path:
         output_path = "file://"+ output_path
     
-    pyarrow_dataset = ParquetDataset(input_path)
+    filters = [] 
+    if min_date:
+        filters.append(("date",">=",min_date))
+    if max_date:
+        filters.append(("date","<=",max_date))
+
+    if len(filters) == 0:
+        filters=None
+
+    pyarrow_dataset = ParquetDataset(input_path,validate_schema=False,
+                                    filters=filters)
     schema = Unischema.from_arrow_schema(pyarrow_dataset)
     
     expected_length = day_window_size*MINS_IN_DAY
@@ -42,7 +108,7 @@ def main(input_path, output_path, max_missing_days_in_window,
 
         np_dtype = field.numpy_dtype
         if np_dtype is np.float64:
-            new_fields.append(UnischemaField(name,np.float32,nullable=False,shape=(expected_length,)))
+            new_fields.append(UnischemaField(name,np.float16,nullable=False,shape=(expected_length,)))
         else:
             new_fields.append(UnischemaField(name,np_dtype,nullable=False,shape=(expected_length,)))
         
@@ -51,24 +117,37 @@ def main(input_path, output_path, max_missing_days_in_window,
 
     schema = Unischema("homekit",new_fields)
     rowgroup_size_mb = 256
-    spark = SparkSession.builder.master("local[64]")\
-                                .config("spark.executor.memory", "32g")\
-                                .config("spark.driver.memory", "32g")\
-                                .appName("Petastorm Conversion").getOrCreate()
-    sc = spark.sparkContext
+
+    configuation_properties = [
+    ("spark.master","local[95]"),
+    ("spark.ui.port","4050"),
+    ("spark.executor.memory","750g"),
+    ('spark.driver.memory',  '2000g'),
+    ("spark.driver.maxResultSize", '0'), # unlimited
+    ("spark.network.timeout",            "10000001"),
+    ("spark.executor.heartbeatInterval", "10000000")]   
+    
+    conf = SparkConf().setAll(configuation_properties)
+    sc = SparkContext(conf=conf, appName="PetaStorm Conversion")
+    spark = SparkSession(sc)
+
 
     # Wrap dataset materialization portion. Will take care of setting up spark environment variables as
     # well as save petastorm specific metadata
     with materialize_dataset(spark, output_path, schema, rowgroup_size_mb):
 
-        # rows_rdd = \
-        #     .map(row_generator)\
-        #     .map(lambda x: dict_to_spark_row(schema, x))
-
         df = spark.read.parquet(input_path)
+        if max_date and min_date:
+            df = df.where(df.date.between(pd.to_datetime(min_date),pd.to_datetime(max_date)))
+
         dbl_cols = [f.name for f in df.schema.fields if isinstance(f.dataType, sql_types.DoubleType)]
         non_dbl_cols = [f.name for f in df.schema.fields if not isinstance(f.dataType, sql_types.DoubleType)]
-        # w = Window.partitionBy(input.id).orderBy(input.timestamp)
+        if parse_timestamp:
+            with spark_timezone("UTC"):
+                # Need to do this because otherwise Spark will use the system's timezone info
+                df = df.withColumn('timestamp', f.from_unixtime(df.timestamp/pow(10,9)))
+                df = df.withColumn('timestamp', f.to_timestamp(df.timestamp))
+
         assemblers = [VectorAssembler(inputCols=[col], outputCol=col + "_vec") for col in dbl_cols]
         scalers = [StandardScaler(inputCol=col + "_vec", outputCol=col + "_scaled") for col in dbl_cols]
         pipeline = Pipeline(stages=assemblers + scalers)

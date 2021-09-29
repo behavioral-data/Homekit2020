@@ -133,6 +133,9 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.eval_probs = []
         self.eval_labels =[]
 
+        self.test_probs = []
+        self.test_labels =[]
+
         self.batch_size = inital_batch_size
         self.train_dataset = None
         self.eval_dataset=None
@@ -195,6 +198,42 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.eval_probs = []
         self.eval_labels = []
     
+    def on_validation_epoch_start(self):
+        #Not sure why I have to explicitly do this, but model fails otherwise
+        torch.cuda.empty_cache()
+        self.test_probs = []
+        self.test_labels = []
+    
+    def on_test_epoch_end(self):
+        test_preds = torch.cat(self.test_probs, dim=0)
+        test_labels = torch.cat(self.test_labels, dim=0)
+        test_auc = torchmetrics.functional.auroc(test_preds,test_labels,pos_label=1)
+        results = {}
+        results["test/roc_auc"] = test_auc
+        
+        # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
+        if os.environ["LOCAL_RANK"] == "0":
+            self.logger.experiment.log({"test/roc": wandb_roc_curve(test_preds,test_labels, limit = 9999)}, commit=False)
+            self.logger.experiment.log({"test/pr": wandb_pr_curve(test_preds,test_labels)}, commit=False)
+            self.logger.experiment.log({"test/det": wandb_detection_error_tradeoff_curve(test_preds,test_labels, limit=9999)}, commit=False)
+        
+        self.log_dict(results)
+        super().on_test_epoch_end()
+    
+    def test_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
+        x = batch["inputs_embeds"]
+        y = batch["label"]
+        with torch.no_grad():
+            loss,logits = self.forward(x,y)
+
+            self.log("test/loss", loss.item(),on_step=True,sync_dist=True)
+            
+            probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
+            self.test_probs.append(probs.detach().cpu())
+            self.test_labels.append(y.detach().cpu())
+        
+        return {"loss":loss, "preds": logits, "labels":y}
+
     def on_validation_epoch_end(self):
 
         eval_preds = torch.cat(self.eval_probs, dim=0)

@@ -12,6 +12,8 @@ from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.loggers.base import DummyExperiment
 from pytorch_lightning.profiler import AdvancedProfiler
 
+from torch.utils.data import DataLoader
+
 from petastorm import make_reader
 from petastorm.pytorch import DataLoader as PetastormDataLoader
 
@@ -265,9 +267,14 @@ def train_cnn_transformer(
         set_gpus_automatically(auto_set_gpu)
 
     logger.info(f"Training CNNTransformer")
+    
     if task_config:
         task_name = task_config["task_name"]
+        task_args = task_config["task_args"]
         dataset_args = task_config["dataset_args"]
+    else:
+        task_name = None
+        task_args = None
 
     if not eval_frac is None:
         dataset_args["eval_frac"] = eval_frac
@@ -287,15 +294,16 @@ def train_cnn_transformer(
     elif task_ray_obj_ref:
         task = ray.get(task_ray_obj_ref)
     else:
-        task = get_task_with_name(task_name)(dataset_args=dataset_args,
-                                            activity_level=activity_level,
-                                            look_for_cached_datareader=look_for_cached_datareader,
-                                            only_with_lab_results = only_with_lab_results,
-                                            datareader_ray_obj_ref=datareader_ray_obj_ref,
-                                            backend=backend,
-                                            train_path=train_path,
-                                            eval_path=eval_path,
-                                            test_path=test_path)
+        task = get_task_with_name(task_name)( **task_args,
+                                              dataset_args=dataset_args,
+                                              activity_level=activity_level,
+                                              look_for_cached_datareader=look_for_cached_datareader,
+                                              only_with_lab_results = only_with_lab_results,
+                                              datareader_ray_obj_ref=datareader_ray_obj_ref,
+                                              backend=backend,
+                                              train_path=train_path,
+                                              eval_path=eval_path,
+                                              test_path=test_path)
     
     
     if not model_path:
@@ -748,6 +756,7 @@ def run_pytorch_lightning(model, task,
                         backend="petastorm"):       
 
     pl.seed_everything(42194)
+    do_eval = bool(task.eval_url)
     if not no_wandb:
         # Creating two wandb runs here?
         import wandb
@@ -773,7 +782,7 @@ def run_pytorch_lightning(model, task,
                             filename='{epoch}-',
                             # save_last=True,
                             save_top_k=3,
-                            monitor="eval/roc_auc",
+                            monitor="eval/roc_auc" if do_eval else "train/loss" ,
                             every_n_val_epochs=1,
                             mode='max')
 
@@ -789,6 +798,7 @@ def run_pytorch_lightning(model, task,
                          accelerator="ddp",
                          terminate_on_nan=True,
                          num_sanity_val_steps=0,
+                         limit_val_batches= 0.0 if not do_eval else 1.0,
                          limit_train_batches=10 if debug_mode else 1.0,
                          **training_args)
 
@@ -799,11 +809,17 @@ def run_pytorch_lightning(model, task,
         trainer.fit(model)
     else:
         ## Manages train and eval context for petastorm:
-        with PetastormDataLoader(make_reader(task.train_url,transform_spec=task.transform),
-                                   batch_size=model.batch_size) as train_dataset:
-            with PetastormDataLoader(make_reader(task.eval_url,transform_spec=task.transform),
-                                   batch_size=3*model.batch_size) as eval_dataset:
-                trainer.fit(model,train_dataset,eval_dataset)
+
+        if do_eval:
+            with PetastormDataLoader(make_reader(task.train_url,transform_spec=task.transform),
+                                    batch_size=model.batch_size) as train_dataset:
+                with PetastormDataLoader(make_reader(task.eval_url,transform_spec=task.transform),
+                                    batch_size=3*model.batch_size) as eval_dataset:
+                    trainer.fit(model,train_dataset,eval_dataset)
+        else:
+            with PetastormDataLoader(make_reader(task.train_url,transform_spec=task.transform),
+                                    batch_size=model.batch_size) as train_dataset:
+                    trainer.fit(model, train_dataset, DataLoader([["dummy"]]))
 
     print(f"Best model score: {checkpoint_callback.best_model_score}")
     print(f"Best model path: {checkpoint_callback.best_model_path}")

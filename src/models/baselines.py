@@ -51,7 +51,7 @@ def xgb_wandb_callback():
 
     return callback
 
-def train_xgboost(task_name, dataset_args ={},
+def train_xgboost(task_config,
                 no_wandb=False,
                 notes=None,
                 activity_level="day",
@@ -68,6 +68,9 @@ def train_xgboost(task_name, dataset_args ={},
                 **_):
 
     """ Baseline for classification tasks that uses daily aggregated features"""
+    task_name = task_config["task_name"]
+    dataset_args = task_config["dataset_args"]
+
     logger.info(f"Training XGBoost on {task_name}")
     dataset_args["add_features_path"] = add_features_path
     dataset_args["data_location"] = data_location

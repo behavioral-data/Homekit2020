@@ -12,21 +12,29 @@ from src.data.utils import get_dask_df, write_pandas_to_parquet, load_processed_
 
 @click.command()
 @click.argument("out_path", type=click.Path(file_okay=False))
+@click.option("--in_path", type=click.Path())
 @click.option("--split_date",default=None)
+@click.option("--end_date",default=None)
 @click.option("--eval_frac",default=None)
 @click.option("--test_frac", default=0.5, help="Fraction of eval set that's reserved for testing")
 @click.option("--activity_level", type=click.Choice(["day","minute"]), default="minute")
 @click.option("--separate_train_and_eval", is_flag=True)
-def main(out_path, split_date=None, eval_frac=None,
+def main(out_path, in_path=None, split_date=None, end_date=None, eval_frac=None,
         test_frac = 0.5, activity_level="minute",
         separate_train_and_eval=False):
     
     if activity_level == "minute":
-        df = get_dask_df("processed_fitbit_minute_level_activity").compute()
+        if not in_path:
+            df = get_dask_df("processed_fitbit_minute_level_activity").compute()
+        elif in_path:
+            df = pd.read_parquet(in_path)
         timestamp_col = "timestamp"
     else:
         df = load_processed_table("fitbit_day_level_activity")
         timestamp_col = "date"
+
+    if end_date:
+        df = df[df[timestamp_col] < pd.to_datetime(end_date)]
 
     if split_date:
         past_date_mask = df[timestamp_col] >= pd.to_datetime(split_date)
