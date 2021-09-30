@@ -23,6 +23,7 @@ ${GIVEN_NODE}
 # Load modules or your own conda environment here
 # module load pytorch/v1.4.0-gpu
 
+source ~/.bashrc
 ${CONDA_PATH}
 conda activate ${CONDA_ENV}
 
