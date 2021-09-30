@@ -65,6 +65,7 @@ ifeq (True,$(HAS_CONDA))
 	conda activate $(PROJECT_NAME)
 	pip install -e .
 	echo MAIN_PATH="\"$PWD\"">> .env
+	echo PROJECT_NAME=$(PROJECT_NAME)>> .env
 	@echo ">>> New conda env created. Activate with:\n conda activate $(PROJECT_NAME)"
 else
 	$(PYTHON_INTERPRETER) -m pip install -q virtualenv virtualenvwrapper
