@@ -75,7 +75,7 @@ def wandb_pr_curve(preds,labels):
     return wandb.plot.pr_curve(labels, probs,classes_to_plot=[1],labels = ["Negative","Positive"])
     
 
-def wandb_detection_error_tradeoff_curve(preds,labels,return_table=False,limit=9999):
+def wandb_detection_error_tradeoff_curve(preds,labels,return_table=False,limit=999):
     preds = preds.cpu().numpy()
     # probs = np.stack((1-preds,preds)).T
   
@@ -102,7 +102,7 @@ def wandb_detection_error_tradeoff_curve(preds,labels,return_table=False,limit=9
     )
     return plot
 
-def wandb_roc_curve(preds,labels, return_table=False,limit=None):
+def wandb_roc_curve(preds,labels, return_table=False,limit=999):
     fpr, tpr, _ = torchmetrics.functional.roc(preds, labels, pos_label=1)
     if limit and limit < len(fpr):
         inds = np.random.choice(len(fpr), size=limit,replace=False)
