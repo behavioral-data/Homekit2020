@@ -7,7 +7,7 @@ import os
 
 from pathlib import Path
 this_dir = Path(__file__).parents[0]
-template_file = this_dir / "single_job_slurm_template.sh"
+template_file = this_dir / "slurm-template.sh"
 
 DIR = "${DIR}"
 JOB_NAME = "${JOB_NAME}"
@@ -27,6 +27,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dir",
         type=str,
+        default = "$PWD",
         required=True,
         help="The job's run directory")
     parser.add_argument(
