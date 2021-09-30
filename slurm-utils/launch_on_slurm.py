@@ -9,6 +9,9 @@ from pathlib import Path
 this_dir = Path(__file__).parents[0]
 template_file = this_dir / "slurm-template.sh"
 
+from dotenv import dotenv_values
+config = dotenv_values(".env")
+
 DIR = "${DIR}"
 JOB_NAME = "${JOB_NAME}"
 MEMORY = "${MEMORY}"
@@ -78,7 +81,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--conda-env",
         type=str,
-        default=None,
+        default=config["PROJECT_NAME"],
         help="The name of the conda environment")
     parser.add_argument(
         "--command",
