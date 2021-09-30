@@ -11,7 +11,7 @@ import os
 
 from pathlib import Path
 this_dir = Path(__file__).parents[0]
-template_file = this_dir / "slurm-template.sh"
+template_file = this_dir / "ray-slurm-template.sh"
 
 DIR = "${DIR}"
 JOB_NAME = "${JOB_NAME}"
