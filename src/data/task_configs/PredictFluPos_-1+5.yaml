@@ -1,0 +1,11 @@
+task_name:
+  PredictFluPos
+task_args:
+  window_onset_min: -1
+  window_onset_max: 5
+dataset_args:  
+  day_window_size: 4
+  max_missing_days_in_window: 2
+  shuffle: 1
+  split_date: 2020-02-10
+  clause: "have_flu > 0"

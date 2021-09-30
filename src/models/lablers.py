@@ -1,17 +1,28 @@
 import pandas as pd
 from pandas.core.computation.eval import eval as _eval
+from pandas.core.indexes.datetimes import date_range
 from pyspark.sql.functions import window
 
 import src.data.task_datasets as td
 
+
+def get_dates_around(date,days_minus,days_plus):
+    return pd.date_range(date + pd.to_timedelta(days_minus,unit="D"),
+                         date + pd.to_timedelta(days_plus,unit="D"))
+
 class FluPosLabler(object):
-    def __init__(self):
+    def __init__(self, window_onset_min = 0,
+                       window_onset_max = 0):
 
         self.lab_results_reader = td.LabResultsReader()
         self.results = self.lab_results_reader.results
         self.results["_date"] = pd.to_datetime(self.results["trigger_datetime"].dt.date)
         self.results["is_pos"] = self.results["result"] == "Detected"
         
+        self.results = self.results[self.results["is_pos"]]
+        mapper = lambda x: get_dates_around(x, days_minus=window_onset_min, days_plus=window_onset_max)
+        self.results["_date"] = self.results["_date"].map(mapper)
+        self.results = self.results.explode("_date")                                                        
         flus = ["Influenza A (Flu A)","Influenza B (Flu B)"]
         self.results = self.results[self.results["test_name"].isin(flus)]
 
@@ -28,8 +39,8 @@ class FluPosLabler(object):
 class EvidationILILabler(object):
     def __init__(self,feather_path,
                       ili_types=[1,2,3],
-                      window_onset_min = -5,
-                      window_onset_max = 1,
+                      window_onset_min = -1,
+                      window_onset_max = 5,
                       ):
         # Uses data like /projects/bdata/datasets/gatesfoundation/raw/UW-flu-label-transfer
 

@@ -313,8 +313,10 @@ class PredictFluPos(ActivityTask, ClassificationMixin):
        max_date, if provided"""
 
     def __init__(self,dataset_args={}, activity_level = "minute",
+                window_onset_max = 0, window_onset_min = 0,
                 **kwargs):
-        self.labler = FluPosLabler()
+        self.labler = FluPosLabler(window_onset_max=window_onset_max,
+                                   window_onset_min=window_onset_min)
         dataset_args["labeler"] = self.labler
         self.keys = ['heart_rate',
                      'missing_heart_rate',
