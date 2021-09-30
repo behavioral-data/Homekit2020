@@ -13,7 +13,7 @@ ${GIVEN_NODE}
 #SBATCH --nodes=${NUM_NODES}
 #SBATCH --cpus-per-task=${NUM_CPUS}
 #SBATCH --mem=${MEMORY}
-#SBATCH --exclusive
+####SBATCH --exclusive
 ### Give all resources to a single Ray task, ray can manage the resources internally
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-task=${NUM_GPUS_PER_NODE}
