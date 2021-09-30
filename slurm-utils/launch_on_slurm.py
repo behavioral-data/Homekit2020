@@ -19,6 +19,7 @@ ACCOUNT = "${ACCOUNT}"
 PARTITION = "${PARTITION}"
 NUM_NODES = "${NUM_NODES}"
 NUM_GPUS_PER_NODE = "${NUM_GPUS_PER_NODE}"
+NUM_CPUS = "${NUM_CPUS}"
 COMMAND_PLACEHOLDER = "${COMMAND_PLACEHOLDER}"
 CONDA_PATH = "${CONDA_PATH}"
 GIVEN_NODE = "${GIVEN_NODE}"
@@ -83,6 +84,14 @@ if __name__ == "__main__":
         type=str,
         default=config["PROJECT_NAME"],
         help="The name of the conda environment")
+    
+    parser.add_argument(
+        "--num-cpus",
+        type=int,
+        required=False,
+        default=8,
+        help="number of cpus to request")
+
     parser.add_argument(
         "--command",
         type=str,
@@ -127,6 +136,7 @@ if __name__ == "__main__":
     text = text.replace(CONDA_ENV,args.conda_env)
     text = text.replace(MEMORY,args.memory)
     text = text.replace(NUM_GPUS_PER_NODE, str(args.num_gpus))
+    text = text.replace(NUM_CPUS, str(args.num_cpus))
     text = text.replace(COMMAND_PLACEHOLDER, str(args.command))
     text = text.replace(GIVEN_NODE, node_info)
     text = text.replace(

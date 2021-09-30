@@ -11,6 +11,7 @@
 ${GIVEN_NODE}
 ### This script works for any number of nodes, Ray will find and manage all resources
 #SBATCH --nodes=${NUM_NODES}
+#SBATCH --cpus-per-task=${NUM_CPUS}
 #SBATCH --mem=${MEMORY}
 #SBATCH --exclusive
 ### Give all resources to a single Ray task, ray can manage the resources internally
