@@ -8,13 +8,13 @@ from wandb.data_types import Table
 
 import torch
 import torchmetrics
-from torchmetrics import Metric
+from torchmetrics import BinnedPrecisionRecallCurve
 
 from scipy.special import softmax
 from scipy.stats import pearsonr, spearmanr
 
 from sklearn.metrics import (accuracy_score,precision_recall_fscore_support, roc_auc_score,
-                            mean_absolute_error, det_curve)
+                            mean_absolute_error, det_curve, precision_recall_curve, auc)
 
 
 from functools import partial
@@ -70,9 +70,25 @@ def get_huggingface_classification_eval(threshold=0.5):
     return evaluator
 
 def wandb_pr_curve(preds,labels):
-    preds = preds.cpu().numpy()
-    probs = np.stack((1-preds,preds)).T
-    return wandb.plot.pr_curve(labels, probs,classes_to_plot=[1],labels = ["Negative","Positive"])
+    # preds = preds.cpu().numpy()
+    # labels = labels.cpu().numpy()
+    pr_curve = BinnedPrecisionRecallCurve(num_classes=1) 
+    precision, recall, _thresholds = pr_curve(preds, labels)
+    label_markers = ["Positive"] * len(precision)
+    table = Table(columns= ["class","precision","recall"], data=list(zip(label_markers,precision,recall)))
+
+    plot = wandb.plot_table(
+        "wandb/precision-recall-curve/v0",
+        table,
+        {"x": "recall", "y": "precision", "class": "class"},
+        {
+            "title": "Precision Recall Curve",
+            "x-axis-title": "Recall",
+            "y-axis-title": "Precision",
+        },
+
+    )
+    return plot
     
 
 def wandb_detection_error_tradeoff_curve(preds,labels,return_table=False,limit=999):
@@ -126,6 +142,11 @@ def wandb_roc_curve(preds,labels, return_table=False,limit=999):
     )
     return plot
 
+def pr_auc(pred,labels):
+    preds = pred.cpu().numpy()
+    precision, recall, thresholds = precision_recall_curve(labels,preds)
+    return auc(recall,precision)
+    
 def autoencode_eval(pred, labels):
     # Remove indices with pad tokens
     results = {}
@@ -138,3 +159,6 @@ def autoencode_eval(pred, labels):
     results["MAE"] = mean_absolute_error(pred_flat,labels_flat)
 
     return results
+
+def recall_at_precision():
+    ...
