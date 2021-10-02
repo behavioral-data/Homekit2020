@@ -332,7 +332,9 @@ def train_cnn_transformer(
         if use_huggingface:
             model = load_model_from_huggingface_checkpoint(model_path)
         else:
-            model = CNNToTransformerEncoder.load_from_checkpoint(model_path, **model_specific_kwargs)
+            model = CNNToTransformerEncoder.load_from_checkpoint(model_path, 
+                                                                strict=False,
+                                                                **model_specific_kwargs)
 
         if reset_cls_params and hasattr(model,"clf"):
             model.clf.reset_parameters()
