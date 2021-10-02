@@ -8,6 +8,8 @@ import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torchmetrics
+from torchmetrics import BinnedPrecisionRecallCurve
+
 import wandb
 from petastorm.pytorch import BatchedDataLoader
 from petastorm.pytorch import DataLoader as PetaDataLoader
@@ -18,7 +20,8 @@ from wandb import plot
 from src.models.losses import build_loss_fn
 from src.SAnD.core import modules
 from src.utils import check_for_wandb_run
-from src.models.eval import wandb_roc_curve, wandb_pr_curve, wandb_detection_error_tradeoff_curve
+from src.models.eval import (wandb_roc_curve, wandb_pr_curve, wandb_detection_error_tradeoff_curve,
+                             pr_auc)
 from torch import Tensor
 from torch.nn.modules import dropout
 from torch.utils.data.dataloader import DataLoader
@@ -139,6 +142,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.batch_size = inital_batch_size
         self.train_dataset = None
         self.eval_dataset=None
+
         self.save_hyperparameters()
 
     def forward(self, inputs_embeds,labels):
@@ -208,9 +212,11 @@ class CNNToTransformerEncoder(pl.LightningModule):
         test_preds = torch.cat(self.test_probs, dim=0)
         test_labels = torch.cat(self.test_labels, dim=0)
         test_auc = torchmetrics.functional.auroc(test_preds,test_labels,pos_label=1)
+        
         results = {}
         results["test/roc_auc"] = test_auc
-        
+        results["test/pr_auc"] = pr_auc(test_preds,test_labels) 
+
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
         if os.environ["LOCAL_RANK"] == "0":
             self.logger.experiment.log({"test/roc": wandb_roc_curve(test_preds,test_labels, limit = 9999)}, commit=False)
@@ -239,9 +245,11 @@ class CNNToTransformerEncoder(pl.LightningModule):
         eval_preds = torch.cat(self.eval_probs, dim=0)
         eval_labels = torch.cat(self.eval_labels, dim=0)
         eval_auc = torchmetrics.functional.auroc(eval_preds,eval_labels,pos_label=1)
+
         results = {}
         results["eval/roc_auc"] = eval_auc
-        
+        results["eval/pr_auc"] = pr_auc(eval_preds,eval_labels) 
+
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
         if os.environ.get("LOCAL_RANK","0") == "0":
             self.logger.experiment.log({"eval/roc": wandb_roc_curve(eval_preds,eval_labels, limit = 9999)}, commit=False)
