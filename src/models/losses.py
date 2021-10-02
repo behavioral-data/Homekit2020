@@ -43,16 +43,20 @@ class FocalLoss(nn.Module):
     binary focal loss
     """
 
-    def __init__(self, alpha=0.25, gamma=2):
+    def __init__(self, alpha=0.25, gamma=2, reduction="mean"):
         super(FocalLoss, self).__init__()
-        self.weight = torch.Tensor([alpha, 1-alpha])
-        self.nllLoss = nn.NLLLoss(weight=self.weight)
+        self.weight = [alpha, 1-alpha]
+        # self.nllLoss = nn.NLLLoss(weight=self.weight)
         self.gamma = gamma
+        self.reduction = reduction
 
-    def forward(self, input, target):
-        softmax = F.softmax(input, dim=1)
-        log_logits = torch.log(softmax)
-        fix_weights = (1 - softmax) ** self.gamma
-        logits = fix_weights * log_logits
-        loss = self.nllLoss(logits, target)
-        return loss
+
+    def forward(self, input_tensor, target_tensor):
+        log_prob = F.log_softmax(input_tensor, dim=-1)
+        prob = torch.exp(log_prob)
+        return F.nll_loss(
+            ((1 - prob) ** self.gamma) * log_prob, 
+            target_tensor, 
+            weight= input_tensor.new(self.weight),
+            reduction = self.reduction
+        )
