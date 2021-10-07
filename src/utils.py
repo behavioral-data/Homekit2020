@@ -57,7 +57,7 @@ def check_for_wandb_run():
     return wandb.run
 
 def render_network_plot(var,dir,filename="model",params=None):
-    graph = make_dot(var,params=None)
+    graph = make_dot(var,params=params)
     graph.format = "png"
     return graph.render(filename=filename,directory=dir)
 
@@ -81,3 +81,17 @@ def set_gpus_automatically(n):
     logger = get_logger(__name__)
     logger.info(f"Auto setting gpus to: {devices}")
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(devices)
+
+
+def visualize_model(model,dir="."):
+    """
+    Returns the path to an image of a model
+    """
+    x_dummy = torch.rand(model.input_dim).unsqueeze(0)
+    y_dummy = torch.tensor(1).unsqueeze(0)
+    pred_dummy = model(inputs_embeds=x_dummy, labels = y_dummy)[0]
+
+    params = dict(model.named_parameters())
+    model_img_path = render_network_plot(pred_dummy,dir,params=params)
+    return model_img_path
+

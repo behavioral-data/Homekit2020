@@ -33,7 +33,7 @@ from src.models.neural_baselines import create_neural_model
 from src.models.models import CNNToTransformerEncoder
 from src.models.trainer import FluTrainer
 from src.SAnD.core.model import SAnD
-from src.utils import get_logger, render_network_plot, set_gpus_automatically
+from src.utils import get_logger, render_network_plot, set_gpus_automatically, visualize_model
 from src.data.utils import write_dict_to_json
 from src.models.load_model import load_model_from_huggingface_checkpoint
 
@@ -252,9 +252,9 @@ def train_cnn_transformer(
                 freeze_encoder=False,
                 tune=False,
                 output_dir=None,
-                kernel_sizes = [5,3,2],
-                out_channels = [256,128,64],
-                stride_sizes = [3,2,2],
+                kernel_sizes = [5,3,2,2,2],
+                out_channels = [256,128,64,16,8],
+                stride_sizes = [3,2,2,2,2],
                 backend="petastorm",
                 train_path=None,
                 eval_path=None,
@@ -316,18 +316,18 @@ def train_cnn_transformer(
         # n_timesteps, n_features = infer_example.shape
         n_timesteps, n_features = (5760,8)
         model_kwargs = dict(input_features=n_features,
-                                        n_timesteps=n_timesteps,
-                                        num_attention_heads = num_attention_heads,
-                                        num_hidden_layers = num_hidden_layers,
-                                        num_labels=2,
-                                        learning_rate =learning_rate,
-                                        warmup_steps = warmup_steps,
-                                        inital_batch_size=train_batch_size,
-                                        dropout_rate=dropout_rate,
-                                        kernel_sizes=kernel_sizes,
-                                        stride_sizes=stride_sizes,
-                                        out_channels=out_channels,
-                                        **model_specific_kwargs)
+                            n_timesteps=n_timesteps,
+                            num_attention_heads = num_attention_heads,
+                            num_hidden_layers = num_hidden_layers,
+                            num_labels=2,
+                            learning_rate =learning_rate,
+                            warmup_steps = warmup_steps,
+                            inital_batch_size=train_batch_size,
+                            dropout_rate=dropout_rate,
+                            kernel_sizes=kernel_sizes,
+                            stride_sizes=stride_sizes,
+                            out_channels=out_channels,
+                            **model_specific_kwargs)
         if model_config:
             model_kwargs.update(model_config)
         model = CNNToTransformerEncoder(**model_kwargs)
@@ -783,6 +783,9 @@ def run_pytorch_lightning(model, task,
             logger.experiment.summary["task"] = task.get_name()
             logger.experiment.summary["model"] = model.base_model_prefix
             logger.experiment.config.update(model.hparams)
+            model_img_path = visualize_model(model, dir=wandb.run.dir)
+            wandb.log({"model_img": [wandb.Image(Image.open(model_img_path), caption="Model Graph")]})
+
         else:
             logger = True
 
