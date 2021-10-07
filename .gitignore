@@ -108,3 +108,5 @@ dask-worker-space/purge.lock
 slurm-utils/job_scripts
 slurm-utils/jobs
 
+#More logs
+lightning_logs/
