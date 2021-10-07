@@ -111,6 +111,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.d_model = out_channels[-1]
         self.learning_rate = learning_rate
         self.warmup_steps = warmup_steps
+        self.input_dim = (n_timesteps,input_features)
 
         self.input_embedding = CNNEncoder(input_features, n_timesteps=n_timesteps, kernel_sizes=kernel_sizes,
                                 out_channels=out_channels, stride_sizes=stride_sizes)
