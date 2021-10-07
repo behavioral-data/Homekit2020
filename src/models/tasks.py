@@ -234,7 +234,7 @@ class ActivityTask(Task):
                                  "to use the petatstorm backend")
         
             schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
-            fields = [k for k in schema.fields.keys()]
+            fields = [k for k in schema.fields.keys() if not k == "participant_id"]
             # features = [k for k in schema.fields.keys() if not k in ["start","end","participant_id"]]
             
             def _transform_row(row):
@@ -254,10 +254,14 @@ class ActivityTask(Task):
 
                 label = int(labler(participant_id,start,end))
                 return {"inputs_embeds":result,
-                        "label": label}
+                        "label": label,
+                        "participant_id": participant_id,
+                        "end_date_str": str(end)}
             
             new_fields = [("inputs_embeds",np.float32,None,False),
-                          ("label",np.int_,None,False)]
+                          ("label",np.int_,None,False),
+                          ("participant_id",np.str_,None,False),
+                          ("end_date_str",np.str_,None,False)]
 
             self.transform = TransformSpec(_transform_row,removed_fields=fields,
                                                       edit_fields= new_fields)
