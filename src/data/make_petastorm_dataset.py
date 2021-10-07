@@ -79,10 +79,11 @@ def get_active_spark_context() -> SparkSession:
 @click.option("--parse_timestamp", is_flag=True)
 @click.option("--min_date", type=str, default=None)
 @click.option("--max_date", type=str, default=None)
+@click.option("--partition_by", type=str, multiple=False)
 @click.option("--rename", type=str, multiple=True)
 def main(input_path, output_path, max_missing_days_in_window, 
                     min_windows, day_window_size, parse_timestamp,
-                    min_date=None, max_date=None, rename=None):
+                    min_date=None, max_date=None, partition_by = None, rename=None):
 
                 
     if not "file://" in output_path:
@@ -191,7 +192,7 @@ def main(input_path, output_path, max_missing_days_in_window,
 
         result.write \
             .mode('overwrite') \
-            .parquet(output_path)
+            .parquet(output_path, partitionBy= partition_by)
 
 def rename_columns(df, columns):
     if isinstance(columns, dict):
