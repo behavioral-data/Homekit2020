@@ -216,6 +216,7 @@ def train_autoencoder(model_name,
 
 
 def train_cnn_transformer( 
+                model_config={},
                 task_config=None,
                 task_name=None, 
                 n_epochs=10,
@@ -314,8 +315,7 @@ def train_cnn_transformer(
         #     infer_example = train_dataset[0]["inputs_embeds"]
         # n_timesteps, n_features = infer_example.shape
         n_timesteps, n_features = (5760,8)
-
-        model = CNNToTransformerEncoder(input_features=n_features,
+        model_kwargs = dict(input_features=n_features,
                                         n_timesteps=n_timesteps,
                                         num_attention_heads = num_attention_heads,
                                         num_hidden_layers = num_hidden_layers,
@@ -328,6 +328,9 @@ def train_cnn_transformer(
                                         stride_sizes=stride_sizes,
                                         out_channels=out_channels,
                                         **model_specific_kwargs)
+        if model_config:
+            model_kwargs.update(model_config)
+        model = CNNToTransformerEncoder(**model_kwargs)
     else:
         if use_huggingface:
             model = load_model_from_huggingface_checkpoint(model_path)

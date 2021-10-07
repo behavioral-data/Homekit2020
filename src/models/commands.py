@@ -93,6 +93,7 @@ class CNNTransformer(NeuralCommand):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         cnn_transformer_params = [
+            click.Option(("--model_config",), type=str, help = "Path to config yaml for model. Params in this file override other command line args and defaults",callback=validate_yaml_or_json),
             click.Option(("--reset_cls_params",),is_flag=True, help="Reset the parameters in a the classifcation layer after loading pretrained model"),
             click.Option(("--freeze_encoder",),is_flag=True, help="Freeze the encoder during training"),
             click.Option(("--use_huggingface",),is_flag=True, help="Run the job with huggingface rather than pytorch lightning")
