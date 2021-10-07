@@ -1,6 +1,6 @@
 import gc
 from copy import copy
-from typing import Dict, Union
+from typing import Dict,  Union, Any, Optional
 import os
 
 import numpy as np
@@ -16,6 +16,8 @@ from petastorm.pytorch import DataLoader as PetaDataLoader
 from petastorm.reader import Reader
 from pytorch_lightning.core.step_result import Result
 from pytorch_lightning.loggers.base import DummyExperiment
+from pytorch_lightning.loggers.wandb import WandbLogger
+
 from wandb import plot
 from src.models.losses import build_loss_fn
 from src.SAnD.core import modules
@@ -138,6 +140,9 @@ class CNNToTransformerEncoder(pl.LightningModule):
 
         self.test_probs = []
         self.test_labels =[]
+        self.test_participant_ids = []
+        self.test_dates = []
+        self.test_losses = []
 
         self.batch_size = inital_batch_size
         self.train_dataset = None
@@ -218,17 +223,32 @@ class CNNToTransformerEncoder(pl.LightningModule):
         results["test/pr_auc"] = pr_auc(test_preds,test_labels) 
 
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
-        if os.environ["LOCAL_RANK"] == "0":
+        if os.environ.get("LOCAL_RANK","0") == "0" and isinstance(self.logger,WandbLogger):
             self.logger.experiment.log({"test/roc": wandb_roc_curve(test_preds,test_labels, limit = 9999)}, commit=False)
             self.logger.experiment.log({"test/pr": wandb_pr_curve(test_preds,test_labels)}, commit=False)
             self.logger.experiment.log({"test/det": wandb_detection_error_tradeoff_curve(test_preds,test_labels, limit=9999)}, commit=False)
         
         self.log_dict(results)
-        super().on_test_epoch_end()
-    
+        return None
+
+    def predict_step(self, batch: Any) -> Any:
+        x = batch["inputs_embeds"]
+        y = batch["label"]
+
+        with torch.no_grad():
+            loss,logits = self.forward(x,y)
+            probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
+        
+        return {"loss":loss, "preds": logits, "labels":y,
+                "participant_id":batch["participant_id"],
+                "end_date":batch["end_date_str"] }
+
     def test_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
         x = batch["inputs_embeds"]
         y = batch["label"]
+        self.test_participant_ids.append(batch["participant_id"])
+        self.test_dates.append(batch["end_date_str"])
+
         with torch.no_grad():
             loss,logits = self.forward(x,y)
 
