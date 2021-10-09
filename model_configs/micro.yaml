@@ -1,0 +1,16 @@
+kernel_sizes:
+- 5
+- 3
+- 2
+- 2
+out_channels:
+- 256
+- 64
+- 32
+- 4
+stride_sizes:
+- 3
+- 3
+- 2
+- 2
+factor: 1
