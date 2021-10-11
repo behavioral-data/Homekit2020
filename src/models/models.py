@@ -2,6 +2,7 @@ import gc
 from copy import copy
 from typing import Dict,  Union, Any, Optional
 import os
+from random import sample
 
 import numpy as np
 import pytorch_lightning as pl
@@ -102,7 +103,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, learning_rate=1e-3, warmup_steps=100,
                 max_positional_embeddings = 1440*5, factor=64, inital_batch_size=100, clf_dropout_rate=0.0,
-                train_dataloader=None,
+                train_mix_positives_back_in=False, train_mixin_batch_size=3,
                 **model_specific_kwargs) -> None:
         self.config = get_config_from_locals(locals())
 
@@ -135,6 +136,9 @@ class CNNToTransformerEncoder(pl.LightningModule):
         
         self.train_probs = []
         self.train_labels = []
+        self.train_mix_positives_back_in = train_mix_positives_back_in
+        self.train_mixin_batch_size = train_mixin_batch_size
+        self.positive_cache = []
         
         self.eval_probs = []
         self.eval_labels =[]
@@ -182,13 +186,24 @@ class CNNToTransformerEncoder(pl.LightningModule):
             return BatchedDataLoader(self.eval_dataset, batch_size=3*self.batch_size)
         else:
             return DataLoader(self.eval_dataset, batch_size=3*self.batch_size, pin_memory=True)
-
+    
     def training_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
-        x = batch["inputs_embeds"]
-        y = batch["label"]
+        
+        if not isinstance(batch,list):
+            batch = [batch]
+
+        x = torch.cat([x["inputs_embeds"] for x in batch],axis=0)
+        y = torch.cat([x["label"] for x in batch], axis=0)
+
+        if self.train_mix_positives_back_in and self.current_epoch == 0:
+            self.positive_cache.extend(x[torch.where(y)].detach())
+            if len(self.positive_cache) >= self.train_mixin_batch_size:
+                pos_samples = [x[None,:,:] for x in sample(self.positive_cache,self.train_mixin_batch_size)]
+                x = torch.cat([x] + pos_samples, axis=0)
+                y = torch.cat([y, y.new([1] * self.train_mixin_batch_size)], axis=0)
+
         loss,logits = self.forward(x,y)
         
-    
         self.log("train/loss", loss.item(), on_step=True, sync_dist=True)
 
         # probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]

@@ -262,6 +262,8 @@ def train_cnn_transformer(
                 val_epochs=10,
                 auto_set_gpu=None,
                 dropout_rate=0.5,
+                train_mix_positives_back_in=False, 
+                train_mixin_batch_size=3,
                 **model_specific_kwargs):
 
     if auto_set_gpu:
@@ -327,6 +329,8 @@ def train_cnn_transformer(
                             kernel_sizes=kernel_sizes,
                             stride_sizes=stride_sizes,
                             out_channels=out_channels,
+                            train_mixin_batch_size = train_mixin_batch_size,
+                            train_mix_positives_back_in = train_mix_positives_back_in,
                             **model_specific_kwargs)
         if model_config:
             model_kwargs.update(model_config)
