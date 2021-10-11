@@ -7,7 +7,7 @@
 #SBATCH --output=${DIR}/${LOG_PATH}
 #SBATCH --account=${ACCOUNT}
 #SBATCH --partition=${PARTITION}
-#SBATCH --time=12:00:00
+#SBATCH --time=6:00:00
 ${GIVEN_NODE}
 ### This script works for any number of nodes, Ray will find and manage all resources
 #SBATCH --nodes=${NUM_NODES}
