@@ -92,18 +92,18 @@ class ClauseLabler(object):
     def __init__(self, survey_respones, clause):
         self.clause = clause
         self.survey_responses = survey_respones
-        self.survey_responses["_date"] = self.survey_responses["timestamp"].dt.date
+        self.survey_responses["_date"] = self.survey_responses["timestamp"].dt.normalize()
+        self.survey_responses["_dummy"] = True
         self.survey_lookup = self.survey_responses\
                                  .reset_index()\
                                  .drop_duplicates(subset=["participant_id","_date"],keep="last")\
                                  .set_index(["participant_id","_date"])\
-                                 .to_dict('index')
+                                 .query(self.clause)\
+                                 ["_dummy"]\
+                                 .to_dict()
 
     def __call__(self,participant_id,start_date,end_date):
-        on_date = self.survey_lookup.get((participant_id,end_date.normalize()),None)
-        if on_date:
-            result = _eval(self.clause,local_dict=on_date)
-            return result
-        else:
-            return 0
+        result = self.survey_lookup.get((participant_id,end_date.normalize()),False)
+        return result
+
 
