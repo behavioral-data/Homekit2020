@@ -1,8 +1,10 @@
 from os import rename
 import numpy as np
+from numpy.core.shape_base import vstack
 import pandas as pd
 import wandb
 import copy
+from wandb.plot.roc_curve import roc_curve
 from wandb.viz import CustomChart
 from wandb.data_types import Table
 
@@ -21,36 +23,46 @@ from functools import partial
 from src.utils import check_for_wandb_run
 
 
+def make_ci_bootsrapper(estimator):
+    def bootstrapper(pred,labels,n_samples=100):
+        results = []
+        inds = np.arange(len(pred))
+        for _ in range(n_samples):
+            sample = np.random.choice(inds,len(pred))
+            try:
+                results.append(estimator(pred[sample],labels[sample]))
+            except ValueError:
+                continue
+        return np.quantile(results,0.05), np.quantile(results,0.95)
+    return bootstrapper
+
 def get_wandb_plots():
     ...
-def classification_eval(logits, labels, threshold = 0.5, prefix=None):
-
-    # Remove indices with pad tokens
-    input_probs = softmax(logits, axis=1)
-    classes = (input_probs[:, -1] >= threshold)
-    precision, recall, f1, _ = precision_recall_fscore_support(labels, classes, average='binary')
+def classification_eval(preds, labels, threshold = None, prefix=None,
+                        bootstrap_cis=False):
     results = {}
-    results["classification_precision"] = precision
-    results["classification_recall"] = recall
-    results["classification_f1"] = f1
-    
+    # Remove indices with pad tokens
+    if threshold:
+        input_probs = softmax(preds, axis=1)
+        classes = (input_probs[:, -1] >= threshold)
+        precision, recall, f1, _ = precision_recall_fscore_support(labels, classes, average='binary')
+        accuracy = accuracy_score(labels, classes)
+        results["precision"] = precision
+        results["recall"] = recall
+        results["f1"] = f1
+        results["accuracy"] = accuracy
+
     support = pd.Series(labels).value_counts().to_dict()
-    results["classification_support"] = support
+    results["support"] = support
 
-    accuracy = accuracy_score(labels, classes)
-    results["classification_accuracy"] = accuracy
-
-    try:
-        results["roc_auc"] = roc_auc_score(labels,input_probs[:,-1])
-    except ValueError:
-        results["roc_auc"] = np.nan
-
-    if check_for_wandb_run():
-        results["roc"] = wandb.plot.roc_curve(labels, input_probs,
-                                            labels=["Negative","Positive"], classes_to_plot=[1])
-        results["pr"] = wandb.plot.pr_curve(labels, input_probs,
     
-                                          labels=["Negative","Positive"], classes_to_plot=[1])
+    if bootstrap_cis:
+        results["roc_auc"], (results["roc_auc_ci_low"] ,results["roc_auc_ci_high"]) = roc_auc(preds,labels,get_ci=True)
+        results["pr_auc"], (results["pr_auc_ci_low"], results["pr_auc_ci_high"]) = pr_auc(preds,labels,get_ci=True)
+    else:
+        results["roc_auc"] = roc_auc(preds,labels,get_ci=False)
+        results["pr_auc"] = pr_auc(preds,labels,get_ci=False)
+
     if prefix:
         renamed = {}
         for k,v in results.items():
@@ -142,10 +154,25 @@ def wandb_roc_curve(preds,labels, return_table=False,limit=999):
     )
     return plot
 
-def pr_auc(pred,labels):
+def pr_auc(pred,labels,get_ci=False,n_samples=10000):
     preds = pred.cpu().numpy()
-    precision, recall, thresholds = precision_recall_curve(labels,preds)
-    return auc(recall,precision)
+    precision, recall, _ = precision_recall_curve(labels,preds)
+    result = auc(recall,precision)
+    if get_ci:
+        ci = make_ci_bootsrapper(pr_auc)(pred,labels,n_samples=n_samples)
+        return result, ci
+    else:
+        return result
+
+
+def roc_auc(pred,labels,get_ci=False,n_samples=10000):
+    preds = pred.cpu().numpy()
+    score = roc_auc_score(labels,preds)
+    if get_ci:
+        ci = make_ci_bootsrapper(lambda x,y : roc_auc_score(y_score=x, y_true=y))(pred,labels,n_samples=n_samples)
+        return score, ci
+    else:
+        return score
     
 def autoencode_eval(pred, labels):
     # Remove indices with pad tokens

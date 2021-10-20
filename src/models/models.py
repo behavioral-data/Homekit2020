@@ -24,7 +24,7 @@ from src.models.losses import build_loss_fn
 from src.SAnD.core import modules
 from src.utils import check_for_wandb_run
 from src.models.eval import (wandb_roc_curve, wandb_pr_curve, wandb_detection_error_tradeoff_curve,
-                             pr_auc)
+                             pr_auc, classification_eval)
 from torch import Tensor
 from torch.nn.modules import dropout
 from torch.utils.data.dataloader import DataLoader
@@ -195,7 +195,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         x = torch.cat([x["inputs_embeds"] for x in batch],axis=0)
         y = torch.cat([x["label"] for x in batch], axis=0)
 
-        if self.train_mix_positives_back_in and self.current_epoch == 0:
+        if self.train_mix_positives_back_in and self.current_epoch > 0:
             self.positive_cache.extend(x[torch.where(y)].detach())
             if len(self.positive_cache) >= self.train_mixin_batch_size:
                 pos_samples = [x[None,:,:] for x in sample(self.positive_cache,self.train_mixin_batch_size)]
@@ -205,23 +205,39 @@ class CNNToTransformerEncoder(pl.LightningModule):
         loss,logits = self.forward(x,y)
         
         self.log("train/loss", loss.item(), on_step=True, sync_dist=True)
-
+        probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
+        
+        self.train_probs.append(probs.detach().cpu())
+        self.train_labels.append(y.detach().cpu())
         # probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
         # self.train_probs.append(probs.detach().cpu())
         # self.train_labels.append(y.detach().cpu())
         return {"loss":loss, "preds": logits, "labels":y}
 
-    def on_train_epoch_start(self):
+    def on_train_epoch_end(self):
+
+        train_preds = torch.cat(self.train_probs, dim=0)
+        train_labels = torch.cat(self.train_labels, dim=0)
+        results = classification_eval(train_preds,train_labels,prefix="train/")
+
+        # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
+        if os.environ.get("LOCAL_RANK","0") == "0":
+            self.logger.experiment.log({"train/roc": wandb_roc_curve(train_preds,train_labels, limit = 9999)}, commit=False)
+            self.logger.experiment.log({"train/pr": wandb_pr_curve(train_preds,train_labels)}, commit=False)
+            self.logger.experiment.log({"train/det": wandb_detection_error_tradeoff_curve(train_preds,train_labels, limit=9999)}, commit=False)
+        
+        self.log_dict(results)
         self.train_probs = []
         self.train_labels = []
-        super().on_train_epoch_start()
+        super().on_validation_epoch_end()
     
+    def on_train_epoch_start(self):
+        super().on_train_epoch_start()
 
     def on_validation_epoch_start(self):
         #Not sure why I have to explicitly do this, but model fails otherwise
         torch.cuda.empty_cache()
-        self.eval_probs = []
-        self.eval_labels = []
+        
     
     def on_validation_epoch_start(self):
         #Not sure why I have to explicitly do this, but model fails otherwise
@@ -232,11 +248,11 @@ class CNNToTransformerEncoder(pl.LightningModule):
     def on_test_epoch_end(self):
         test_preds = torch.cat(self.test_probs, dim=0)
         test_labels = torch.cat(self.test_labels, dim=0)
-        test_auc = torchmetrics.functional.auroc(test_preds,test_labels,pos_label=1)
         
-        results = {}
-        results["test/roc_auc"] = test_auc
-        results["test/pr_auc"] = pr_auc(test_preds,test_labels) 
+        # results = {}
+        # results["test/roc_auc"] = test_auc
+        # results["test/pr_auc"] = pr_auc(test_preds,test_labels) 
+        results = classification_eval(test_preds,test_labels,prefix="test/")
 
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
         if os.environ.get("LOCAL_RANK","0") == "0" and isinstance(self.logger,WandbLogger):
@@ -280,11 +296,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
 
         eval_preds = torch.cat(self.eval_probs, dim=0)
         eval_labels = torch.cat(self.eval_labels, dim=0)
-        eval_auc = torchmetrics.functional.auroc(eval_preds,eval_labels,pos_label=1)
-
-        results = {}
-        results["eval/roc_auc"] = eval_auc
-        results["eval/pr_auc"] = pr_auc(eval_preds,eval_labels) 
+        results = classification_eval(eval_preds,eval_labels,prefix="eval/",bootstrap_cis=True)
 
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
         if os.environ.get("LOCAL_RANK","0") == "0":
@@ -293,6 +305,9 @@ class CNNToTransformerEncoder(pl.LightningModule):
             self.logger.experiment.log({"eval/det": wandb_detection_error_tradeoff_curve(eval_preds,eval_labels, limit=9999)}, commit=False)
         
         self.log_dict(results)
+        
+        self.eval_probs = []
+        self.eval_labels = []
         super().on_validation_epoch_end()
 
     def validation_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
