@@ -99,6 +99,7 @@ wandb/*
 models/*
 results/*
 new_dataset/*
+flu/*
 logs/*
 dask-worker-space/global.lock
 .gitignore
