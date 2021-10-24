@@ -7,7 +7,7 @@ Code pertaining to the UW Behavioral Data Science Lab's contributions to the Sea
 How to contibute:
 ------------
 1. Clone this repo: `git clone https://github.com/behavioral-data/RobustDataScience.git`
-2. cd into it:  `cd RobustDataScience`
+2. cd into it:  `cd SeattleFluStudy`
 3. Build the conda environment: `make create_environment`
 4. Follow the project structure outlined below.
 
