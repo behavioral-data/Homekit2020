@@ -29,21 +29,21 @@ dependencies:
   - cudatoolkit=10.2
   - jupyter
   - plotly
-  - matplotlib
-  - pytorch-lightning>=0.10.0
-  - torchmetrics
-  - tensorboardx
   - dask-ml
-  - pyspark
+  - matplotlib
+  - pytorch-lightning=1.4.9
+  - torchmetrics>=0.5
+  - tensorboardx
+  - pyspark=3.1.2
   - pip:
-    - torchviz
+    - torchviz==0.0.2
     - pyyaml==5.4.1
     - wandb
-    - xgboost
-    - tensorboard
+    - xgboost==1.4.2
+    - tensorboard==2.6.0
     - ray[default]
-    - tabulate
-    - petastorm
-    - methodtools
+    - tabulate==0.8.9
+    - petastorm==0.11.3
+    - methodtools==0.4.5
 variables:
   USE_TORCH: 1
