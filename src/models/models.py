@@ -1,5 +1,5 @@
-import gc
 from copy import copy
+
 from typing import Dict,  Union, Any, Optional
 import os
 from random import sample
@@ -8,28 +8,18 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-import torchmetrics
-from torchmetrics import BinnedPrecisionRecallCurve
 
-import wandb
 from petastorm.pytorch import BatchedDataLoader
-from petastorm.pytorch import DataLoader as PetaDataLoader
 from petastorm.reader import Reader
-from pytorch_lightning.core.step_result import Result
-from pytorch_lightning.loggers.base import DummyExperiment
 from pytorch_lightning.loggers.wandb import WandbLogger
 
-from wandb import plot
 from src.models.losses import build_loss_fn
 from src.SAnD.core import modules
-from src.utils import check_for_wandb_run
+
 from src.models.eval import (wandb_roc_curve, wandb_pr_curve, wandb_detection_error_tradeoff_curve,
-                             pr_auc, classification_eval)
+                            classification_eval,  TorchMetricClassification)
 from torch import Tensor
-from torch.nn.modules import dropout
 from torch.utils.data.dataloader import DataLoader
-from transformers import PretrainedConfig
-from wandb.data_types import Table
 from wandb.plot.roc_curve import roc_curve
 
 
@@ -152,6 +142,11 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.batch_size = inital_batch_size
         self.train_dataset = None
         self.eval_dataset=None
+        
+        self.train_metrics = TorchMetricClassification(bootstrap_cis=False,
+                                                       prefix="train/")
+        self.eval_metrics = TorchMetricClassification(bootstrap_cis=True,
+                                                      prefix="eval/")
 
         self.save_hyperparameters()
 
@@ -187,6 +182,11 @@ class CNNToTransformerEncoder(pl.LightningModule):
         else:
             return DataLoader(self.eval_dataset, batch_size=3*self.batch_size, pin_memory=True)
     
+    def on_train_start(self) -> None:
+        self.train_metrics.apply(lambda x: x.to(self.device))
+        self.eval_metrics.apply(lambda x: x.to(self.device))
+        return super().on_train_start()
+        
     def training_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
         
         if not isinstance(batch,list):
@@ -204,21 +204,19 @@ class CNNToTransformerEncoder(pl.LightningModule):
 
         loss,logits = self.forward(x,y)
         
-        self.log("train/loss", loss.item(), on_step=True, sync_dist=True)
+        self.log("train/loss", loss.item())
         probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
         
+        self.train_metrics.update(probs,y)
+
         self.train_probs.append(probs.detach().cpu())
         self.train_labels.append(y.detach().cpu())
-        # probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
-        # self.train_probs.append(probs.detach().cpu())
-        # self.train_labels.append(y.detach().cpu())
         return {"loss":loss, "preds": logits, "labels":y}
 
     def on_train_epoch_end(self):
 
         train_preds = torch.cat(self.train_probs, dim=0)
         train_labels = torch.cat(self.train_labels, dim=0)
-        results = classification_eval(train_preds,train_labels,prefix="train/")
 
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
         if os.environ.get("LOCAL_RANK","0") == "0":
@@ -226,24 +224,21 @@ class CNNToTransformerEncoder(pl.LightningModule):
             self.logger.experiment.log({"train/pr": wandb_pr_curve(train_preds,train_labels)}, commit=False)
             self.logger.experiment.log({"train/det": wandb_detection_error_tradeoff_curve(train_preds,train_labels, limit=9999)}, commit=False)
         
-        self.log_dict(results)
+        metrics = self.train_metrics.compute()
+        self.log_dict(metrics, on_step=False, on_epoch=True)
+        
+        # Clean up for next epoch:
+        self.train_metrics.reset()
         self.train_probs = []
         self.train_labels = []
-        super().on_validation_epoch_end()
+        super().on_train_epoch_end()
     
     def on_train_epoch_start(self):
-        super().on_train_epoch_start()
-
-    def on_validation_epoch_start(self):
-        #Not sure why I have to explicitly do this, but model fails otherwise
-        torch.cuda.empty_cache()
-        
+        self.train_metrics.to(self.device)
     
     def on_validation_epoch_start(self):
-        #Not sure why I have to explicitly do this, but model fails otherwise
-        torch.cuda.empty_cache()
+
         self.test_probs = []
-        self.test_labels = []
     
     def on_test_epoch_end(self):
         test_preds = torch.cat(self.test_probs, dim=0)
@@ -296,7 +291,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
 
         eval_preds = torch.cat(self.eval_probs, dim=0)
         eval_labels = torch.cat(self.eval_labels, dim=0)
-        results = classification_eval(eval_preds,eval_labels,prefix="eval/",bootstrap_cis=True)
+        # results = classification_eval(eval_preds,eval_labels,prefix="eval/",bootstrap_cis=True)
 
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
         if os.environ.get("LOCAL_RANK","0") == "0":
@@ -304,10 +299,14 @@ class CNNToTransformerEncoder(pl.LightningModule):
             self.logger.experiment.log({"eval/pr": wandb_pr_curve(eval_preds,eval_labels)}, commit=False)
             self.logger.experiment.log({"eval/det": wandb_detection_error_tradeoff_curve(eval_preds,eval_labels, limit=9999)}, commit=False)
         
-        self.log_dict(results)
+        metrics = self.eval_metrics.compute()
+        self.log_dict(metrics, on_step=False, on_epoch=True)
         
+        # Clean up
+        self.eval_metrics.reset()
         self.eval_probs = []
         self.eval_labels = []
+
         super().on_validation_epoch_end()
 
     def validation_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
@@ -319,10 +318,10 @@ class CNNToTransformerEncoder(pl.LightningModule):
             self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
             
             probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
-            self.eval_probs.append(probs.detach().cpu())
-            self.eval_labels.append(y.detach().cpu())
+            self.eval_probs.append(probs.detach())
+            self.eval_labels.append(y.detach())
         
-
+        self.eval_metrics.update(probs,y)
         return {"loss":loss, "preds": logits, "labels":y}
     
     def configure_optimizers(self):

@@ -1,7 +1,9 @@
-from os import rename
+import os
+from typing import Dict, Any, Union, List, Optional, Union, Callable, AnyStr
 import numpy as np
 from numpy.core.shape_base import vstack
 import pandas as pd
+from torchmetrics.classification.auroc import AUROC
 import wandb
 import copy
 from wandb.plot.roc_curve import roc_curve
@@ -9,8 +11,14 @@ from wandb.viz import CustomChart
 from wandb.data_types import Table
 
 import torch
+
 import torchmetrics
-from torchmetrics import BinnedPrecisionRecallCurve
+from torchmetrics import BinnedPrecisionRecallCurve, BinnedAveragePrecision, BootStrapper, MetricCollection, Metric
+from torchmetrics.functional import auc as tm_auc
+from torchmetrics.functional import precision_recall_curve as tm_precision_recall_curve
+from torchmetrics.utilities.data import dim_zero_cat
+
+import pytorch_lightning as pl
 
 from scipy.special import softmax
 from scipy.stats import pearsonr, spearmanr
@@ -21,6 +29,90 @@ from sklearn.metrics import (accuracy_score,precision_recall_fscore_support, roc
 
 from functools import partial
 from src.utils import check_for_wandb_run
+
+class Support(Metric):
+    def __init__(self,  n_classes: int = 1,
+                        compute_on_step: bool = True,
+                        dist_sync_on_step: bool = False,
+                        process_group: Optional[Any] = None,
+                        dist_sync_fn: Callable = None) -> None:
+
+        super().__init__(compute_on_step=compute_on_step,
+                        dist_sync_on_step=dist_sync_on_step,
+                        process_group=process_group,
+                        dist_sync_fn=dist_sync_fn)
+
+        self.n_classes = n_classes
+        self.add_state("counts", default = torch.zeros(self.n_classes + 1),
+                                dist_reduce_fx="sum")
+
+    def update(self, _preds: torch.Tensor, target: torch.Tensor) -> None:
+        values = torch.bincount(target, minlength=self.n_classes+1)
+        self.counts += values
+
+    def compute(self) -> Dict[AnyStr,torch.Tensor]:
+        return {i:self.counts[i] for i in range(self.n_classes + 1)}
+
+class TorchPrecisionRecallAUC(AUROC):
+    """A note about this implementation. It would be much more memory
+       efficent to use BinnedPrecisionRecallCurve from torchmetrics, 
+       but the update step is much slower. This implementation trades
+       off memory (it stores every prediction and label) for speed."""
+    
+    def compute(self) -> torch.Tensor: 
+        if not self.mode:
+            raise RuntimeError("You have to have determined mode.")
+
+        preds = dim_zero_cat(self.preds)
+        target = dim_zero_cat(self.target)
+        precisions, recalls, _ = tm_precision_recall_curve(preds,target)
+        return tm_auc(recalls,precisions)
+
+class TorchMetricClassification(MetricCollection):
+    def __init__(self, bootstrap_cis=False,
+                 n_boostrap_samples=100,
+                 prefix=""):
+        
+        self.add_prefix = prefix
+        self.bootstrap_cis = bootstrap_cis
+        metrics = {}
+
+        if bootstrap_cis:
+            roc_auc = BootStrapper(torchmetrics.AUROC(),
+                                   num_bootstraps=n_boostrap_samples)
+            pr_auc = BootStrapper(TorchPrecisionRecallAUC(),
+                                  num_bootstraps=n_boostrap_samples)
+        else:    
+            roc_auc = torchmetrics.AUROC()  
+            pr_auc = TorchPrecisionRecallAUC()
+
+        metrics["roc_auc"] = roc_auc
+        metrics["pr_auc"] = pr_auc
+        metrics["support"] = Support()
+
+        super(TorchMetricClassification,self).__init__(metrics)
+    
+    def compute(self) -> Dict[str, Any]:
+        results = super().compute()
+        if self.bootstrap_cis:
+
+            roc_auc = results["roc_auc"]["mean"] 
+            roc_std = results["roc_auc"]["std"] 
+            results["roc_auc_ci_high"] = roc_auc + 2*roc_std
+            results["roc_auc_ci_low"] = roc_auc - 2*roc_std
+            results["roc_auc"] = results["roc_auc"]["mean"]
+        
+            pr_auc = results["pr_auc"]["mean"] 
+            pr_std = results["pr_auc"]["std"] 
+            results["pr_auc_ci_high"] = pr_auc + 2*pr_std
+            results["pr_auc_ci_low"] = pr_auc - 2*pr_std
+            results["pr_auc"] = results["pr_auc"]["mean"]
+        
+        if self.add_prefix:
+            return add_prefix(results,self.add_prefix)
+        else:
+            return results
+
 
 
 def make_ci_bootsrapper(estimator):
@@ -35,6 +127,12 @@ def make_ci_bootsrapper(estimator):
                 continue
         return np.quantile(results,0.05), np.quantile(results,0.95)
     return bootstrapper
+
+def add_prefix(results,prefix):
+    renamed = {}
+    for k,v in results.items():
+        renamed[prefix+k] = v
+    return renamed
 
 def get_wandb_plots():
     ...
@@ -81,10 +179,11 @@ def get_huggingface_classification_eval(threshold=0.5):
     
     return evaluator
 
-def wandb_pr_curve(preds,labels):
+def wandb_pr_curve(preds,labels,thresholds=50, num_classes=1):
     # preds = preds.cpu().numpy()
     # labels = labels.cpu().numpy()
-    pr_curve = BinnedPrecisionRecallCurve(num_classes=1) 
+    # preds = preds.cpu().numpy()
+    pr_curve = BinnedPrecisionRecallCurve(thresholds=thresholds, num_classes=num_classes).to(preds.device)
     precision, recall, _thresholds = pr_curve(preds, labels)
     label_markers = ["Positive"] * len(precision)
     table = Table(columns= ["class","precision","recall"], data=list(zip(label_markers,precision,recall)))
@@ -105,7 +204,7 @@ def wandb_pr_curve(preds,labels):
 
 def wandb_detection_error_tradeoff_curve(preds,labels,return_table=False,limit=999):
     preds = preds.cpu().numpy()
-    # probs = np.stack((1-preds,preds)).T
+    labels = labels.cpu().numpy()
   
     fpr, fnr, _ = det_curve(labels, preds)
     if limit and limit < len(fpr):
@@ -156,6 +255,7 @@ def wandb_roc_curve(preds,labels, return_table=False,limit=999):
 
 def pr_auc(pred,labels,get_ci=False,n_samples=10000):
     preds = pred.cpu().numpy()
+    labels = labels.cpu().numpy()
     precision, recall, _ = precision_recall_curve(labels,preds)
     result = auc(recall,precision)
     if get_ci:

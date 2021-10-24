@@ -808,7 +808,7 @@ def run_pytorch_lightning(model, task,
     
     debug_mode = os.environ.get("DEBUG_MODE")
     trainer = pl.Trainer(logger=logger,
-                         checkpoint_callback=checkpoint_callback,
+                         checkpoint_callback=True,
                          callbacks=[checkpoint_callback],
                          gpus = -1,
                          accelerator="ddp",
