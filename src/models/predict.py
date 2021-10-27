@@ -49,9 +49,8 @@ def main(ctx, ckpt_path, task_config, predict_path, wandb_mode="offline",
 
 
     trainer = pl.Trainer(logger=logger,
-
                          gpus = -1,
-                         accelerator="ddp",
+                         accelerator="dp",
                          terminate_on_nan=True,
                          num_sanity_val_steps=0,
                          limit_train_batches=10)
