@@ -799,7 +799,7 @@ def run_pytorch_lightning(model, task,
                             # save_last=True,
                             save_top_k=3,
                             monitor="eval/roc_auc" if do_eval else "train/loss" ,
-                            every_n_val_epochs=1,
+                            every_n_epochs=1,
                             mode='max')
 
     else:
