@@ -11,6 +11,7 @@ import torch.nn as nn
 
 from petastorm.pytorch import BatchedDataLoader
 from petastorm.reader import Reader
+
 from pytorch_lightning.loggers.wandb import WandbLogger
 
 from src.models.losses import build_loss_fn
@@ -326,16 +327,24 @@ class CNNToTransformerEncoder(pl.LightningModule):
     
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        return optimizer
+        
+        def scheduler(step):  
+            return min(1., float(step + 1) / self.warmup_steps)
+
+        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer,scheduler)
+        
+        return [optimizer], [       
+            {
+                'scheduler': lr_scheduler,
+                'interval': 'step',
+                'frequency': 1,
+                'reduce_on_plateau': False,
+                'monitor': 'val_loss',
+            }
+        ]
 
     def optimizer_step(
         self, epoch, batch_idx, optimizer, optimizer_idx, optimizer_closure,
         on_tpu=False, using_native_amp=False, using_lbfgs=False,
     ):
-        if self.trainer.global_step < self.warmup_steps:
-            lr_scale = min(1., float(self.trainer.global_step + 1) / self.warmup_steps)
-            for pg in optimizer.param_groups:
-                pg['lr'] = lr_scale * self.learning_rate
-
-        # update params
         optimizer.step(closure=optimizer_closure)

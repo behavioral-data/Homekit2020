@@ -11,6 +11,7 @@ from pytorch_lightning.accelerators import accelerator
 from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.loggers.base import DummyExperiment
 from pytorch_lightning.profiler import AdvancedProfiler
+from pytorch_lightning.callbacks import LearningRateMonitor
 
 from torch.utils.data import DataLoader
 
@@ -810,10 +811,11 @@ def run_pytorch_lightning(model, task,
         checkpoint_callback = True
         logger=True
     
+    lr_monitor = LearningRateMonitor(logging_interval='step')
     debug_mode = os.environ.get("DEBUG_MODE")
     trainer = pl.Trainer(logger=logger,
                          checkpoint_callback=True,
-                         callbacks=[checkpoint_callback],
+                         callbacks=[checkpoint_callback, lr_monitor],
                          gpus = -1,
                          accelerator="ddp",
                          terminate_on_nan=True,
