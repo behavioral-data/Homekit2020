@@ -264,10 +264,14 @@ def train_cnn_transformer(
                 dropout_rate=0.5,
                 train_mix_positives_back_in=False, 
                 train_mixin_batch_size=3,
+                pl_seed=2494,
                 **model_specific_kwargs):
 
     if auto_set_gpu:
         set_gpus_automatically(auto_set_gpu)
+    
+    if pl_seed:
+        pl.seed_everything(pl_seed)
 
     logger.info(f"Training CNNTransformer")
     
@@ -768,7 +772,6 @@ def run_pytorch_lightning(model, task,
                         notes=None,
                         backend="petastorm"):       
 
-    pl.seed_everything(42194)
     do_eval = bool(task.eval_url)
     if not no_wandb:
         # Creating two wandb runs here?
