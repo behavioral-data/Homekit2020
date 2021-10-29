@@ -238,7 +238,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.train_metrics.to(self.device)
     
     def on_validation_epoch_start(self):
-        torch.cuda().empty_cache()
+        torch.cuda.empty_cache()
         self.test_probs = []
     
     def on_test_epoch_end(self):
