@@ -238,16 +238,13 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.train_metrics.to(self.device)
     
     def on_validation_epoch_start(self):
-
+        torch.cuda().empty_cache()
         self.test_probs = []
     
     def on_test_epoch_end(self):
         test_preds = torch.cat(self.test_probs, dim=0)
         test_labels = torch.cat(self.test_labels, dim=0)
         
-        # results = {}
-        # results["test/roc_auc"] = test_auc
-        # results["test/pr_auc"] = pr_auc(test_preds,test_labels) 
         results = classification_eval(test_preds,test_labels,prefix="test/")
 
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
@@ -288,11 +285,9 @@ class CNNToTransformerEncoder(pl.LightningModule):
         
         return {"loss":loss, "preds": logits, "labels":y}
 
-    def on_validation_epoch_end(self):
-
+    def on_validation_epoch_end(self):        
         eval_preds = torch.cat(self.eval_probs, dim=0)
         eval_labels = torch.cat(self.eval_labels, dim=0)
-        # results = classification_eval(eval_preds,eval_labels,prefix="eval/",bootstrap_cis=True)
 
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
         if os.environ.get("LOCAL_RANK","0") == "0":
