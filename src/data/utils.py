@@ -6,6 +6,9 @@ from re import M
 from fsspec.registry import filesystem
 
 import pyarrow.parquet as pq
+
+import fastparquet as fp
+from fastparquet import ParquetFile
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 from scipy.special import softmax
@@ -118,16 +121,25 @@ def load_processed_table(name,fmt="df",path=None):
         raise ValueError("Unsupported fmt") 
 
 def write_pandas_to_parquet(df,path,write_metadata=True,
-                            partition_cols=[],overwrite=False):
+                            partition_cols=[],overwrite=False,
+                            engine="pyarrow"):
     if os.path.exists(path):
         files = glob.glob(os.path.join(path,'*parquet*'))
         for file in files:
             os.remove(file)
 
-    table = pa.Table.from_pandas(df, preserve_index=False)
+    if engine == "pyarrow":
+        table = pa.Table.from_pandas(df, preserve_index=False)
+        
+        pq.write_to_dataset(table, root_path=path,
+                        partition_cols=partition_cols)
     
-    pq.write_to_dataset(table, root_path=path,
-                    partition_cols=partition_cols)
+    elif engine == "fastparquet":
+        fp.write(path, df,  partition_on = partition_cols, file_scheme="hive")
+    
+    else:
+        raise ValueError("Engine must either be 'fastparquet' or pyarrow")
+
     if write_metadata:
         paths = glob.glob(os.path.join(path,"*","*.parquet"))
         dd.io.parquet.create_metadata_file(paths)
@@ -357,3 +369,6 @@ def url_from_path(path,filesystem="file://"):
     if path:
         return filesystem + path
 
+
+def read_parquet_to_pandas(path):
+    return pd.read_parquet(path,engine="fastparquet")
