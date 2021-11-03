@@ -170,7 +170,7 @@ class CNNDecoder(nn.Module):
                     max_pool_kernel_size=None,
                     max_pool_stride_size=None
                 )
-
+            
 class CNNToTransformerEncoder(pl.LightningModule):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, learning_rate=1e-3, warmup_steps=100,
@@ -249,7 +249,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         
         x = self.dense_interpolation(x)
         return x
-    
+
     def set_train_dataset(self,dataset):
         self.train_dataset = dataset
     
@@ -367,7 +367,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         
         return {"loss":loss, "preds": logits, "labels":y}
 
-    def on_validation_epoch_end(self):        
+    def on_validation_epoch_end(self):
         eval_preds = torch.cat(self.eval_probs, dim=0)
         eval_labels = torch.cat(self.eval_labels, dim=0)
 
@@ -384,18 +384,18 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.eval_metrics.reset()
         self.eval_probs = []
         self.eval_labels = []
-
+        
         super().on_validation_epoch_end()
 
     def validation_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
         x = batch["inputs_embeds"]
         y = batch["label"]
         
-            loss,logits = self.forward(x,y)
+        loss,logits = self.forward(x,y)
 
-            self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
-            
-            probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
+        self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
+        
+        probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
         self.eval_probs.append(probs)
         self.eval_labels.append(y)
         
@@ -425,3 +425,43 @@ class CNNToTransformerEncoder(pl.LightningModule):
         on_tpu=False, using_native_amp=False, using_lbfgs=False,
     ):
         optimizer.step(closure=optimizer_closure)
+
+class CNNToTransformerAutoEncoder(pl.LightningModule):
+    def __init__(self, input_features, num_attention_heads, num_hidden_layers, 
+                    n_timesteps, kernel_sizes=[5, 3, 1], out_channels=[256, 128, 64], 
+                    stride_sizes=[2, 2, 2], dropout_rate=0.3, num_labels=2, 
+                    learning_rate=0.001, warmup_steps=100, max_positional_embeddings=1440 * 5,
+                    factor=64, inital_batch_size=100, clf_dropout_rate=0, 
+                    train_mix_positives_back_in=False, train_mixin_batch_size=3, 
+                    **model_specific_kwargs) -> None:
+        
+        # super().__init__(input_features, num_attention_heads, num_hidden_layers, 
+        #                 n_timesteps, kernel_sizes=kernel_sizes, out_channels=out_channels, 
+        #                 stride_sizes=stride_sizes, dropout_rate=dropout_rate, 
+        #                 num_labels=num_labels, learning_rate=learning_rate, 
+        #                 warmup_steps=warmup_steps, max_positional_embeddings=max_positional_embeddings, 
+        #                 factor=factor, inital_batch_size=inital_batch_size, 
+        #                 clf_dropout_rate=clf_dropout_rate, train_mix_positives_back_in=train_mix_positives_back_in, 
+        #                 train_mixin_batch_size=train_mixin_batch_size, **model_specific_kwargs)
+
+        # Probably don't want to actually subclass
+        self.encoder = CNNToTransformerEncoder(input_features, num_attention_heads, num_hidden_layers, 
+                    n_timesteps, kernel_sizes=[5, 3, 1], out_channels=[256, 128, 64], 
+                    stride_sizes=[2, 2, 2], dropout_rate=0.3, num_labels=2, 
+                    learning_rate=0.001, warmup_steps=100, max_positional_embeddings=1440 * 5,
+                    factor=64, inital_batch_size=100, clf_dropout_rate=0, 
+                    train_mix_positives_back_in=False, train_mixin_batch_size=3, 
+                    **model_specific_kwargs)
+
+        self.decoder = CNN
+        self.criterion = nn.MSELoss()
+        self.name = "CNNToTransformerAutoEncoder"
+        self.base_model_prefix = self.name
+
+    def forward(self, inputs_embeds,labels):
+        encoding = self.encoder.encode(inputs_embeds)
+        
+
+    
+    def decode(inputs_embeds):
+        ...
