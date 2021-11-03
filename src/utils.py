@@ -1,7 +1,8 @@
 import os
 import json 
 import logging
-from io import BytesIO
+import gc
+
 
 import dotenv
 import yaml
@@ -95,3 +96,12 @@ def visualize_model(model,dir="."):
     model_img_path = render_network_plot(pred_dummy,dir,params=params)
     return model_img_path
 
+def describe_resident_tensors():
+    tensors = []
+    for obj in gc.get_objects():
+        try:
+            if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                tensors.append((type(obj), obj.size()))
+        except:
+            pass
+    return tensors
