@@ -8,7 +8,7 @@ import numpy as np
 import dask.dataframe as dd
 
 from src.models.commands import validate_yaml_or_json
-from src.data.utils import get_dask_df, write_pandas_to_parquet, load_processed_table
+from src.data.utils import get_dask_df, write_pandas_to_parquet, load_processed_table, read_parquet_to_pandas
 
 @click.command()
 @click.argument("out_path", type=click.Path(file_okay=False))
@@ -27,7 +27,7 @@ def main(out_path, in_path=None, split_date=None, end_date=None, eval_frac=None,
         if not in_path:
             df = get_dask_df("processed_fitbit_minute_level_activity").compute()
         elif in_path:
-            df = pd.read_parquet(in_path)
+            df = read_parquet_to_pandas(in_path)
         timestamp_col = "timestamp"
     else:
         df = load_processed_table("fitbit_day_level_activity")
@@ -83,9 +83,11 @@ def main(out_path, in_path=None, split_date=None, end_date=None, eval_frac=None,
     if not os.path.exists(out_path):
         os.mkdir(out_path)
 
+    df["participant_id"] = df["participant_id"].astype("string")
     if activity_level == "minute":
         for df, path in zip(to_write_dfs,to_write_paths):
-            write_pandas_to_parquet(df,path, partition_cols=["date"],overwrite=True)
+            write_pandas_to_parquet(df,path, partition_cols=["date"],overwrite=True,
+                                    engine="fastparquet")
 
     else:
         for df, path in zip(to_write_dfs,to_write_paths):
