@@ -20,7 +20,7 @@ from petastorm.etl.dataset_metadata import infer_or_load_unischema
 import src.data.task_datasets as td
 from src.models.eval import classification_eval, autoencode_eval
 from src.data.utils import load_processed_table, load_cached_activity_reader, url_from_path
-from src.utils import get_logger
+from src.utils import get_logger, read_yaml
 from src.models.lablers import FluPosLabler, ClauseLabler, EvidationILILabler
 
 logger = get_logger(__name__)
@@ -39,6 +39,14 @@ def get_task_with_name(name):
     if isinstance(identifier, type):
         return identifier
     raise TypeError(f"{name} is not a valid task.")
+
+
+def get_task_from_config_path(path):
+    config = read_yaml(path)
+    task_class = get_task_with_name(config["task_name"])
+    task = task_class(**config["task_args"],
+                      **config["dataset_args"])
+    return task
 
 class Task(object):
     def __init__(self):
@@ -136,7 +144,7 @@ class ActivityTask(Task):
                      train_path=None,
                      eval_path=None,
                      test_path=None,
-                     backend="dask"):
+                     backend="petastorm"):
         
         super(ActivityTask,self).__init__()
         
