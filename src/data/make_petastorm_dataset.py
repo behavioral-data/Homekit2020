@@ -73,6 +73,7 @@ def get_active_spark_context() -> SparkSession:
 @click.command()
 @click.argument("input_path", type=click.Path(file_okay=False,exists=True))
 @click.argument("output_path", type=click.Path(file_okay=False,exists=False))
+@click.option("--label_path", type=click.Path(file_okay=True,exists=True))
 @click.option("--max_missing_days_in_window", type=int, default=2)
 @click.option("--min_windows", type=int, default=1)
 @click.option("--day_window_size", type=int, default=4)
@@ -81,7 +82,7 @@ def get_active_spark_context() -> SparkSession:
 @click.option("--max_date", type=str, default=None)
 @click.option("--partition_by", type=str, multiple=False)
 @click.option("--rename", type=str, multiple=True)
-def main(input_path, output_path, max_missing_days_in_window, 
+def main(input_path, output_path, label_path, max_missing_days_in_window, 
                     min_windows, day_window_size, parse_timestamp,
                     min_date=None, max_date=None, partition_by = None, rename=None):
 
@@ -156,6 +157,7 @@ def main(input_path, output_path, max_missing_days_in_window,
                 df = df.withColumn('timestamp', f.from_unixtime(df.timestamp/pow(10,9)))
                 df = df.withColumn('timestamp', f.to_timestamp(df.timestamp))
 
+        # Scale the data
         assemblers = [VectorAssembler(inputCols=[col], outputCol=col + "_vec") for col in dbl_cols]
         scalers = [StandardScaler(inputCol=col + "_vec", outputCol=col + "_scaled") for col in dbl_cols]
         pipeline = Pipeline(stages=assemblers + scalers)
@@ -164,28 +166,24 @@ def main(input_path, output_path, max_missing_days_in_window,
         
         names = {x + "_scaled": x for x in dbl_cols}
         firstelement=f.udf(lambda v:float(v[0]),sql_types.DoubleType())
-        # df = df.select([firstelement(c).alias(c) for c in df.columns])
         scaled_cols = [firstelement(f.col(c)).alias(names[c]) for c in names.keys()]
         old_cols = [f.col(c) for c in non_dbl_cols]
         scaledData = scaledData.select(old_cols + scaled_cols)
        
-        
+        # Apply windowing
         window_duration = f"{day_window_size} days"
         slide_duration = f"1 days"
-        
-        # w = Window.partitionBy(scaledData.participant_id,scaledData.date).orderBy(scaledData.timestamp)
         grouped = scaledData.groupBy("participant_id",f.window("timestamp", window_duration, 
                                                             slide_duration, startTime="0 minutes"))
 
         feature_columns = [x for x in scaledData.columns if not x in ["participant_id","timestamp","date"]]
         aggs = [f.collect_list(colName) for colName in feature_columns] + [f.count(feature_columns[0]).alias("count_col")]
-        # vecAssembler = VectorAssembler(outputCol="features", inputCols=[f"collect_list({x})" for x in feature_columns])
-        
         result = grouped.agg(*aggs)
+
+        # Remove windows that don't have enough samples (e.g. on the edges)
         result  = result.filter(result.count_col == expected_length)
         result.drop("count_col")
         result = rename_columns(result,{f"collect_list({x})" : x for x in feature_columns})
-        # result = result.withColumn()
 
         result = result.withColumn("start",result.window.start)
         result = result.withColumn("end",result.window.end)
