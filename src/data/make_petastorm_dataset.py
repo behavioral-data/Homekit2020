@@ -73,7 +73,7 @@ def get_active_spark_context() -> SparkSession:
 @click.command()
 @click.argument("input_path", type=click.Path(file_okay=False,exists=True))
 @click.argument("output_path", type=click.Path(file_okay=False,exists=False))
-@click.option("--label_path", type=click.Path(file_okay=True,exists=True))
+@click.option("--task_config", type=click.Path(file_okay=True,exists=True))
 @click.option("--max_missing_days_in_window", type=int, default=2)
 @click.option("--min_windows", type=int, default=1)
 @click.option("--day_window_size", type=int, default=4)
@@ -82,7 +82,7 @@ def get_active_spark_context() -> SparkSession:
 @click.option("--max_date", type=str, default=None)
 @click.option("--partition_by", type=str, multiple=False)
 @click.option("--rename", type=str, multiple=True)
-def main(input_path, output_path, label_path, max_missing_days_in_window, 
+def main(input_path, output_path, task_config, max_missing_days_in_window, 
                     min_windows, day_window_size, parse_timestamp,
                     min_date=None, max_date=None, partition_by = None, rename=None):
 
@@ -121,6 +121,7 @@ def main(input_path, output_path, label_path, max_missing_days_in_window,
         
     new_fields.append(UnischemaField("start",np.datetime64,nullable=False,shape=None))
     new_fields.append(UnischemaField("end",np.datetime64,nullable=False,shape=None))
+    new_fields.append(UnischemaField("id",np.int32,nullable=False,shape=None))
 
     schema = Unischema("homekit",new_fields)
     rowgroup_size_mb = 256
@@ -156,7 +157,7 @@ def main(input_path, output_path, label_path, max_missing_days_in_window,
                 # Need to do this because otherwise Spark will use the system's timezone info
                 df = df.withColumn('timestamp', f.from_unixtime(df.timestamp/pow(10,9)))
                 df = df.withColumn('timestamp', f.to_timestamp(df.timestamp))
-
+        
         # Scale the data
         assemblers = [VectorAssembler(inputCols=[col], outputCol=col + "_vec") for col in dbl_cols]
         scalers = [StandardScaler(inputCol=col + "_vec", outputCol=col + "_scaled") for col in dbl_cols]
@@ -187,6 +188,9 @@ def main(input_path, output_path, label_path, max_missing_days_in_window,
 
         result = result.withColumn("start",result.window.start)
         result = result.withColumn("end",result.window.end)
+
+        # Add ID
+        result = result.select("*").withColumn("id", f.monotonically_increasing_id())
 
         result.write \
             .mode('overwrite') \
