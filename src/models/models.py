@@ -378,7 +378,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
             self.logger.experiment.log({"eval/det": wandb_detection_error_tradeoff_curve(eval_preds,eval_labels, limit=9999)}, commit=False)
         
         metrics = self.eval_metrics.compute()
-        self.log_dict(metrics, on_step=False, on_epoch=True)
+        self.log_dict(metrics, on_step=False, on_epoch=True, sync_dist=True)
         
         # Clean up
         self.eval_metrics.reset()
@@ -396,8 +396,8 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
         
         probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
-        self.eval_probs.append(probs)
-        self.eval_labels.append(y)
+        self.eval_probs.append(probs.detach())
+        self.eval_labels.append(y.detach())
         
         self.eval_metrics.update(probs,y)
         return {"loss":loss, "preds": logits, "labels":y}
