@@ -19,7 +19,7 @@ def validate_yaml_or_json(ctx, param, value):
         except json.decoder.JSONDecodeError:
             raise click.BadParameter('dataset_args needs to be either a json string or a path to a config .yaml')
 
-nerual_options = [
+neural_options = [
         click.Option(('--n_epochs',), default = 10, help='Number of training epochs'),
         click.Option(('--val_epochs',), default=10, help="Run validation every n epochs"),
         click.Option(('--hidden_size',), default = 768),
@@ -40,6 +40,7 @@ nerual_options = [
         click.Option(('--sinu_position_encoding',), is_flag=True, default=False),
         click.Option(('--classification_threshold',), default = 0.5),
         click.Option(('--no_eval_during_training',), is_flag=True, default = False),
+        click.Option(('--downsample_negative_frac',), default = None, type=float),
         click.Option(('--auto_set_gpu',), type=int, default = None, help="Try to find n GPUs, and use them"),
         click.Option(('--dropout_rate',), type=float, default = 0.5)
      
@@ -86,7 +87,7 @@ class BaseCommand(click.Command):
 class NeuralCommand(BaseCommand):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.params = self.params + nerual_options 
+        self.params = self.params + neural_options 
 
     
 class CNNTransformer(NeuralCommand):

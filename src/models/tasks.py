@@ -16,6 +16,7 @@ import numpy as np
 from petastorm import make_reader
 from petastorm.transform import TransformSpec
 from petastorm.etl.dataset_metadata import infer_or_load_unischema
+import petastorm.predicates  as peta_pred
 
 import src.data.task_datasets as td
 from src.models.eval import classification_eval, autoencode_eval
@@ -133,7 +134,11 @@ def verify_backend(backend,
 
 class ActivityTask(Task):
     """ Is inhereited by anything that operatres over the minute
-        level data"""
+        level data
+        
+        TODO: A ton of these arguments only work with the legacy dask backend.
+        Likely we want to remove them.
+        """
     def __init__(self,base_dataset,dataset_args={},
                      activity_level = "minute",
                      look_for_cached_datareader=False,
@@ -144,6 +149,7 @@ class ActivityTask(Task):
                      train_path=None,
                      eval_path=None,
                      test_path=None,
+                     downsample_negative_frac=None,
                      backend="petastorm"):
         
         super(ActivityTask,self).__init__()
@@ -230,6 +236,22 @@ class ActivityTask(Task):
             self.eval_url = url_from_path(eval_path)
             self.test_url = url_from_path(test_path)
             
+            labler = self.get_labler()
+
+            if downsample_negative_frac:
+                if not hasattr(labler,"get_positive_keys"):
+                    raise ValueError(f"Tried to downsample negatives but {type(labler)}"
+                                      " does not support `get_positive_keys`")
+                positive_keys = labler.get_positive_keys()
+                has_positive_predicate = peta_pred.in_lambda(["participant_id","end"],
+                                                             lambda x,y : (x,pd.to_datetime(y)) in positive_keys)
+                in_subset_predicate = peta_pred.in_pseudorandom_split([downsample_negative_frac,1-downsample_negative_frac],
+                                                                      0,"id")
+                self.predicate = peta_pred.in_reduce([has_positive_predicate, in_subset_predicate], any)
+            else:
+                self.predicate = None
+                                                            
+                
             infer_schema_path = None
             for path in [self.train_path,self.eval_path,self.test_path]:
                 if path: 
@@ -238,11 +260,11 @@ class ActivityTask(Task):
 
             if not infer_schema_path:
                 raise ValueError("Must provide at least one of {}"
-                                 "train_path, eval_path, or test_path"
-                                 "to use the petatstorm backend")
+                                "train_path, eval_path, or test_path"
+                                "to use the petatstorm backend")
         
             schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
-            fields = [k for k in schema.fields.keys() if not k == "participant_id"]
+            fields = [k for k in schema.fields.keys() if not k in ["participant_id","id"]]
             # features = [k for k in schema.fields.keys() if not k in ["start","end","participant_id"]]
             
             def _transform_row(row):
@@ -252,7 +274,8 @@ class ActivityTask(Task):
                 end = pd.to_datetime(row.pop("end")) - pd.to_timedelta("1ms")
 
                 participant_id = row.pop("participant_id")
-                
+                data_id = row.pop("id")
+
                 if hasattr(self,"keys"):
                     keys = self.keys
                 else:
@@ -263,17 +286,18 @@ class ActivityTask(Task):
                 label = int(labler(participant_id,start,end))
                 return {"inputs_embeds":result,
                         "label": label,
+                        "id": data_id,
                         "participant_id": participant_id,
                         "end_date_str": str(end)}
             
             new_fields = [("inputs_embeds",np.float32,None,False),
-                          ("label",np.int_,None,False),
-                          ("participant_id",np.str_,None,False),
-                          ("end_date_str",np.str_,None,False)]
+                        ("label",np.int_,None,False),
+                        ("participant_id",np.str_,None,False),
+                        ("id",np.int32,None,False),
+                        ("end_date_str",np.str_,None,False)]
 
             self.transform = TransformSpec(_transform_row,removed_fields=fields,
-                                                      edit_fields= new_fields)
-
+                                                    edit_fields= new_fields)
     def get_description(self):
         return self.__doc__
 

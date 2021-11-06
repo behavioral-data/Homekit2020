@@ -266,6 +266,7 @@ def train_cnn_transformer(
                 train_mix_positives_back_in=False, 
                 train_mixin_batch_size=3,
                 pl_seed=2494,
+                downsample_negative_frac=None,
                 **model_specific_kwargs):
 
     if auto_set_gpu:
@@ -303,6 +304,7 @@ def train_cnn_transformer(
         task = ray.get(task_ray_obj_ref)
     else:
         task = get_task_with_name(task_name)( **task_args,
+                                              downsample_negative_frac=downsample_negative_frac,
                                               dataset_args=dataset_args,
                                               activity_level=activity_level,
                                               look_for_cached_datareader=look_for_cached_datareader,
@@ -822,6 +824,7 @@ def run_pytorch_lightning(model, task,
                          num_sanity_val_steps=0,
                          limit_val_batches= 0.0 if not do_eval else 1.0,
                          limit_train_batches=10 if debug_mode else 1.0,
+                         profiler="simple",
                          **training_args)
 
 
@@ -833,10 +836,12 @@ def run_pytorch_lightning(model, task,
         ## Manages train and eval context for petastorm:
 
         if do_eval:
-            with PetastormDataLoader(make_reader(task.train_url,transform_spec=task.transform),
+            with PetastormDataLoader(make_reader(task.train_url,transform_spec=task.transform,
+                                     predicate=task.predicate),
                                     batch_size=model.batch_size) as train_dataset:
-                with PetastormDataLoader(make_reader(task.eval_url,transform_spec=task.transform),
-                                    batch_size=3*model.batch_size) as eval_dataset:
+                with PetastormDataLoader(make_reader(task.eval_url,transform_spec=task.transform,
+                                     predicate=task.predicate),
+                                    batch_size=model.batch_size) as eval_dataset:
                     trainer.fit(model,train_dataset,eval_dataset)
         else:
             with PetastormDataLoader(make_reader(task.train_url,transform_spec=task.transform),

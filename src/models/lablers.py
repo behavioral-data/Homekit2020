@@ -36,6 +36,9 @@ class FluPosLabler(object):
         is_pos_on_date = self.result_lookup.get((participant_id,end_date.normalize()),False)
         return is_pos_on_date
 
+    def get_positive_keys(self):
+        return set([(x[0], x[1].normalize()) for x in self.result_lookup.keys()])
+
 class EvidationILILabler(object):
     def __init__(self,feather_path,
                       ili_types=[1,2,3],
@@ -83,10 +86,13 @@ class EvidationILILabler(object):
                                  .groupby(["participant_id","date"])\
                                  ["is_pos"].any()\
                                  .to_dict()
-                                 
+                           
     def __call__(self,participant_id,start_date,end_date):
         is_pos_on_date = self.result_lookup.get((participant_id,end_date.normalize()),False)
         return is_pos_on_date
+    
+    def get_positive_keys(self):
+        return set([(x[0], x[1].normalize()) for x in self.result_lookup.keys()])
 
 class ClauseLabler(object):
     def __init__(self, survey_respones, clause):
@@ -106,4 +112,6 @@ class ClauseLabler(object):
         result = self.survey_lookup.get((participant_id,end_date.normalize()),False)
         return result
 
+    def get_positive_keys(self):
+        return set([(x[0], x[1].normalize()) for x in self.survey_lookup.keys()])
 
