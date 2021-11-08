@@ -36,7 +36,7 @@ def main(ctx, ckpt_path, task_config, predict_path, wandb_mode="offline",
     local_rank = os.environ.get("LOCAL_RANK",0)
     if local_rank == 0:
         logger = WandbLogger(project="flu",
-                                entity="mikeamerrill",
+                                entity="mikeamerrill", #TODO make argument
                                 log_model=True,
                                 notes=notes,
                                 reinit=True)

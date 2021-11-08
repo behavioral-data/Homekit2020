@@ -1,3 +1,19 @@
+"""
+====================================================
+Architectures For Behavioral Representation Learning     
+====================================================
+`Project repository available here  <https://github.com/behavioral-data/SeattleFluStudy>`_
+
+This module contains the architectures used for behavioral representation learning in the reference paper. 
+Particularly, the two main classes in the module implement a CNN architecture and the novel CNN-Transformer
+architecture. 
+
+**Classes**
+    :class CNNEncoder: 
+    :class CNNToTransformerEncoder:
+
+"""
+
 from copy import copy
 
 from typing import Dict,  Union, Any, Optional

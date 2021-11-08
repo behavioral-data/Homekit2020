@@ -1,3 +1,31 @@
+"""
+===========================
+SeattleFluStudy experiments  
+===========================
+`Project repository available here  <https://github.com/behavioral-data/SeattleFluStudy>`_
+
+This module contains the code used in the experimental tasks described in the reference paper.
+The tasks are classes intended to provide, during training and evaluation, the correct reference to 
+the datasets being used and evaluation metrics. 
+
+**Classes**
+    :class Task:
+    :class ClassificationMixin:
+    :class AutoencodeMixin:
+    :class ActivityTask: 
+    :class GeqMeanSteps: 
+    :class PredictFluPos: 
+    :class PredictEvidationILI: 
+    :class PredictTrigger:
+    :class PredictSurveyClause:
+    :class SingleWindowActivityTask:
+    :class ClassifyObese:
+    :class EarlyDetection:
+    :class AutoencodeEarlyDetection:
+    :class Autoencode:
+
+"""
+__docformat__ = 'reStructuredText'
 
 import sys
 import datetime
@@ -27,13 +55,22 @@ logger = get_logger(__name__)
 
 import pandas as pd
 
-SUPPORTED_TASK_TYPES=[
+
+###################################################
+########### MODULE UTILITY FUNCTIONS ##############
+###################################################
+
+SUPPORTED_TASK_TYPES=[      
     "classification",
     "autoencoder"
 ]
-def get_task_with_name(name):
+def get_task_with_name(name): 
+    """
+    Checks the provided `name` is within the module definitions, raises `NameError` if it isn't
+       :returns: an object referencing the desired task (specified in input)
+    """
     try:
-        identifier = getattr(sys.modules[__name__], name)
+        identifier = getattr(sys.modules[__name__], name) # get a reference to the module itself through the sys.modules dictionary  
     except AttributeError:
         raise NameError(f"{name} is not a valid task.")
     if isinstance(identifier, type):
@@ -123,6 +160,7 @@ def verify_backend(backend,
         if datareader_ray_obj_ref:
             raise NotImplementedError("Petastorm backend does not support ray references")
 
+
 class ActivityTask(Task):
     """ Is inhereited by anything that operatres over the minute
         level data"""
@@ -211,6 +249,9 @@ class ActivityTask(Task):
 
         ### Newer backend relies on petastorm and is faster, but requires more pre-processing:
         elif self.backend == "petastorm":
+            """
+            Set the necessary attributes and adjust the time window of data  
+            """
             #TODO make sure labler gets label for right day
             #TODO ensure labler is serialized properly 
             
@@ -270,6 +311,9 @@ class ActivityTask(Task):
         return self.__doc__
 
     def get_train_dataset(self):
+        """
+        In case the Petastorm framework is chosen, Returns a `Reader` instance
+        """
         if self.backend == "dask":
             return self.train_dataset
         elif self.backend == "petastorm":
@@ -288,6 +332,11 @@ class ActivityTask(Task):
         else:
             raise ValueError("Invalid backend")
     
+    
+################################################
+########### TASKS IMPLEMENTATIONS ##############
+################################################
+
 class GeqMeanSteps(ActivityTask, ClassificationMixin):
     """A dummy task to predict whether or not the total number of steps
        on the first day of a window is >= the mean across the whole dataset"""
@@ -311,7 +360,7 @@ class GeqMeanSteps(ActivityTask, ClassificationMixin):
         return evaluator
 
 class PredictFluPos(ActivityTask, ClassificationMixin):
-    """Predict the whether a participant was positive
+    """Predict whether a participant was positive
        given a rolling window of minute level activity data.
        We validate on data after split_date, but before
        max_date, if provided"""
