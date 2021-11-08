@@ -39,6 +39,13 @@ class FluPosLabler(object):
     def get_positive_keys(self):
         return set([(x[0], x[1].normalize()) for x in self.result_lookup.keys()])
 
+class DayOfWeekLabler(object):
+    """ Returns true if `end_date` is on one of `days`"""
+    def __init__(self,days):
+        self.days = days
+
+    def __call__(self,participant_id,start_date,end_date):
+        return end_date.weekday() in self.days
 class EvidationILILabler(object):
     def __init__(self,feather_path,
                       ili_types=[1,2,3],

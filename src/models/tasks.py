@@ -22,7 +22,7 @@ import src.data.task_datasets as td
 from src.models.eval import classification_eval, autoencode_eval
 from src.data.utils import load_processed_table, load_cached_activity_reader, url_from_path
 from src.utils import get_logger, read_yaml
-from src.models.lablers import FluPosLabler, ClauseLabler, EvidationILILabler
+from src.models.lablers import FluPosLabler, ClauseLabler, EvidationILILabler, DayOfWeekLabler
 
 logger = get_logger(__name__)
 
@@ -370,6 +370,35 @@ class PredictFluPos(ActivityTask, ClassificationMixin):
 
     def get_name(self):
         return "PredictFluPos"
+    
+    def get_labler(self):
+        return self.labler
+
+
+class PredictWeekend(ActivityTask, ClassificationMixin):
+    """Predict the whether the associated data belongs to a 
+       weekend"""
+
+    def __init__(self,dataset_args={}, activity_level = "minute",
+                **kwargs):
+        self.labler = DayOfWeekLabler([5,6])
+
+        dataset_args["labeler"] = self.labler
+        self.keys = ['heart_rate',
+                     'missing_heart_rate',
+                     'missing_steps',
+                     'sleep_classic_0',
+                     'sleep_classic_1',
+                     'sleep_classic_2',
+                     'sleep_classic_3', 
+                     'steps']
+
+        ActivityTask.__init__(self,td.CustomLabler,dataset_args=dataset_args,
+                                 activity_level=activity_level,**kwargs)
+        ClassificationMixin.__init__(self)
+        
+    def get_name(self):
+        return "PredictWeekend"
     
     def get_labler(self):
         return self.labler
