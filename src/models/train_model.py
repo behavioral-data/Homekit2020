@@ -252,6 +252,7 @@ def train_cnn_transformer(
                 limit_train_frac=None,
                 freeze_encoder=False,
                 tune=False,
+                resume_model_from_ckpt=None,
                 output_dir=None,
                 kernel_sizes = [5,3,2],
                 out_channels = [256,128,64],
@@ -315,14 +316,18 @@ def train_cnn_transformer(
                                               eval_path=eval_path,
                                               test_path=test_path)
     
-    
-    if not model_path:
-        train_dataset = task.get_train_dataset()
-        # if backend=="petastorm":
-        #     infer_example = next(train_dataset).inputs_embeds
-        # else:
-        #     infer_example = train_dataset[0]["inputs_embeds"]
-        # n_timesteps, n_features = infer_example.shape
+    if model_path:
+        if use_huggingface:
+            model = load_model_from_huggingface_checkpoint(model_path)
+        else:
+            model = CNNToTransformerEncoder.load_from_checkpoint(model_path, 
+                                                                strict=False,
+                                                               **model_specific_kwargs)
+    elif resume_model_from_ckpt:
+            model = CNNToTransformerEncoder.load_from_checkpoint(resume_model_from_ckpt, 
+                                                                strict=False,
+                                                                **model_specific_kwargs)                                                          
+    else:
         n_timesteps, n_features = (5760,8)
         model_kwargs = dict(input_features=n_features,
                             n_timesteps=n_timesteps,
@@ -342,16 +347,9 @@ def train_cnn_transformer(
         if model_config:
             model_kwargs.update(model_config)
         model = CNNToTransformerEncoder(**model_kwargs)
-    else:
-        if use_huggingface:
-            model = load_model_from_huggingface_checkpoint(model_path)
-        else:
-            model = CNNToTransformerEncoder.load_from_checkpoint(model_path, 
-                                                                strict=False,
-                                                                **model_specific_kwargs)
 
-        if reset_cls_params and hasattr(model,"clf"):
-            model.clf.reset_parameters()
+    if reset_cls_params and hasattr(model,"clf"):
+        model.clf.reset_parameters()
 
     if freeze_encoder:
         for param in model.blocks.parameters():
@@ -386,9 +384,9 @@ def train_cnn_transformer(
 
     if not use_huggingface:
         pl_training_args = dict(
-            max_epochs = n_epochs,
+            max_epochs=n_epochs,
             check_val_every_n_epoch=val_epochs,
-            auto_scale_batch_size="binsearch"
+            resume_from_checkpoint=resume_model_from_ckpt
         )
         run_pytorch_lightning(model,task,training_args=pl_training_args,backend=backend)
     else:
