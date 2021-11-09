@@ -1,3 +1,19 @@
+"""
+==========================
+Argument parser definition 
+==========================
+`Project repository available here  <https://github.com/behavioral-data/SeattleFluStudy>`_
+
+This module sets up the argument parser provided by the click library. 
+
+**Classes**
+    :class BaseCommand: Inherits from click.Command and adds the commands defined in the `universal_options` list 
+    :class NeuralCommand: Inherits from BaseCommand and adds the commands defined in the `nerual_options` list 
+    :class CNNTransformer: Inherits from NeuralCommand and adds the commands defined in the `loss_options`, `cnn_transformer_params`, `petastorm_options` lists 
+
+"""
+__docformat__ = 'reStructuredText'
+
 import json
 from random import choice
 import click

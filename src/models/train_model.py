@@ -1,3 +1,26 @@
+"""
+========================
+Model Training Utilities 
+========================
+`Project repository available here  <https://github.com/behavioral-data/SeattleFluStudy>`_
+
+This module provides the functions to fit different statistical models to the data and evaluating their performance. 
+The operations common to all functions regard instantiating the needed model, fetching the train and evaluation data by instatiating
+the correct task in the `tasks` module, evaluating the results. 
+Some functions also rely on the two utilites `run_huggingface` and `run_pytorch_lightning` in order to fit the model to the data, saving it and
+getting evaluation metrics 
+
+**Functions**
+    :function train_neural_baseline: 
+    :function train_autoencoder:
+    :function train_cnn_transformer:
+    :function train_sand:
+    :function train_bert:
+    :function train_longformer:
+    :function run_huggingface:
+    :function run_pytorch_lightning:
+"""
+__docformat__ = 'reStructuredText'
 
 import logging
 
@@ -77,7 +100,7 @@ def train_neural_baseline(model_name,task_name,
     logger.info(f"Training {model_name} on {task_name}")
     dataset_args["eval_frac"] = eval_frac
     dataset_args["data_location"] = data_location
-    task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level,
+    task = get_task_with_name(task_name)(dataset_args=dataset_args, activity_level=activity_level, #get task class and input the arguments 
                                         look_for_cached_datareader=look_for_cached_datareader,
                                         datareader_ray_obj_ref=datareader_ray_obj_ref)
 
@@ -114,7 +137,7 @@ def train_neural_baseline(model_name,task_name,
         from wandb.keras import WandbCallback
         import wandb
         wandb.init(project="flu",
-                   entity="mikeamerrill",
+                   entity="mikeamerrill", #TODO make this an argument? could also be a utility function in utils module
                    config=config_info,
                    notes=notes)
         wandb.log({"train_class_balance":train_class_balance})                   
@@ -709,7 +732,7 @@ def run_huggingface(model,base_trainer,training_args,
                     metrics, task,no_wandb=False,notes=None,
                     tune=True):
                     
-    if not no_wandb:
+    if not no_wandb: 
         import wandb
         wandb.init(project="flu",
                    entity="mikeamerrill",

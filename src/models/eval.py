@@ -116,13 +116,14 @@ class TorchMetricClassification(MetricCollection):
 
 
 def make_ci_bootsrapper(estimator):
+    """  """ 
     def bootstrapper(pred,labels,n_samples=100):
         results = []
         inds = np.arange(len(pred))
-        for _ in range(n_samples):
-            sample = np.random.choice(inds,len(pred))
+        for _ in range(n_samples): #TODO how does it not return an array of same values? JM
+            sample = np.random.choice(inds,len(pred)) #sample from the (0,...,len(pred)) vector without replacement for len(pred) times 
             try:
-                results.append(estimator(pred[sample],labels[sample]))
+                results.append(estimator(pred[sample],labels[sample])) #get AUC estimates for the shuffled logits vector 
             except ValueError:
                 continue
         return np.quantile(results,0.05), np.quantile(results,0.95)
@@ -134,10 +135,23 @@ def add_prefix(results,prefix):
         renamed[prefix+k] = v
     return renamed
 
-def get_wandb_plots():
+def get_wandb_plots(): #TODO
     ...
+
 def classification_eval(preds, labels, threshold = None, prefix=None,
                         bootstrap_cis=False):
+    """
+    Get a dictionary containing performance evaluation 
+    results for the classification setting. 
+
+    **Arguments** 
+        :preds: tensor of unnormalized probabilities 
+        :labels: ground truth labels 
+        :threshold: 
+        :prefix:
+        :bootstrap_cis:  
+    """
+
     results = {}
     # Remove indices with pad tokens
     if threshold:
@@ -254,6 +268,12 @@ def wandb_roc_curve(preds,labels, return_table=False,limit=999):
     return plot
 
 def pr_auc(pred,labels,get_ci=False,n_samples=10000):
+    """
+    Returns AUC for the classifier
+    First computes precision and recall and then returns the torchmetrics.functional.auc() result 
+        **Arguments** 
+        :pred: tensor of unnormalized probabilities 
+    """
     preds = pred.cpu().numpy()
     labels = labels.cpu().numpy()
     precision, recall, _ = precision_recall_curve(labels,preds)
@@ -266,6 +286,12 @@ def pr_auc(pred,labels,get_ci=False,n_samples=10000):
 
 
 def roc_auc(pred,labels,get_ci=False,n_samples=10000):
+    """
+    Returns AUC for the classifier 
+    Uses the sklearn.metrics.roc_auc_score() function
+        **Arguments** 
+        :pred: tensor of unnormalized probabilities 
+    """
     preds = pred.cpu().numpy()
     score = roc_auc_score(labels,preds)
     if get_ci:

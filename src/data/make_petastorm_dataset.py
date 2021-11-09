@@ -1,3 +1,14 @@
+"""
+========================
+Model Training Utilities 
+========================
+`Project repository available here  <https://github.com/behavioral-data/SeattleFluStudy>`_
+
+The main() function of the module takes care of saving a transformed Parquet dataset given one in input. 
+Transformations include scaling and grouping of data to time windows of specified size. 
+
+
+"""
 from os import name
 import numpy as np
 import click
