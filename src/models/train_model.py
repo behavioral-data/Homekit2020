@@ -49,7 +49,8 @@ import pickle
 from torch import tensor
 warnings.filterwarnings("ignore")
 
-import click
+from dotenv import dotenv_values
+
 
 from src.models.autoencode import get_autoencoder_by_name, run_autoencoder
 from src.models.tasks import get_task_with_name, Autoencode
@@ -57,7 +58,8 @@ from src.models.neural_baselines import create_neural_model
 from src.models.models import CNNToTransformerEncoder
 from src.models.trainer import FluTrainer
 from src.SAnD.core.model import SAnD
-from src.utils import get_logger, render_network_plot, set_gpus_automatically, visualize_model
+from src.utils import (get_logger, load_dotenv, render_network_plot, set_gpus_automatically, 
+                        visualize_model)
 from src.data.utils import write_dict_to_json
 from src.models.load_model import load_model_from_huggingface_checkpoint
 
@@ -77,7 +79,7 @@ from PIL import Image
 import torch
 
 logger = get_logger(__name__)
-
+CONFIG = dotenv_values(".env")
 
 def train_neural_baseline(model_name,task_name,
                          model_path=None,
@@ -800,14 +802,10 @@ def run_pytorch_lightning(model, task,
     if not no_wandb:
         # Creating two wandb runs here?
         import wandb
-        # experiment = wandb.init(project="flu",
-        #                       entity="mikeamerrill",
-        #                       notes=notes,
-        #                       reinit=True)
         local_rank = os.environ.get("LOCAL_RANK",0)
         if local_rank == 0:
-            logger = WandbLogger(project="flu",
-                              entity="mikeamerrill",
+            logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],
+                              entity=CONFIG["WANDB_USERNAME"],
                               notes=notes,
                               log_model=True,
                               reinit=True)                     

@@ -12,6 +12,16 @@ How to contibute:
 4. Follow the project structure outlined below.
 
 
+Weights and Biases Integration:
+------------
+By default this project integrates with Weights and Biases. If you would like to ignore this integration and use some other logging infrasturcture, run commands with the `--no_wandb` flag.
+
+In order to set up this integration, add the following to `.env`:
+```
+WANDB_USERNAME=<your username>
+WANDB_PROJECT=<the name of the WandB project you want to save results to>
+```
+
 Why is this project set up like this?
 ------------
 Great question. For a more satisfying answer than can be provided here, look to the [original cookiecutter page](https://drivendata.github.io/cookiecutter-data-science/): 
