@@ -73,7 +73,6 @@ def get_active_spark_context() -> SparkSession:
 @click.command()
 @click.argument("input_path", type=click.Path(file_okay=False,exists=True))
 @click.argument("output_path", type=click.Path(file_okay=False,exists=False))
-@click.option("--task_config", type=click.Path(file_okay=True,exists=True))
 @click.option("--max_missing_days_in_window", type=int, default=2)
 @click.option("--min_windows", type=int, default=1)
 @click.option("--day_window_size", type=int, default=4)
@@ -82,7 +81,7 @@ def get_active_spark_context() -> SparkSession:
 @click.option("--max_date", type=str, default=None)
 @click.option("--partition_by", type=str, multiple=False)
 @click.option("--rename", type=str, multiple=True)
-def main(input_path, output_path, task_config, max_missing_days_in_window, 
+def main(input_path, output_path, max_missing_days_in_window, 
                     min_windows, day_window_size, parse_timestamp,
                     min_date=None, max_date=None, partition_by = None, rename=None):
 
