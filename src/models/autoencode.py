@@ -167,7 +167,7 @@ def run_autoencoder(base_model,
     if not no_wandb:
         import wandb
         wandb.init(project="flu",
-                   entity="mikeamerrill",
+                   entity="mikeamerrill", #TODO make this an argument
                    config=config_info,
                    notes=notes)
         wandb.watch(model)

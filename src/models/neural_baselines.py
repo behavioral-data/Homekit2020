@@ -1,3 +1,16 @@
+"""
+=================================
+Baseline Model Creation Utilities 
+=================================
+`Project repository available here  <https://github.com/behavioral-data/SeattleFluStudy>`_
+
+Contains the routines to define the CNN and LSTM baseline models as described in the reference paper. 
+Makes use of the Tensorflow framework. 
+
+**Functions**
+    :function create_neural_model: returns the compiled model asked for in input
+
+"""
 from tensorflow import keras
 import tensorflow as tf
 # import tensorflow.keras as keras

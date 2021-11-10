@@ -1,4 +1,13 @@
+"""
+==============================================
+Model Training/eval Utilities for Transformers
+==============================================
+`Project repository available here  <https://github.com/behavioral-data/SeattleFluStudy>`_
 
+This module contains a subclass of the Trainer class (transformers library), 
+in order to provide a customized training and evaluation loop to be used by the functions in 
+`train_model`
+"""
 import collections
 from typing import List, Optional, Union
 import os
