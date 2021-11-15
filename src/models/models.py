@@ -48,7 +48,7 @@ class Config(object):
 
 
 def conv_l_out(l_in,kernel_size,stride,padding=0, dilation=1):
-    return np.floor((l_in + 2 * padding - dilation * (kernel_size-1)-1)/stride + 1)
+    return int(np.floor((l_in + 2 * padding - dilation * (kernel_size-1)-1)/stride + 1))
 
 def get_final_conv_l_out(l_in,kernel_sizes,stride_sizes,
                         max_pool_kernel_size=None, max_pool_stride_size=None):
@@ -101,6 +101,7 @@ class CNNEncoder(nn.Module):
         self.input_features = input_features
 
         layers = []
+        l_out = n_timesteps
         for i in range(n_layers):
             if i == 0:
                 in_channels = input_features
@@ -111,8 +112,11 @@ class CNNEncoder(nn.Module):
                                     kernel_size=kernel_sizes[i],
                                     stride = stride_sizes[i]))
             layers.append(nn.ReLU())
+            l_out = conv_l_out(l_out,kernel_sizes[i],stride_sizes[i])
             if max_pool_stride_size and max_pool_kernel_size:
+                l_out = conv_l_out(l_out, max_pool_kernel_size,max_pool_stride_size)
                 layers.append(nn.MaxPool1d(max_pool_kernel_size, stride=max_pool_stride_size))
+            layers.append(nn.LayerNorm([out_channels[i],l_out]))
         self.layers = nn.ModuleList(layers)
         self.final_output_length = get_final_conv_l_out(n_timesteps,kernel_sizes,stride_sizes, 
                                                         max_pool_kernel_size=max_pool_kernel_size, 
@@ -191,13 +195,14 @@ class CNNToTransformerEncoder(pl.LightningModule):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, learning_rate=1e-3, warmup_steps=100,
                 max_positional_embeddings = 1440*5, factor=64, inital_batch_size=100, clf_dropout_rate=0.0,
-                train_mix_positives_back_in=False, train_mixin_batch_size=3,
+                train_mix_positives_back_in=False, train_mixin_batch_size=3, skip_cnn=False,
                 **model_specific_kwargs) -> None:
         self.config = get_config_from_locals(locals())
 
         super(CNNToTransformerEncoder, self).__init__()
         
-        self.d_model = out_channels[-1]
+        
+
         self.learning_rate = learning_rate
         self.warmup_steps = warmup_steps
         self.input_dim = (n_timesteps,input_features)
@@ -205,6 +210,13 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.input_embedding = CNNEncoder(input_features, n_timesteps=n_timesteps, kernel_sizes=kernel_sizes,
                                 out_channels=out_channels, stride_sizes=stride_sizes)
         
+        if not skip_cnn:
+            self.d_model = out_channels[-1]
+            final_length = self.input_embedding.final_output_length
+        else:
+            self.d_model = input_features
+            final_length = n_timesteps
+
         if self.input_embedding.final_output_length < 1:
             raise ValueError("CNN final output dim is <1 ")                                
             
@@ -213,7 +225,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
             modules.EncoderBlock(self.d_model, num_attention_heads, dropout_rate) for _ in range(num_hidden_layers)
         ])
         
-        self.dense_interpolation = modules.DenseInterpolation(self.input_embedding.final_output_length, factor)
+        self.dense_interpolation = modules.DenseInterpolation(final_length, factor)
         self.clf = modules.ClassificationModule(self.d_model, factor, num_labels,
                                                 dropout_p=clf_dropout_rate)
         self.provided_train_dataloader = None
@@ -245,7 +257,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
                                                        prefix="train/")
         self.eval_metrics = TorchMetricClassification(bootstrap_cis=True,
                                                       prefix="eval/")
-
+        self.skip_cnn = skip_cnn
         self.save_hyperparameters()
 
     def forward(self, inputs_embeds,labels):
@@ -255,10 +267,12 @@ class CNNToTransformerEncoder(pl.LightningModule):
         return loss, logits
 
     def encode(self, inputs_embeds):
-        x = inputs_embeds.transpose(1, 2)
-        x = self.input_embedding(x)
-        x = x.transpose(1, 2)
-        x = self.positional_encoding(x)
+        if not self.skip_cnn:
+            x = inputs_embeds.transpose(1, 2)
+            x = self.input_embedding(x)
+            x = x.transpose(1, 2)
+        else:
+            x = inputs_embeds
 
         for l in self.blocks:
             x = l(x)
@@ -306,7 +320,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
 
         loss,logits = self.forward(x,y)
         
-        self.log("train/loss", loss.item())
+        self.log("train/loss", loss.item(),on_step=True)
         probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
         
         self.train_metrics.update(probs,y)
