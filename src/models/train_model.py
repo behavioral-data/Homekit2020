@@ -290,6 +290,7 @@ def train_cnn_transformer(
                 auto_set_gpu=None,
                 dropout_rate=0.5,
                 train_mix_positives_back_in=False, 
+                log_steps=50,
                 train_mixin_batch_size=3,
                 pl_seed=2494,
                 downsample_negative_frac=None,
@@ -411,7 +412,8 @@ def train_cnn_transformer(
         pl_training_args = dict(
             max_epochs=n_epochs,
             check_val_every_n_epoch=val_epochs,
-            resume_from_checkpoint=resume_model_from_ckpt
+            resume_from_checkpoint=resume_model_from_ckpt,
+            log_every_n_steps=log_steps
         )
         run_pytorch_lightning(model,task,training_args=pl_training_args,backend=backend)
     else:
@@ -813,7 +815,7 @@ def run_pytorch_lightning(model, task,
             logger.experiment.summary["model"] = model.base_model_prefix
             logger.experiment.config.update(model.hparams)
             model_img_path = visualize_model(model, dir=wandb.run.dir)
-            wandb.log({"model_img": [wandb.Image(Image.open(model_img_path), caption="Model Graph")]})
+            # wandb.log({"model_img": [wandb.Image(Image.open(model_img_path), caption="Model Graph")]})
 
         else:
             logger = True
@@ -826,7 +828,7 @@ def run_pytorch_lightning(model, task,
                             save_on_train_epoch_end = not do_eval,
                             monitor="eval/roc_auc" if do_eval else "train/loss" ,
                             every_n_epochs=1,
-                            mode='max')
+                            mode='max' if do_eval else "min")
 
     else:
         checkpoint_callback = True
