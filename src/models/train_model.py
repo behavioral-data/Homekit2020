@@ -354,7 +354,7 @@ def train_cnn_transformer(
                                                                 strict=False,
                                                                 **model_specific_kwargs)                                                          
     else:
-        n_timesteps, n_features = (5760,8)
+        n_timesteps, n_features = task.data_shape
         model_kwargs = dict(input_features=n_features,
                             n_timesteps=n_timesteps,
                             num_attention_heads = num_attention_heads,

@@ -32,7 +32,6 @@ import datetime
 from warnings import WarningMessage
 import os
 
-from pyspark.sql.functions import transform
 from pyarrow.parquet import ParquetDataset
 
 from torch.utils.data import DataLoader
@@ -339,6 +338,19 @@ class ActivityTask(Task):
 
             self.transform = TransformSpec(_transform_row,removed_fields=fields,
                                                     edit_fields= new_fields)
+            
+            # Infer the shape of the data
+            lengths = set()
+            for k in self.keys:
+                lengths.add(getattr(schema,k).shape[-1])
+            lengths = set(lengths)
+            if len(lengths) != 1:
+                raise ValueError("Provided fields have mismatched feature sizes")
+            else: 
+                data_length = list(lengths)[0]
+            
+            self.data_shape = (data_length,len(self.keys))
+
     def get_description(self):
         return self.__doc__
 
