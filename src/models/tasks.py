@@ -78,11 +78,12 @@ def get_task_with_name(name):
     raise TypeError(f"{name} is not a valid task.")
 
 
-def get_task_from_config_path(path):
+def get_task_from_config_path(path,**kwargs):
     config = read_yaml(path)
     task_class = get_task_with_name(config["task_name"])
-    task = task_class(**config["task_args"],
-                      **config["dataset_args"])
+    task = task_class(dataset_args=config.get("dataset_args",{}),
+                      **config.get("task_args",{}),                      
+                      **kwargs)
     return task
 
 class Task(object):
@@ -187,6 +188,8 @@ class ActivityTask(Task):
                      eval_path=None,
                      test_path=None,
                      downsample_negative_frac=None,
+                     keys=None,
+                     normalize_numerical=True,
                      backend="petastorm"):
         
         super(ActivityTask,self).__init__()
@@ -321,10 +324,21 @@ class ActivityTask(Task):
                 else:
                     keys = sorted(row.keys())
 
-                result = np.vstack([row[k].T for k in keys]).T
+                results = []
+                for k in keys:
+                    feature_vector = row[k]
+                    is_numerical = np.issubdtype(feature_vector.dtype, np.number)
+                    
+                    if normalize_numerical and is_numerical:
+                        mu = feature_vector.mean()
+                        sigma = feature_vector.std()
+                        if sigma != 0:
+                            feature_vector = (feature_vector - mu) / sigma
+                    
+                    results.append(feature_vector.T)
 
                 label = int(labler(participant_id,start,end))
-                return {"inputs_embeds":result,
+                return {"inputs_embeds": np.vstack(results).T,
                         "label": label,
                         "id": data_id,
                         "participant_id": participant_id,
@@ -440,19 +454,22 @@ class PredictWeekend(ActivityTask, ClassificationMixin):
     """Predict the whether the associated data belongs to a 
        weekend"""
 
-    def __init__(self,dataset_args={}, activity_level = "minute",
+    def __init__(self,dataset_args={}, activity_level = "minute", keys=None,
                 **kwargs):
         self.labler = DayOfWeekLabler([5,6])
+        if keys:
+            self.keys=keys
+        else:
+            self.keys = ['heart_rate',
+                        'missing_heart_rate',
+                        'missing_steps',
+                        'sleep_classic_0',
+                        'sleep_classic_1',
+                        'sleep_classic_2',
+                        'sleep_classic_3', 
+                        'steps']
 
         dataset_args["labeler"] = self.labler
-        self.keys = ['heart_rate',
-                     'missing_heart_rate',
-                     'missing_steps',
-                     'sleep_classic_0',
-                     'sleep_classic_1',
-                     'sleep_classic_2',
-                     'sleep_classic_3', 
-                     'steps']
 
         ActivityTask.__init__(self,td.CustomLabler,dataset_args=dataset_args,
                                  activity_level=activity_level,**kwargs)
