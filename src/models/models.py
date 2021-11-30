@@ -225,8 +225,8 @@ class CNNToTransformerEncoder(pl.LightningModule):
             modules.EncoderBlock(self.d_model, num_attention_heads, dropout_rate) for _ in range(num_hidden_layers)
         ])
         
-        self.dense_interpolation = modules.DenseInterpolation(final_length, factor)
-        self.clf = modules.ClassificationModule(self.d_model, factor, num_labels,
+        # self.dense_interpolation = modules.DenseInterpolation(final_length, factor)
+        self.clf = modules.ClassificationModule(self.d_model, final_length, num_labels,
                                                 dropout_p=clf_dropout_rate)
         self.provided_train_dataloader = None
         self.criterion = build_loss_fn(model_specific_kwargs)
@@ -277,7 +277,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         for l in self.blocks:
             x = l(x)
         
-        x = self.dense_interpolation(x)
+        # x = self.dense_interpolation(x)
         return x
 
     def set_train_dataset(self,dataset):
@@ -308,7 +308,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         if not isinstance(batch,list):
             batch = [batch]
 
-        x = torch.cat([x["inputs_embeds"] for x in batch],axis=0)
+        x = torch.cat([x["inputs_embeds"] for x in batch],axis=0).type(torch.cuda.FloatTensor)
         y = torch.cat([x["label"] for x in batch], axis=0)
 
         if self.train_mix_positives_back_in and self.current_epoch > 0:
@@ -418,7 +418,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         super().on_validation_epoch_end()
 
     def validation_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
-        x = batch["inputs_embeds"]
+        x = batch["inputs_embeds"].type(torch.cuda.FloatTensor)
         y = batch["label"]
         
         loss,logits = self.forward(x,y)
