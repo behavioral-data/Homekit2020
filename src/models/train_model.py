@@ -800,7 +800,11 @@ def run_pytorch_lightning(model, task,
                         notes=None,
                         backend="petastorm"):       
 
-    do_eval = bool(task.eval_url)
+    if backend == "petastorm":
+        do_eval = bool(task.eval_url)
+    else:
+        do_eval = hasattr(task,"eval_dataset")
+        
     if not no_wandb:
         # Creating two wandb runs here?
         import wandb
@@ -848,8 +852,7 @@ def run_pytorch_lightning(model, task,
                          profiler="simple",
                          **training_args)
 
-
-    if backend == "dask":
+    if backend in ["dask", "dynamic"]:
         model.set_train_dataset(task.get_train_dataset())
         model.set_eval_dataset(task.get_eval_dataset())
         trainer.fit(model)

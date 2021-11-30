@@ -188,6 +188,7 @@ class ActivityTask(Task):
                      eval_path=None,
                      test_path=None,
                      downsample_negative_frac=None,
+                     shape=None,
                      keys=None,
                      normalize_numerical=True,
                      backend="petastorm"):
@@ -261,7 +262,7 @@ class ActivityTask(Task):
                                 participant_dates = eval_participant_dates,
                                 cache=cache,
                                 **dataset_args)
-        
+
 
         ### Newer backend relies on petastorm and is faster, but requires more pre-processing:
         elif self.backend == "petastorm":
@@ -364,6 +365,9 @@ class ActivityTask(Task):
                 data_length = list(lengths)[0]
             
             self.data_shape = (data_length,len(self.keys))
+        
+        elif backend == "dynamic":
+            self.data_shape = shape 
 
     def get_description(self):
         return self.__doc__
@@ -372,7 +376,7 @@ class ActivityTask(Task):
         """
         In case the Petastorm framework is chosen, Returns a `Reader` instance
         """
-        if self.backend == "dask":
+        if self.backend in ["dask","dynamic"]:
             return self.train_dataset
         elif self.backend == "petastorm":
             logger.info("Making train dataset reader")
@@ -382,7 +386,7 @@ class ActivityTask(Task):
 
 
     def get_eval_dataset(self):
-        if self.backend == "dask":
+        if self.backend in ["dask","dynamic"]:
             return self.eval_dataset
         elif self.backend == "petastorm":
             logger.info("Making eval dataset reader")
@@ -394,6 +398,35 @@ class ActivityTask(Task):
 ################################################
 ########### TASKS IMPLEMENTATIONS ##############
 ################################################
+
+
+class DummySquareOrSine(ActivityTask, ClassificationMixin):
+    """A dummy task to predict whether or not the total number of steps
+       on the first day of a window is >= the mean across the whole dataset"""
+    
+    def __init__(self,dataset_args={}, n = 10000, p = 0.1, **kwargs):
+        self.train_dataset = td.DummySquareOrSineHRDataset(n=n,p=p)
+        self.eval_dataset = td.DummySquareOrSineHRDataset(n=n,p=p)
+        self.data_shape = (4*24*60,1)
+        ActivityTask.__init__(self, td.ActivtyDataset, 
+                              shape = self.data_shape,
+                              dataset_args=dataset_args,
+                               **kwargs)
+        ClassificationMixin.__init__(self)
+        self.is_classification = True
+    
+    def evaluate_results(self,logits,labels,threshold=0.5):
+        return classification_eval(logits,labels,threshold=threshold)
+    
+    def get_name(self):
+        return "GeqMedianSteps"
+    
+    def get_huggingface_metrics(self,threshold=0.5):
+        def evaluator(pred):
+            labels = pred.label_ids
+            logits = pred.predictions
+            return self.evaluate_results(logits,labels,threshold=threshold)
+        return evaluator
 
 class GeqMeanSteps(ActivityTask, ClassificationMixin):
     """A dummy task to predict whether or not the total number of steps
