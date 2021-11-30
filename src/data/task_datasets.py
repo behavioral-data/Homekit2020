@@ -11,6 +11,7 @@ from distributed import Client
 import dask
 from dask.diagnostics import ProgressBar
 import dask.dataframe as dd
+from scipy import signal
 
 from dask_ml.preprocessing import StandardScaler
 import xgboost as xgb
@@ -548,6 +549,65 @@ class AutoencodeDataset(ActivtyDataset):
             X.append(el_x)
 
         return np.stack(X)
+
+
+
+class DummyDataset(Dataset):
+    
+    def __init__(self, n=10000,
+                 p = 0.1) -> None:
+        self.n = n
+        self.p = p
+        super().__init__()
+
+        self.inputs = []
+        self.labels = []
+        for _i in range(self.n):
+            if np.random.rand() < p:
+                self.inputs.append(self.generate_pos())
+                self.labels.append(1)
+            else:
+                self.inputs.append(self.generate_neg())
+                self.labels.append(0)
+        
+        def __len__(self):
+            return len(self.inputs)
+        
+        def __getitem__(self,index):
+            return {
+                "inputs_embeds": self.inputs[index],
+                "labels": self.labels[index]
+            }
+class DummySquareOrSineHRDataset(DummyDataset):
+
+    def __init__(self, n=10000, p=0.1) -> None:
+        self.n_days = 4
+        self.shape = (60*24*self.n_days,2) 
+        self.t = np.linspace(0, 1, self.shape[0], endpoint=True)
+        super().__init__(n=n, p=p)
+
+    def generate_pos(self):
+        offset = np.random.randn() * 100
+        peak_hr =  80 + (np.random.randn() * 10)
+        base_signal = (signal.square(2 * self.n_days * np.pi * self.t + offset) + 1) * 0.5 * peak_hr
+        noise = np.random.normal(scale = 5, size=self.shape[0])
+        return np.array([base_signal + noise]).T
+    
+    def generate_neg(self):
+        offset = np.random.randn() * 100
+        peak_hr =  80 + (np.random.randn() * 10)
+        base_signal = (np.sin(2 * self.n_days * np.pi * self.t + offset) + 1) * 0.5 * peak_hr
+        noise = np.random.normal(scale = 5, size=self.shape[0])
+        return np.array([base_signal + noise]).T
+    
+    def __len__(self):
+        return len(self.inputs)
+        
+    def __getitem__(self,index):
+        return {
+            "inputs_embeds": self.inputs[index],
+            "label": self.labels[index]
+        }
 
 def sin_time(timestamps):
     return np.sin(2*np.pi*(timestamps.hour * 60 + timestamps.minute)/MIN_IN_DAY).astype(np.float32)
