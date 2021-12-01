@@ -33,6 +33,7 @@ from warnings import WarningMessage
 import os
 
 from pyarrow.parquet import ParquetDataset
+from sklearn.utils import resample
 
 from torch.utils.data import DataLoader
 from transformers.data.data_collator import default_data_collator
@@ -49,7 +50,7 @@ import src.data.task_datasets as td
 from src.models.eval import classification_eval, autoencode_eval
 from src.data.utils import load_processed_table, load_cached_activity_reader, url_from_path
 from src.utils import get_logger, read_yaml
-from src.models.lablers import FluPosLabler, ClauseLabler, EvidationILILabler, DayOfWeekLabler
+from src.models.lablers import FluPosLabler, ClauseLabler, EvidationILILabler, DayOfWeekLabler, AudereObeseLabler
 
 logger = get_logger(__name__)
 
@@ -671,24 +672,26 @@ class SingleWindowActivityTask(Task):
                 candidates[id] = date
         return list(candidates.items())
 
-class ClassifyObese(SingleWindowActivityTask, ClassificationMixin):
-    def __init__(self, dataset_args, activity_level, window_selection="first",**kwargs):
-        dataset_args["labeler"] = self.get_labeler()
-        SingleWindowActivityTask.__init__(self, td.CustomLabler, 
+class ClassifyObese(ActivityTask, ClassificationMixin):
+    def __init__(self, dataset_args, activity_level,**kwargs):
+        self.labler = AudereObeseLabler()
+        self.keys = ['heart_rate',
+                'missing_heart_rate',
+                'missing_steps',
+                'sleep_classic_0',
+                'sleep_classic_1',
+                'sleep_classic_2',
+                'sleep_classic_3', 
+                'steps']
+        dataset_args["labeler"] = self.labler
+        ActivityTask.__init__(self, td.CustomLabler, 
                          dataset_args=dataset_args, 
                          activity_level=activity_level, 
-                         window_selection=window_selection,
                          **kwargs)
         ClassificationMixin.__init__(self)      
 
-    def get_labeler(self):
-        self.baseline_results = load_processed_table("baseline_screener_survey")
-        def labeler(participant_id, start_date, end_date):
-            participant_data = self.baseline_results[self.baseline_results["participant_id"]==participant_id].iloc[0]
-            weight = participant_data["weight"]
-            height = (participant_data["height__ft"] *12 + participant_data["height__in"])
-            return weight / (height**2) * 703 > 30.0
-        return labeler
+    def get_labler(self):
+        return self.labler
     
     def get_name(self):
         return "ClassifyObese"

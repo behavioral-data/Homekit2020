@@ -1,7 +1,6 @@
-add_absolute_embedding: 1
-day_window_size: 7
-eval_frac: 0.3
-max_date: 2020-05-01
-max_missing_days_in_window: 1
-min_date: 2020-01-01
-shuffle: 1
+task_name:  
+  ClassifyObese
+dataset_args:  
+  max_missing_days_in_window: 2
+  shuffle: 1
+  split_date: 2020-02-10
