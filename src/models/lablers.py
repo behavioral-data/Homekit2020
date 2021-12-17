@@ -4,6 +4,7 @@ from pandas.core.indexes.datetimes import date_range
 from pyspark.sql.functions import window
 
 import src.data.task_datasets as td
+from src.data.utils import load_processed_table
 
 
 def get_dates_around(date,days_minus,days_plus):
@@ -46,6 +47,23 @@ class DayOfWeekLabler(object):
 
     def __call__(self,participant_id,start_date,end_date):
         return end_date.weekday() in self.days
+
+class AudereObeseLabler(object):
+    def __init__(self):
+        self.baseline_results = load_processed_table("baseline_screener_survey")\
+                                                .drop_duplicates(subset=["participant_id"], 
+                                                                  keep="last")\
+                                                .set_index("participant_id")
+
+        weight = self.baseline_results["weight"]
+        height = (self.baseline_results["height__ft"] *12 + self.baseline_results["height__in"])
+        is_obese = weight / (height**2) * 703 > 30.0
+        self.results_lookup = is_obese.to_dict()
+
+
+    def __call__(self,participant_id,start_date,end_date):
+        return self.results_lookup.get(participant_id,False)
+
 class EvidationILILabler(object):
     def __init__(self,feather_path,
                       ili_types=[1,2,3],

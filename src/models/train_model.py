@@ -355,7 +355,7 @@ def train_cnn_transformer(
                                                                 strict=False,
                                                                 **model_specific_kwargs)                                                          
     else:
-        n_timesteps, n_features = (5760,8)
+        n_timesteps, n_features = task.data_shape
         model_kwargs = dict(input_features=n_features,
                             n_timesteps=n_timesteps,
                             num_attention_heads = num_attention_heads,
@@ -802,7 +802,11 @@ def run_pytorch_lightning(model, task,
                         backend="petastorm",
                         reload_dataloaders = 0): #to be passed to the pytorch lightning Trainer instance. Reload dataloaders every n epochs (default 0, don't reload)      
 
-    do_eval = bool(task.eval_url)
+    if backend == "petastorm":
+        do_eval = bool(task.eval_url)
+    else:
+        do_eval = hasattr(task,"eval_dataset")
+        
     if not no_wandb:
         # Creating two wandb runs here?
         import wandb
@@ -856,8 +860,7 @@ def run_pytorch_lightning(model, task,
                          reload_dataloaders_every_n_epochs = reload_dataloaders, #how often to reload dataloaders (defaut:every 0 epochs)
                          **training_args)
 
-
-    if backend == "dask":
+    if backend in ["dask", "dynamic"]:
         model.set_train_dataset(task.get_train_dataset())
         model.set_eval_dataset(task.get_eval_dataset())
         trainer.fit(model)

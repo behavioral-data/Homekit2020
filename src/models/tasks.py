@@ -32,8 +32,8 @@ import datetime
 from warnings import WarningMessage
 import os
 
-from pyspark.sql.functions import transform
 from pyarrow.parquet import ParquetDataset
+from sklearn.utils import resample
 
 from torch.utils.data import DataLoader
 from transformers.data.data_collator import default_data_collator
@@ -50,7 +50,7 @@ import src.data.task_datasets as td
 from src.models.eval import classification_eval, autoencode_eval
 from src.data.utils import load_processed_table, load_cached_activity_reader, url_from_path
 from src.utils import get_logger, read_yaml
-from src.models.lablers import FluPosLabler, ClauseLabler, EvidationILILabler, DayOfWeekLabler
+from src.models.lablers import FluPosLabler, ClauseLabler, EvidationILILabler, DayOfWeekLabler, AudereObeseLabler
 
 logger = get_logger(__name__)
 
@@ -79,11 +79,12 @@ def get_task_with_name(name):
     raise TypeError(f"{name} is not a valid task.")
 
 
-def get_task_from_config_path(path):
+def get_task_from_config_path(path,**kwargs):
     config = read_yaml(path)
     task_class = get_task_with_name(config["task_name"])
-    task = task_class(**config["task_args"],
-                      **config["dataset_args"])
+    task = task_class(dataset_args=config.get("dataset_args",{}),
+                      **config.get("task_args",{}),                      
+                      **kwargs)
     return task
 
 class Task(object):
@@ -188,6 +189,9 @@ class ActivityTask(Task):
                      eval_path=None,
                      test_path=None,
                      downsample_negative_frac=None,
+                     shape=None,
+                     keys=None,
+                     normalize_numerical=True,
                      backend="petastorm"):
         
         super(ActivityTask,self).__init__()
@@ -259,7 +263,7 @@ class ActivityTask(Task):
                                 participant_dates = eval_participant_dates,
                                 cache=cache,
                                 **dataset_args)
-        
+
 
         ### Newer backend relies on petastorm and is faster, but requires more pre-processing:
         elif self.backend == "petastorm":
@@ -322,10 +326,21 @@ class ActivityTask(Task):
                 else:
                     keys = sorted(row.keys())
 
-                result = np.vstack([row[k].T for k in keys]).T
+                results = []
+                for k in keys:
+                    feature_vector = row[k]
+                    is_numerical = np.issubdtype(feature_vector.dtype, np.number)
+                    
+                    if normalize_numerical and is_numerical:
+                        mu = feature_vector.mean()
+                        sigma = feature_vector.std()
+                        if sigma != 0:
+                            feature_vector = (feature_vector - mu) / sigma
+                    
+                    results.append(feature_vector.T)
 
                 label = int(labler(participant_id,start,end))
-                return {"inputs_embeds":result,
+                return {"inputs_embeds": np.vstack(results).T,
                         "label": label,
                         "id": data_id,
                         "participant_id": participant_id,
@@ -339,6 +354,22 @@ class ActivityTask(Task):
 
             self.transform = TransformSpec(_transform_row,removed_fields=fields,
                                                     edit_fields= new_fields)
+            
+            # Infer the shape of the data
+            lengths = set()
+            for k in self.keys:
+                lengths.add(getattr(schema,k).shape[-1])
+            lengths = set(lengths)
+            if len(lengths) != 1:
+                raise ValueError("Provided fields have mismatched feature sizes")
+            else: 
+                data_length = list(lengths)[0]
+            
+            self.data_shape = (data_length,len(self.keys))
+        
+        elif backend == "dynamic":
+            self.data_shape = shape 
+
     def get_description(self):
         return self.__doc__
 
@@ -346,7 +377,7 @@ class ActivityTask(Task):
         """
         In case the Petastorm framework is chosen, Returns a `Reader` instance
         """
-        if self.backend == "dask":
+        if self.backend in ["dask","dynamic"]:
             return self.train_dataset
         elif self.backend == "petastorm":
             logger.info("Making train dataset reader")
@@ -356,7 +387,7 @@ class ActivityTask(Task):
 
 
     def get_eval_dataset(self):
-        if self.backend == "dask":
+        if self.backend in ["dask","dynamic"]:
             return self.eval_dataset
         elif self.backend == "petastorm":
             logger.info("Making eval dataset reader")
@@ -368,6 +399,35 @@ class ActivityTask(Task):
 ################################################
 ########### TASKS IMPLEMENTATIONS ##############
 ################################################
+
+
+class DummySquareOrSine(ActivityTask, ClassificationMixin):
+    """A dummy task to predict whether or not the total number of steps
+       on the first day of a window is >= the mean across the whole dataset"""
+    
+    def __init__(self,dataset_args={}, n = 10000, p = 0.1, **kwargs):
+        self.train_dataset = td.DummySquareOrSineHRDataset(n=n,p=p)
+        self.eval_dataset = td.DummySquareOrSineHRDataset(n=n,p=p)
+        self.data_shape = (4*24*60,1)
+        ActivityTask.__init__(self, td.ActivtyDataset, 
+                              shape = self.data_shape,
+                              dataset_args=dataset_args,
+                               **kwargs)
+        ClassificationMixin.__init__(self)
+        self.is_classification = True
+    
+    def evaluate_results(self,logits,labels,threshold=0.5):
+        return classification_eval(logits,labels,threshold=threshold)
+    
+    def get_name(self):
+        return "GeqMedianSteps"
+    
+    def get_huggingface_metrics(self,threshold=0.5):
+        def evaluator(pred):
+            labels = pred.label_ids
+            logits = pred.predictions
+            return self.evaluate_results(logits,labels,threshold=threshold)
+        return evaluator
 
 class GeqMeanSteps(ActivityTask, ClassificationMixin):
     """A dummy task to predict whether or not the total number of steps
@@ -428,19 +488,22 @@ class PredictWeekend(ActivityTask, ClassificationMixin):
     """Predict the whether the associated data belongs to a 
        weekend"""
 
-    def __init__(self,dataset_args={}, activity_level = "minute",
+    def __init__(self,dataset_args={}, activity_level = "minute", keys=None,
                 **kwargs):
         self.labler = DayOfWeekLabler([5,6])
+        if keys:
+            self.keys=keys
+        else:
+            self.keys = ['heart_rate',
+                        'missing_heart_rate',
+                        'missing_steps',
+                        'sleep_classic_0',
+                        'sleep_classic_1',
+                        'sleep_classic_2',
+                        'sleep_classic_3', 
+                        'steps']
 
         dataset_args["labeler"] = self.labler
-        self.keys = ['heart_rate',
-                     'missing_heart_rate',
-                     'missing_steps',
-                     'sleep_classic_0',
-                     'sleep_classic_1',
-                     'sleep_classic_2',
-                     'sleep_classic_3', 
-                     'steps']
 
         ActivityTask.__init__(self,td.CustomLabler,dataset_args=dataset_args,
                                  activity_level=activity_level,**kwargs)
@@ -609,24 +672,26 @@ class SingleWindowActivityTask(Task):
                 candidates[id] = date
         return list(candidates.items())
 
-class ClassifyObese(SingleWindowActivityTask, ClassificationMixin):
-    def __init__(self, dataset_args, activity_level, window_selection="first",**kwargs):
-        dataset_args["labeler"] = self.get_labeler()
-        SingleWindowActivityTask.__init__(self, td.CustomLabler, 
+class ClassifyObese(ActivityTask, ClassificationMixin):
+    def __init__(self, dataset_args, activity_level,**kwargs):
+        self.labler = AudereObeseLabler()
+        self.keys = ['heart_rate',
+                'missing_heart_rate',
+                'missing_steps',
+                'sleep_classic_0',
+                'sleep_classic_1',
+                'sleep_classic_2',
+                'sleep_classic_3', 
+                'steps']
+        dataset_args["labeler"] = self.labler
+        ActivityTask.__init__(self, td.CustomLabler, 
                          dataset_args=dataset_args, 
                          activity_level=activity_level, 
-                         window_selection=window_selection,
                          **kwargs)
         ClassificationMixin.__init__(self)      
 
-    def get_labeler(self):
-        self.baseline_results = load_processed_table("baseline_screener_survey")
-        def labeler(participant_id, start_date, end_date):
-            participant_data = self.baseline_results[self.baseline_results["participant_id"]==participant_id].iloc[0]
-            weight = participant_data["weight"]
-            height = (participant_data["height__ft"] *12 + participant_data["height__in"])
-            return weight / (height**2) * 703 > 30.0
-        return labeler
+    def get_labler(self):
+        return self.labler
     
     def get_name(self):
         return "ClassifyObese"

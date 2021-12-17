@@ -91,10 +91,12 @@ def get_active_spark_context() -> SparkSession:
 @click.option("--min_date", type=str, default=None)
 @click.option("--max_date", type=str, default=None)
 @click.option("--partition_by", type=str, multiple=False)
+@click.option("--no_scale", is_flag=True)
 @click.option("--rename", type=str, multiple=True)
 def main(input_path, output_path, max_missing_days_in_window, 
                     min_windows, day_window_size, parse_timestamp,
-                    min_date=None, max_date=None, partition_by = None, rename=None):
+                    min_date=None, max_date=None, partition_by = None, rename=None,
+                    no_scale=False):
 
                 
     if not "file://" in output_path:
@@ -169,18 +171,22 @@ def main(input_path, output_path, max_missing_days_in_window,
                 df = df.withColumn('timestamp', f.to_timestamp(df.timestamp))
         
         # Scale the data
-        assemblers = [VectorAssembler(inputCols=[col], outputCol=col + "_vec") for col in dbl_cols]
-        scalers = [StandardScaler(inputCol=col + "_vec", outputCol=col + "_scaled") for col in dbl_cols]
-        pipeline = Pipeline(stages=assemblers + scalers)
-        scalerModel = pipeline.fit(df)
-        scaledData = scalerModel.transform(df)
+        if not no_scale:
+            assemblers = [VectorAssembler(inputCols=[col], outputCol=col + "_vec") for col in dbl_cols]
+            scalers = [StandardScaler(inputCol=col + "_vec", outputCol=col + "_scaled") for col in dbl_cols]
+            pipeline = Pipeline(stages=assemblers + scalers)
+            scalerModel = pipeline.fit(df)
+            scaledData = scalerModel.transform(df)
+            
+            names = {x + "_scaled": x for x in dbl_cols}
+            firstelement=f.udf(lambda v:float(v[0]),sql_types.DoubleType())
+            scaled_cols = [firstelement(f.col(c)).alias(names[c]) for c in names.keys()]
+            old_cols = [f.col(c) for c in non_dbl_cols]
+            scaledData = scaledData.select(old_cols + scaled_cols)
         
-        names = {x + "_scaled": x for x in dbl_cols}
-        firstelement=f.udf(lambda v:float(v[0]),sql_types.DoubleType())
-        scaled_cols = [firstelement(f.col(c)).alias(names[c]) for c in names.keys()]
-        old_cols = [f.col(c) for c in non_dbl_cols]
-        scaledData = scaledData.select(old_cols + scaled_cols)
-       
+        else:
+           scaledData = df
+
         # Apply windowing
         window_duration = f"{day_window_size} days"
         slide_duration = f"1 days"
@@ -213,7 +219,6 @@ def rename_columns(df, columns):
         return df
     else:
         raise ValueError("'columns' should be a dict, like {'old_name_1':'new_name_1', 'old_name_2':'new_name_2'}")
-
 
 
 def _field_spark_dtype(field):
