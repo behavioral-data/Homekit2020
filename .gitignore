@@ -104,6 +104,8 @@ logs/*
 dask-worker-space/global.lock
 .gitignore
 dask-worker-space/purge.lock
+flustudy/
+
 
 #Slurm scripts
 slurm-utils/job_scripts
@@ -111,3 +113,7 @@ slurm-utils/jobs
 
 #More logs
 lightning_logs/
+
+#datasets used for debugging support 
+debugbatch_fulldata/
+debugbatch_fulldata_drop_pt/

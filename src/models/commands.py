@@ -117,7 +117,8 @@ class CNNTransformer(NeuralCommand):
             click.Option(("--resume_model_from_ckpt",),type=click.Path(exists=True), help="Load a model and continue training from the checkpoint"),
             click.Option(("--use_huggingface",),is_flag=True, help="Run the job with huggingface rather than pytorch lightning"),
             click.Option(("--train_mix_positives_back_in",),is_flag=True, help="Keep mixing positive examples back into the batches"),
-            click.Option(("--train_mixin_batch_size",),default=3, help="Number of positive examples to mix back in")
+            click.Option(("--train_mixin_batch_size",),default=3, help="Number of positive examples to mix back in"),
+            click.Option(("--reload_dataloaders",),default=0, help="Reload the dataloaders every n epochs") 
         ]
         self.params = self.params + loss_options + cnn_transformer_params + petastorm_options
 

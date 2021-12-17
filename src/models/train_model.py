@@ -294,6 +294,7 @@ def train_cnn_transformer(
                 train_mixin_batch_size=3,
                 pl_seed=2494,
                 downsample_negative_frac=None,
+                reload_dataloaders = 0, #to be passed to the pytorch lightning Trainer instance. Reload dataloaders every n epochs (default 0, don't reload)
                 **model_specific_kwargs):
 
     if auto_set_gpu:
@@ -415,7 +416,7 @@ def train_cnn_transformer(
             resume_from_checkpoint=resume_model_from_ckpt,
             log_every_n_steps=log_steps
         )
-        run_pytorch_lightning(model,task,training_args=pl_training_args,backend=backend)
+        run_pytorch_lightning(model,task,training_args=pl_training_args,backend=backend, reload_dataloaders = reload_dataloaders)
     else:
         training_args = TrainingArguments(
             output_dir=results_dir,          # output directorz
@@ -798,7 +799,8 @@ def run_pytorch_lightning(model, task,
                         training_args={},
                         no_wandb=False,
                         notes=None,
-                        backend="petastorm"):       
+                        backend="petastorm",
+                        reload_dataloaders = 0): #to be passed to the pytorch lightning Trainer instance. Reload dataloaders every n epochs (default 0, don't reload)      
 
     if backend == "petastorm":
         do_eval = bool(task.eval_url)
@@ -850,6 +852,7 @@ def run_pytorch_lightning(model, task,
                          limit_val_batches= 0.0 if not do_eval else 1.0,
                          limit_train_batches=10 if debug_mode else 1.0,
                          profiler="simple",
+                         reload_dataloaders_every_n_epochs = reload_dataloaders, #how often to reload dataloaders (defaut:every 0 epochs)
                          **training_args)
 
     if backend in ["dask", "dynamic"]:
