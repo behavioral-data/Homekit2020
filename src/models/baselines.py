@@ -12,8 +12,10 @@ import pickle
 from src.models.tasks import get_task_with_name
 from src.utils import get_logger
 from src.models.eval import classification_eval
+from dotenv import dotenv_values
 
 logger = get_logger(__name__)
+CONFIG = dotenv_values(".env")
 
 @click.command()
 @click.argument("task_name")
@@ -90,7 +92,7 @@ def train_xgboost(task_config,
                                             limit_train_frac=limit_train_frac)
 
     if not task.is_classification:
-        raise ValueError(f"{task_name} is not an classification task")
+        raise ValueError(f"{task_name} is not a classification task")
 
     train = task.get_train_dataset().to_dmatrix()
     eval = task.get_eval_dataset().to_dmatrix()
@@ -101,8 +103,8 @@ def train_xgboost(task_config,
     evallist = [(eval, 'eval'), (train, 'train')]
     callbacks = []
     if not no_wandb:
-        wandb.init(project="flu",
-                   entity="mikeamerrill",
+        wandb.init(project=CONFIG["WANDB_PROJECT"],
+                   entity=CONFIG["WANDB_USERNAME"],
                    notes=notes)
         wandb.run.summary["task"] = task.get_name()
 

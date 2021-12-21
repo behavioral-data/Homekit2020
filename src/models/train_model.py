@@ -739,8 +739,8 @@ def run_huggingface(model,base_trainer,training_args,
                     
     if not no_wandb: 
         import wandb
-        wandb.init(project="flu",
-                   entity="mikeamerrill",
+        wandb.init(project=CONFIG["WANDB_PROJECT"],
+                   entity=CONFIG["WANDB_USERNAME"],
                    notes=notes)
         wandb.run.summary["task"] = task.get_name()
         wandb.run.summary["model"] = model.base_model_prefix
