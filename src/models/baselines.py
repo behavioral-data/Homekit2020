@@ -89,8 +89,8 @@ def train_xgboost(task_config,
         task = get_task_with_name(task_name)(dataset_args=dataset_args,
                                             only_with_lab_results=only_with_lab_results,
                                             activity_level="day",
-                                            limit_train_frac=limit_train_frac,
-                                            backend="dask")
+                                            backend="dask",
+                                            limit_train_frac=limit_train_frac)
 
     if not task.is_classification:
         raise ValueError(f"{task_name} is not a classification task")

@@ -1,7 +1,7 @@
 task_name:  
-  ClassifyObese
+  DummySquareOrSine
 dataset_args:  
   max_missing_days_in_window: 2
-  day_window_size: 4
   shuffle: 1
   split_date: 2020-02-10
+  clause: "have_flu > 0"

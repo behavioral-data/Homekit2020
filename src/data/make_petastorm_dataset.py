@@ -192,19 +192,24 @@ def main(input_path, output_path, max_missing_days_in_window,
         slide_duration = f"1 days"
         grouped = scaledData.groupBy("participant_id",f.window("timestamp", window_duration, 
                                                             slide_duration, startTime="0 minutes"))
-
         feature_columns = [x for x in scaledData.columns if not x in ["participant_id","timestamp","date"]]
-        aggs = [f.collect_list(colName) for colName in feature_columns] + [f.count(feature_columns[0]).alias("count_col")]
+        aggs = [f.sort_array(f.collect_list(f.struct("timestamp",colName))).alias(f"collect_list({colName})") for colName in feature_columns] \
+               + [f.count(feature_columns[0]).alias("count_col")]
         result = grouped.agg(*aggs)
+        
 
         # Remove windows that don't have enough samples (e.g. on the edges)
         result  = result.filter(result.count_col == expected_length)
+        
         result.drop("count_col")
+        
         result = rename_columns(result,{f"collect_list({x})" : x for x in feature_columns})
 
         result = result.withColumn("start",result.window.start)
         result = result.withColumn("end",result.window.end)
-
+        final_columns = ["participant_id","start","end"] + [f.col(f"{x}.{x}").alias(x) for x in feature_columns] 
+        result = result.select(*final_columns)
+        
         # Add ID
         result = result.select("*").withColumn("id", f.monotonically_increasing_id())
 
