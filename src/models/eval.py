@@ -274,8 +274,12 @@ def pr_auc(pred,labels,get_ci=False,n_samples=10000):
         **Arguments** 
         :pred: tensor of unnormalized probabilities 
     """
-    preds = pred.cpu().numpy()
-    labels = labels.cpu().numpy()
+    if torch.is_tensor(pred):
+        preds = pred.cpu().numpy()
+        labels = labels.cpu().numpy()
+    else:
+        preds = pred
+    
     precision, recall, _ = precision_recall_curve(labels,preds)
     result = auc(recall,precision)
     if get_ci:
@@ -292,7 +296,10 @@ def roc_auc(pred,labels,get_ci=False,n_samples=10000):
         **Arguments** 
         :pred: tensor of unnormalized probabilities 
     """
-    preds = pred.cpu().numpy()
+    if torch.is_tensor(pred):
+        preds = pred.cpu().numpy()
+    else:
+        preds = pred
     score = roc_auc_score(labels,preds)
     if get_ci:
         ci = make_ci_bootsrapper(lambda x,y : roc_auc_score(y_score=x, y_true=y))(pred,labels,n_samples=n_samples)

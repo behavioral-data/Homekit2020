@@ -89,7 +89,8 @@ def train_xgboost(task_config,
         task = get_task_with_name(task_name)(dataset_args=dataset_args,
                                             only_with_lab_results=only_with_lab_results,
                                             activity_level="day",
-                                            limit_train_frac=limit_train_frac)
+                                            limit_train_frac=limit_train_frac,
+                                            backend="dask")
 
     if not task.is_classification:
         raise ValueError(f"{task_name} is not a classification task")
@@ -118,7 +119,7 @@ def train_xgboost(task_config,
     bst = xgb.train(param, train, 10, evallist, callbacks=callbacks)
     eval_pred = bst.predict(eval)
     eval_logits = np.stack([1-eval_pred,eval_pred],axis=1)
-    results = classification_eval(eval_logits,eval.get_label(),prefix="eval/")
+    results = classification_eval(eval_pred,eval.get_label(),prefix="eval/") # results = classification_eval(eval_logits,eval.get_label(),prefix="eval/") JM
 
 
     if not no_wandb:
