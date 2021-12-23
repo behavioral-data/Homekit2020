@@ -1,16 +1,16 @@
 kernel_sizes:
-- 28
-- 67
-- 149
+- 64
+- 32
+- 11
 out_channels:
-- 8
+- 4
 - 16
 - 32
 stride_sizes:
-- 1
+- 7
+- 7
 - 3
-- 5
 factor: 36
 num_attention_heads: 8
-num_hidden_layers: 4
+num_hidden_layers: 0
 skip_cnn : False
