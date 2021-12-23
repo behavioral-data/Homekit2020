@@ -292,8 +292,10 @@ def roc_auc(pred,labels,get_ci=False,n_samples=10000):
         **Arguments** 
         :pred: tensor of unnormalized probabilities 
     """
-    preds = pred.cpu().numpy()
-    score = roc_auc_score(labels,preds)
+    if not isinstance(pred,np.ndarray):
+        pred = pred.cpu().numpy()
+
+    score = roc_auc_score(labels,pred)
     if get_ci:
         ci = make_ci_bootsrapper(lambda x,y : roc_auc_score(y_score=x, y_true=y))(pred,labels,n_samples=n_samples)
         return score, ci
