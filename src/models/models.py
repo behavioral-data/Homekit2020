@@ -195,7 +195,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, learning_rate=1e-3, warmup_steps=100,
                 max_positional_embeddings = 1440*5, factor=64, inital_batch_size=100, clf_dropout_rate=0.0,
-                train_mix_positives_back_in=False, train_mixin_batch_size=3, skip_cnn=False,
+                train_mix_positives_back_in=False, train_mixin_batch_size=3, skip_cnn=False, wandb_id=None, #wandb_id is run id saved as hyperparameter
                 **model_specific_kwargs) -> None:
         self.config = get_config_from_locals(locals())
 
@@ -259,6 +259,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
                                                       prefix="eval/")
         self.skip_cnn = skip_cnn
         self.save_hyperparameters()
+
 
     def forward(self, inputs_embeds,labels):
         encoding = self.encode(inputs_embeds)

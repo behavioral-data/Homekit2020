@@ -739,8 +739,8 @@ def run_huggingface(model,base_trainer,training_args,
                     
     if not no_wandb: 
         import wandb
-        wandb.init(project="flu",
-                   entity="mikeamerrill",
+        wandb.init(project=CONFIG["WANDB_PROJECT"],
+                   entity=CONFIG["WANDB_USERNAME"],
                    notes=notes)
         wandb.run.summary["task"] = task.get_name()
         wandb.run.summary["model"] = model.base_model_prefix
@@ -815,14 +815,19 @@ def run_pytorch_lightning(model, task,
             logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],
                               entity=CONFIG["WANDB_USERNAME"],
                               notes=notes,
-                              log_model=True,
-                              reinit=True)                     
+                              log_model=True, #saves checkpoints to wandb as artifacts, might add overhead 
+                              reinit=True,
+                              resume = 'allow',
+                              allow_val_change=True,
+                              id = model.hparams.wandb_id)   #id of run to resume from, None if model is not from checkpoint. Alternative: directly use id = model.logger.experiment.id, or try setting WANDB_RUN_ID env variable                
             logger.experiment.summary["task"] = task.get_name()
             logger.experiment.summary["model"] = model.base_model_prefix
-            logger.experiment.config.update(model.hparams)
+            logger.experiment.config.update(model.hparams, allow_val_change=True)
+            model.hparams.wandb_id = logger.experiment.id  
+
             model_img_path = visualize_model(model, dir=wandb.run.dir)
             # wandb.log({"model_img": [wandb.Image(Image.open(model_img_path), caption="Model Graph")]})
-
+            
         else:
             logger = True
 
