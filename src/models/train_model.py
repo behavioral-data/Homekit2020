@@ -416,7 +416,9 @@ def train_cnn_transformer(
             resume_from_checkpoint=resume_model_from_ckpt,
             log_every_n_steps=log_steps
         )
-        run_pytorch_lightning(model,task,training_args=pl_training_args,backend=backend, reload_dataloaders = reload_dataloaders)
+        run_pytorch_lightning(model,task,training_args=pl_training_args,backend=backend, 
+                                reload_dataloaders = reload_dataloaders,
+                                notes=notes)
     else:
         training_args = TrainingArguments(
             output_dir=results_dir,          # output directorz
