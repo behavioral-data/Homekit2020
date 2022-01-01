@@ -119,7 +119,7 @@ def train_xgboost(task_config,
     bst = xgb.train(param, train, 10, evallist, callbacks=callbacks)
     eval_pred = bst.predict(eval)
     eval_logits = np.stack([1-eval_pred,eval_pred],axis=1)
-    results = classification_eval(eval_logits,eval.get_label(),prefix="eval/")
+    results = classification_eval(eval_pred,eval.get_label(),prefix="eval/") # results = classification_eval(eval_logits,eval.get_label(),prefix="eval/") JM
 
 
     if not no_wandb:

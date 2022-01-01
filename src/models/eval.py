@@ -274,8 +274,12 @@ def pr_auc(pred,labels,get_ci=False,n_samples=10000):
         **Arguments** 
         :pred: tensor of unnormalized probabilities 
     """
-    preds = pred.cpu().numpy()
-    labels = labels.cpu().numpy()
+    if torch.is_tensor(pred):
+        preds = pred.cpu().numpy()
+        labels = labels.cpu().numpy()
+    else:
+        preds = pred
+    
     precision, recall, _ = precision_recall_curve(labels,preds)
     result = auc(recall,precision)
     if get_ci:
