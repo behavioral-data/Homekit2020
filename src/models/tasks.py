@@ -197,7 +197,9 @@ class ActivityTask(Task):
         super(ActivityTask,self).__init__()
         
         self.backend = backend
-        
+        if keys:
+            self.keys = keys
+            
         split_date = dataset_args.pop("split_date",None)
         eval_frac = dataset_args.pop("eval_frac",None)
 
@@ -462,6 +464,7 @@ class PredictFluPos(ActivityTask, ClassificationMixin):
                 **kwargs):
         self.labler = FluPosLabler(window_onset_max=window_onset_max,
                                    window_onset_min=window_onset_min)
+
         dataset_args["labeler"] = self.labler
         self.keys = ['heart_rate',
                      'missing_heart_rate',
