@@ -257,6 +257,8 @@ class CNNToTransformerEncoder(pl.LightningModule):
                                                        prefix="train/")
         self.eval_metrics = TorchMetricClassification(bootstrap_cis=True,
                                                       prefix="eval/")
+        self.test_metrics = TorchMetricClassification(bootstrap_cis=True,
+                                                      prefix="test/")
         self.skip_cnn = skip_cnn
         self.save_hyperparameters()
 
@@ -355,19 +357,26 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.test_probs = []
     
     def on_test_epoch_end(self):
+
+
         test_preds = torch.cat(self.test_probs, dim=0)
         test_labels = torch.cat(self.test_labels, dim=0)
-        
-        results = classification_eval(test_preds,test_labels,prefix="test/")
 
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
-        if os.environ.get("LOCAL_RANK","0") == "0" and isinstance(self.logger,WandbLogger):
+        if os.environ.get("LOCAL_RANK","0") == "0":
             self.logger.experiment.log({"test/roc": wandb_roc_curve(test_preds,test_labels, limit = 9999)}, commit=False)
             self.logger.experiment.log({"test/pr": wandb_pr_curve(test_preds,test_labels)}, commit=False)
             self.logger.experiment.log({"test/det": wandb_detection_error_tradeoff_curve(test_preds,test_labels, limit=9999)}, commit=False)
         
-        self.log_dict(results)
-        return None
+        metrics = self.test_metrics.compute()
+        self.log_dict(metrics, on_step=False, on_epoch=True, sync_dist=True)
+        
+        # Clean up
+        self.test_metrics.reset()
+        self.test_probs = []
+        self.test_labels = []
+        
+        super().on_validation_epoch_end()
 
     def predict_step(self, batch: Any) -> Any:
         x = batch["inputs_embeds"]
@@ -382,21 +391,21 @@ class CNNToTransformerEncoder(pl.LightningModule):
                 "end_date":batch["end_date_str"] }
 
     def test_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
-        x = batch["inputs_embeds"]
+
+        x = batch["inputs_embeds"].type(torch.cuda.FloatTensor)
         y = batch["label"]
-        self.test_participant_ids.append(batch["participant_id"])
-        self.test_dates.append(batch["end_date_str"])
-
-        with torch.no_grad():
-            loss,logits = self.forward(x,y)
-
-            self.log("test/loss", loss.item(),on_step=True,sync_dist=True)
-            
-            probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
-            self.test_probs.append(probs.detach().cpu())
-            self.test_labels.append(y.detach().cpu())
         
+        loss,logits = self.forward(x,y)
+
+        self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
+        
+        probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
+        self.test_probs.append(probs.detach())
+        self.test_labels.append(y.detach())
+        
+        self.test_metrics.update(probs,y)
         return {"loss":loss, "preds": logits, "labels":y}
+        
 
     def on_validation_epoch_end(self):
         eval_preds = torch.cat(self.eval_probs, dim=0)
