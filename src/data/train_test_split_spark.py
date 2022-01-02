@@ -58,7 +58,7 @@ def main(in_path, out_path, split_date=None, end_date=None,
             df = df.where(col("date") < pd.to_datetime(end_date))
 
         train_df = df.where(col("date") < pd.to_datetime(split_date))
-        test_eval = df.where(col("date") <= pd.to_datetime(split_date))
+        test_eval = df.where(col("date") >= pd.to_datetime(split_date))
 
         test_eval_split = (test_eval.select("participant_id")
                       .distinct()  # removing duplicate account_ids
@@ -67,12 +67,14 @@ def main(in_path, out_path, split_date=None, end_date=None,
                                                 .otherwise("eval")))
 
         eval_df = (test_eval_split.filter(f.col("data_type") == "eval")
-                            .join(df, on="participant_id"))  # inner join removes all rows other than train
+                            .join(test_eval, on="participant_id") # inner join removes all rows other than train
+                            .drop("data_type","rand_val"))
 
         test_df = (test_eval_split.filter(f.col("data_type") == "test")
-                           .join(df, on="participant_id"))
+                           .join(test_eval, on="participant_id")
+                           .drop("data_type","rand_val"))
         
-
+        test_df.printSchema()
         dfs_to_write = [train_df,eval_df,test_df]
         prefixes = ["train","eval","test"]
 
