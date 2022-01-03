@@ -80,6 +80,7 @@ universal_options = [
     click.Option(('--datareader_ray_obj_ref',), default=None),
     click.Option(('--task_ray_obj_ref',), default=None),
     click.Option(('--only_with_lab_results',),is_flag=True, default=None),
+    click.Option(('--pl_seed',),default=2494,)
 ]
 
 petastorm_options = [
