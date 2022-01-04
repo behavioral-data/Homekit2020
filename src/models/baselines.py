@@ -1,7 +1,6 @@
 import click
 import numpy as np
 from json import loads
-from ray import tune
 import xgboost as xgb
 from matplotlib import pyplot as plt
 from xgboost import callback
@@ -127,6 +126,3 @@ def train_xgboost(task_config,
         plt.tight_layout()
         wandb.log({"feature_importance": wandb.Image(plt)})
         wandb.log(results)
-
-    if tune:
-        ray.tune.report(**results)
