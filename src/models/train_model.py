@@ -884,3 +884,9 @@ def run_pytorch_lightning(model, task,
 
     print(f"Best model score: {checkpoint_callback.best_model_score}")
     print(f"Best model path: {checkpoint_callback.best_model_path}")
+
+    if task.test_url:
+        with PetastormDataLoader(make_reader(task.test_url,transform_spec=task.transform),
+                                   batch_size=3*model.batch_size) as test_dataset:
+            trainer.test(ckpt_path=checkpoint_callback.best_model_path,
+                        test_dataloaders=test_dataset)
