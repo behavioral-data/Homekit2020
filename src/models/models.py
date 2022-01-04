@@ -195,7 +195,8 @@ class CNNToTransformerEncoder(pl.LightningModule):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, learning_rate=1e-3, warmup_steps=100,
                 max_positional_embeddings = 1440*5, factor=64, inital_batch_size=100, clf_dropout_rate=0.0,
-                train_mix_positives_back_in=False, train_mixin_batch_size=3, skip_cnn=False, wandb_id=None, #wandb_id is run id saved as hyperparameter
+                train_mix_positives_back_in=False, train_mixin_batch_size=3, skip_cnn=False, wandb_id=None, 
+                positional_encoding = False,#wandb_id is run id saved as hyperparameter
                 **model_specific_kwargs) -> None:
         self.config = get_config_from_locals(locals())
 
@@ -219,8 +220,12 @@ class CNNToTransformerEncoder(pl.LightningModule):
 
         if self.input_embedding.final_output_length < 1:
             raise ValueError("CNN final output dim is <1 ")                                
-            
-        self.positional_encoding = modules.PositionalEncoding(self.d_model, max_positional_embeddings)
+        
+        if positional_encoding:
+            self.positional_encoding = modules.PositionalEncoding(self.d_model, final_length)
+        else:
+            self.positional_encoding = None
+
         self.blocks = nn.ModuleList([
             modules.EncoderBlock(self.d_model, num_attention_heads, dropout_rate) for _ in range(num_hidden_layers)
         ])
@@ -276,6 +281,9 @@ class CNNToTransformerEncoder(pl.LightningModule):
             x = x.transpose(1, 2)
         else:
             x = inputs_embeds
+        
+        if self.positional_encoding:
+            x = self.positional_encoding(x)
 
         for l in self.blocks:
             x = l(x)
