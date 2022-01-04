@@ -592,6 +592,14 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
 
     def __init__(self,dataset_args={},activity_level="minute", **kwargs):
         self.clause = dataset_args.pop("clause")
+        self.keys = ['heart_rate',
+                'missing_heart_rate',
+                'missing_steps',
+                'sleep_classic_0',
+                'sleep_classic_1',
+                'sleep_classic_2',
+                'sleep_classic_3', 
+                'steps']
         self.survey_responses = load_processed_table("daily_surveys_onehot").set_index("participant_id")
         self.labler = ClauseLabler(self.survey_responses,self.clause)
         dataset_args["labeler"] = self.labler
