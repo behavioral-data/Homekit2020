@@ -257,7 +257,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.batch_size = inital_batch_size
         self.train_dataset = None
         self.eval_dataset=None
-        
+
         self.train_metrics = TorchMetricClassification(bootstrap_cis=False,
                                                        prefix="train/")
         self.eval_metrics = TorchMetricClassification(bootstrap_cis=True,
@@ -273,6 +273,15 @@ class CNNToTransformerEncoder(pl.LightningModule):
         logits = self.clf(encoding)
         loss =  self.criterion(logits,labels)
         return loss, logits
+
+    def initialize_wandb_metrics(self):
+        # We do this because by default wandb logs the last
+        # (and not 'best') value to the summary.
+        metrics = [("roc_auc","max"), ("loss_epoch","min"), ("pr_auc","max")]
+        steps = ["train","test","eval"]
+        for s in steps:
+            for m in metrics:
+                self.logger.experiment.define_metric(f"{s}/{m[0]}",summary=m[1])
 
     def encode(self, inputs_embeds):
         if not self.skip_cnn:
@@ -310,6 +319,9 @@ class CNNToTransformerEncoder(pl.LightningModule):
             return DataLoader(self.eval_dataset, batch_size=3*self.batch_size, pin_memory=True)
     
     def on_train_start(self) -> None:
+        if os.environ.get("LOCAL_RANK","0") == "0":
+            self.initialize_wandb_metrics()
+
         self.train_metrics.apply(lambda x: x.to(self.device))
         self.eval_metrics.apply(lambda x: x.to(self.device))
         return super().on_train_start()
