@@ -11,7 +11,6 @@ TASKS=(
     "PredictTrigger"
     "PredictCough"
     "PredictFatigue"
-    "PredictSevereSymptoms"
 )
 
 for task in ${TASKS[*]} 
