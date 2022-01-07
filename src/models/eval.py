@@ -91,7 +91,10 @@ class TorchMetricClassification(MetricCollection):
         metrics["support"] = Support()
 
         super(TorchMetricClassification,self).__init__(metrics)
-    
+
+        self.best_metrics = {"pr_auc":(max,0),
+                             "roc_auc":(max,0)}
+
     def compute(self) -> Dict[str, Any]:
         results = super().compute()
         if self.bootstrap_cis:
@@ -108,6 +111,14 @@ class TorchMetricClassification(MetricCollection):
             results["pr_auc_ci_low"] = pr_auc - 2*pr_std
             results["pr_auc"] = results["pr_auc"]["mean"]
         
+        for metric , (operator,old_value) in self.best_metrics.items():
+            
+            gt_max = (operator == max) and (results[metric] >= old_value)
+            lt_min = (operator == min) and (results[metric] <= old_value)
+            if gt_max or lt_min:
+                self.best_metrics[metric] = (operator,results[metric])
+                results[f"best_{metric}"] = results[metric]
+
         if self.add_prefix:
             return add_prefix(results,self.add_prefix)
         else:
