@@ -16,8 +16,12 @@ __docformat__ = 'reStructuredText'
 
 import json
 from random import choice
+import re
+from typing import List
 import click
+import pandas as pd
 import petastorm
+from pytorch_lightning import callbacks
 from src.utils import read_yaml
 from src.models.train_model import (train_cnn_transformer, train_neural_baseline,
                                     train_autoencoder, train_sand,
@@ -34,6 +38,13 @@ def validate_yaml_or_json(ctx, param, value):
             return json.loads(value)
         except json.decoder.JSONDecodeError:
             raise click.BadParameter('dataset_args needs to be either a json string or a path to a config .yaml')
+
+def read_participant_dates(ctx, param, value) -> List[List]:
+    if not value:
+        return None
+    df = pd.read_csv(value)
+    df["date"] = pd.to_datetime(df["date"])
+    return df[["participant_id","date"]].values.tolist()
 
 neural_options = [
         click.Option(('--n_epochs',), default = 10, help='Number of training epochs'),
@@ -121,6 +132,7 @@ class CNNTransformer(NeuralCommand):
             click.Option(("--train_mixin_batch_size",),default=3, help="Number of positive examples to mix back in"),
             click.Option(("--reload_dataloaders",),default=0, help="Reload the dataloaders every n epochs"),
             click.Option(("--positional_encoding",),is_flag=True, help="Use positional encodings"),
+            click.Option(("--early_stopping",),is_flag=True, help="Use early stopping"),
         ]
         self.params = self.params + loss_options + cnn_transformer_params + petastorm_options
 
@@ -161,6 +173,9 @@ def train_longformer_command(*args,**kwargs):
 
 @click.command(cls=BaseCommand, name="train-xgboost")
 @click.option("--add_features_path", type = click.Path(dir_okay=False), default=None)
+@click.option("--train_participant_dates", type = click.Path(dir_okay=False), callback=read_participant_dates, default=None)
+@click.option("--eval_participant_dates", type = click.Path(dir_okay=False), callback=read_participant_dates, default=None)
+@click.option("--test_participant_dates", type = click.Path(dir_okay=False), callback=read_participant_dates, default=None)
 def train_xgboost_command(*args,**kwargs):
     train_xgboost(*args,**kwargs)
 

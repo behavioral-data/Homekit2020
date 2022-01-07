@@ -34,7 +34,7 @@ from pytorch_lightning.accelerators import accelerator
 from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.loggers.base import DummyExperiment
 from pytorch_lightning.profiler import AdvancedProfiler
-from pytorch_lightning.callbacks import LearningRateMonitor
+from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
 
 from torch.utils.data import DataLoader
 
@@ -73,7 +73,6 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 
-from tensorflow.keras.callbacks import EarlyStopping # type: ignore
 import pandas as pd
 from PIL import Image
 import torch
@@ -295,6 +294,7 @@ def train_cnn_transformer(
                 pl_seed=2494,
                 downsample_negative_frac=None,
                 reload_dataloaders = 0, #to be passed to the pytorch lightning Trainer instance. Reload dataloaders every n epochs (default 0, don't reload)
+                early_stopping=False,
                 **model_specific_kwargs):
 
     if auto_set_gpu:
@@ -416,9 +416,10 @@ def train_cnn_transformer(
             resume_from_checkpoint=resume_model_from_ckpt,
             log_every_n_steps=log_steps
         )
+        
         run_pytorch_lightning(model,task,training_args=pl_training_args,backend=backend, 
                                 reload_dataloaders = reload_dataloaders,
-                                notes=notes)
+                                notes=notes, early_stopping=early_stopping)
     else:
         training_args = TrainingArguments(
             output_dir=results_dir,          # output directorz
@@ -802,13 +803,24 @@ def run_pytorch_lightning(model, task,
                         no_wandb=False,
                         notes=None,
                         backend="petastorm",
-                        reload_dataloaders = 0): #to be passed to the pytorch lightning Trainer instance. Reload dataloaders every n epochs (default 0, don't reload)      
+                        reload_dataloaders = 0,
+                        early_stopping=False): #to be passed to the pytorch lightning Trainer instance. Reload dataloaders every n epochs (default 0, don't reload)      
 
+    
+    callbacks = [LearningRateMonitor(logging_interval='step')]
+    
     if backend == "petastorm":
         do_eval = bool(task.eval_url)
     else:
         do_eval = hasattr(task,"eval_dataset")
-        
+    
+    if do_eval and early_stopping:
+        # val_epochs = training_args["check_val_every_n_epoch"]
+        early_stopping_callback = EarlyStopping(monitor="eval/roc_auc",patience=2,mode="max")
+
+
+        callbacks.append(early_stopping_callback)
+
     if not no_wandb:
         # Creating two wandb runs here?
         import wandb
@@ -826,7 +838,6 @@ def run_pytorch_lightning(model, task,
             logger.experiment.summary["model"] = model.base_model_prefix
             logger.experiment.config.update(model.hparams, allow_val_change=True)
             model.hparams.wandb_id = logger.experiment.id  
-
             model_img_path = visualize_model(model, dir=wandb.run.dir)
             # wandb.log({"model_img": [wandb.Image(Image.open(model_img_path), caption="Model Graph")]})
             
@@ -842,16 +853,17 @@ def run_pytorch_lightning(model, task,
                             monitor="eval/roc_auc" if do_eval else "train/loss" ,
                             every_n_epochs=1,
                             mode='max' if do_eval else "min")
+        
+        callbacks.append(checkpoint_callback)
 
     else:
         checkpoint_callback = True
         logger=True
     
-    lr_monitor = LearningRateMonitor(logging_interval='step')
     debug_mode = os.environ.get("DEBUG_MODE")
     trainer = pl.Trainer(logger=logger,
                          checkpoint_callback=True,
-                         callbacks=[checkpoint_callback, lr_monitor],
+                         callbacks=callbacks,
                          gpus = -1,
                          accelerator="ddp",
                          terminate_on_nan=True,
