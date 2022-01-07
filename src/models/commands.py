@@ -146,7 +146,7 @@ def train_neural_baseline_command(*args,**kwargs):
 def train_autoencoder_command(*args, **kwargs):
     train_autoencoder(*args,**kwargs)
 
-@click.command(cls=NeuralCommand,name="train-sand")
+@click.command(cls=CNNTransformer,name="train-sand")
 def train_sand_command(*args,**kwargs):
     train_sand(*args,**kwargs)
 

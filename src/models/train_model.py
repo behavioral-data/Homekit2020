@@ -474,25 +474,54 @@ def train_sand( task_config=None,
                 data_location=None,
                 no_eval_during_training=False,
                 auto_set_gpu=None,
+                use_huggingface=False,
+                backend="petastorm",
+                train_path=None,
+                eval_path=None,
+                test_path=None,
+                only_with_lab_results=False,
+                downsample_negative_frac=None,
+                reload_dataloaders = 0,
+                log_steps=50,
+                val_epochs=10,
                 **_):
     
     if model_path:
         raise NotImplementedError()
 
     logger.info(f"Training SAnD")
+    
     if task_config:
         task_name = task_config["task_name"]
         dataset_args = task_config["dataset_args"]
+        task_args = None #JM remove
+    """
+    if task_config:
+        task_name = task_config.get("task_name")
+        task_args = task_config.get("task_args",{})
+        dataset_args = task_config.get("dataset_args",{})
+    else:
+        task_name = None
+        task_args = None
+    """
 
     if not eval_frac is None:
         dataset_args["eval_frac"] = eval_frac
     dataset_args["return_dict"] = True
     dataset_args["data_location"] = data_location
 
-    task = get_task_with_name(task_name)(dataset_args=dataset_args, 
-                                         activity_level=activity_level,
-                                         look_for_cached_datareader=look_for_cached_datareader,
-                                         datareader_ray_obj_ref=datareader_ray_obj_ref)
+    
+    task = get_task_with_name(task_name)( #**task_args,
+                                        downsample_negative_frac=downsample_negative_frac,
+                                        dataset_args=dataset_args,
+                                        activity_level=activity_level,
+                                        look_for_cached_datareader=look_for_cached_datareader,
+                                        only_with_lab_results = only_with_lab_results,
+                                        datareader_ray_obj_ref=datareader_ray_obj_ref,
+                                        backend=backend,
+                                        train_path=train_path,
+                                        eval_path=eval_path,
+                                        test_path=test_path)
     
     if sinu_position_encoding:
         dataset_args["add_absolute_embedding"] = True
@@ -511,8 +540,28 @@ def train_sand( task_config=None,
                  pos_class_weight=pos_class_weight,
                  neg_class_weight=neg_class_weight)
                  
+    
+    if task.is_classification:
+        metrics = task.get_huggingface_metrics(threshold=classification_threshold)
+    else:
+        metrics=None
 
-    training_args = TrainingArguments(
+    if not use_huggingface:
+        pl_training_args = dict(
+            max_epochs=n_epochs,
+            check_val_every_n_epoch=val_epochs,
+            log_every_n_steps=log_steps
+        )
+        run_pytorch_lightning(model = model, 
+                        task = task, 
+                        training_args=pl_training_args,
+                        no_wandb=False,
+                        notes=notes,
+                        backend=backend,
+                        reload_dataloaders = reload_dataloaders)
+    
+    else:   
+        training_args = TrainingArguments(
         output_dir='./results',          # output directorz
         num_train_epochs=n_epochs,              # total # of training epochs
         per_device_train_batch_size=train_batch_size,  # batch size per device during training
@@ -528,14 +577,9 @@ def train_sand( task_config=None,
         prediction_loss_only=False,
         evaluation_strategy="epoch",
         report_to=["wandb"]            # directory for storing logs
-    )
-
-    if task.is_classification:
-        metrics = task.get_huggingface_metrics(threshold=classification_threshold)
-    else:
-        metrics=None
-
-    run_huggingface(model=model, base_trainer=FluTrainer,
+        )                  
+        
+        run_huggingface(model=model, base_trainer=FluTrainer,
                    training_args=training_args,
                    metrics = metrics, task=task,
                    no_wandb=no_wandb, notes=notes)
