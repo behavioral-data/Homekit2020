@@ -235,8 +235,11 @@ class CNNToTransformerEncoder(pl.LightningModule):
                                                 dropout_p=clf_dropout_rate)
         self.provided_train_dataloader = None
         self.criterion = build_loss_fn(model_specific_kwargs)
-
-        self.name = "CNNToTransformerEncoder"
+        if num_attention_heads > 0:
+            self.name = "CNNToTransformerEncoder"
+        else:
+            self.name = "CNN"
+            
         self.base_model_prefix = self.name
         
         self.train_probs = []
