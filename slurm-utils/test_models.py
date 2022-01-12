@@ -24,5 +24,5 @@ for model_path, task_path in paths:
     task = get_task_from_config_path(task_path)
 
     with PetastormDataLoader(make_reader(task.test_url,transform_spec=task.transform),
-                                   batch_size=3*model.batch_size) as test_dataset:
+                                   batch_size=300) as test_dataset:
             trainer.test(test_dataloaders=test_dataset)
