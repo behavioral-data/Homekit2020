@@ -111,9 +111,9 @@ class TorchMetricRegression(MetricCollection):
             results["cosine_sim"] = results["roc_auc"]["mean"]
         
             explained_variance = results["explained_variance"]["mean"] 
-            pr_std = results["explained_variance"]["std"] 
-            results["explained_variance_ci_high"] = explained_variance + 2*pr_std
-            results["explained_variance_ci_low"] = explained_variance - 2*pr_std
+            explained_variance_std = results["explained_variance"]["std"] 
+            results["explained_variance_ci_high"] = explained_variance + 2*explained_variance_std
+            results["explained_variance_ci_low"] = explained_variance - 2*explained_variance_std
             results["explained_variance"] = results["explained_variance"]["mean"]
         
         for metric , (operator,old_value) in self.best_metrics.items():
