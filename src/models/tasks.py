@@ -47,7 +47,7 @@ from petastorm.etl.dataset_metadata import infer_or_load_unischema
 import petastorm.predicates  as peta_pred
 
 import src.data.task_datasets as td
-from src.models.eval import classification_eval, autoencode_eval
+from src.models.eval import classification_eval, regression_eval
 from src.data.utils import load_processed_table, load_cached_activity_reader, url_from_path
 from src.utils import get_logger, read_yaml
 from src.models.lablers import FluPosLabler, ClauseLabler, EvidationILILabler, DayOfWeekLabler, AudereObeseLabler
@@ -142,7 +142,7 @@ class AutoencodeMixin():
         self.is_autoencoder = True
 
     def evaluate_results(self,preds,labels):
-        return autoencode_eval(preds,labels)
+        return regression_eval(preds,labels)
 
     def get_huggingface_metrics(self):
         def evaluator(predictions):
@@ -188,6 +188,9 @@ class ActivityTask(Task):
                      train_path=None,
                      eval_path=None,
                      test_path=None,
+                     train_participant_dates=None,
+                     eval_participant_dates=None,
+                     test_participant_dates=None,
                      downsample_negative_frac=None,
                      shape=None,
                      keys=None,
@@ -249,23 +252,32 @@ class ActivityTask(Task):
                                                     add_features_path=add_features_path,
                                                     data_location = data_location)
 
-            if limit_train_frac:
-                train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac,
-                                                                                                        limit_train_frac=limit_train_frac,
-                                                                                                        by_participant=True)
+            if not (train_participant_dates and eval_participant_dates):
+                logger.warning("Participant dates not provided, conducting train test split from task config")
 
-            else:
-                train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
+                if limit_train_frac:
+                    train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac,
+                                                                                                            limit_train_frac=limit_train_frac, by_participant=True)
+                else:
+                    train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
             
 
             self.train_dataset = base_dataset(activity_reader, lab_results_reader,
                             participant_dates = train_participant_dates,
                             cache=cache,**dataset_args)
+
             self.eval_dataset = base_dataset(activity_reader, lab_results_reader,
                                 participant_dates = eval_participant_dates,
                                 cache=cache,
                                 **dataset_args)
-
+            
+            if test_participant_dates:
+                self.test_dataset = base_dataset(activity_reader, lab_results_reader,
+                                    participant_dates = test_participant_dates,
+                                    cache=cache,
+                                    **dataset_args) 
+            else:
+                self.test_dataset = None
 
         ### Newer backend relies on petastorm and is faster, but requires more pre-processing:
         elif self.backend == "petastorm":
@@ -387,6 +399,14 @@ class ActivityTask(Task):
         else:
             raise ValueError("Invalid backend")
 
+    def get_test_dataset(self):
+        if self.backend in ["dask","dynamic"]:
+            return self.test_dataset
+        elif self.backend == "petastorm":
+            logger.info("Making test dataset reader")
+            return make_reader(self.test_url,transform_spec=self.transform)
+        else:
+            raise ValueError("Invalid backend")
 
     def get_eval_dataset(self):
         if self.backend in ["dask","dynamic"]:
@@ -675,7 +695,7 @@ class SingleWindowActivityTask(Task):
                         participant_dates = train_participant_dates,**dataset_args)
         self.eval_dataset = base_dataset(activity_reader, lab_results_reader,
                         participant_dates = eval_participant_dates,**dataset_args)
-    
+
     def filter_participant_dates(self,participant_dates):
         candidates = {}
         for id, date in participant_dates:
