@@ -454,9 +454,10 @@ class ActivtyDataset(Dataset):
         for el_x, el_y in tqdm(self, desc = "Converting to np Array"): 
             if flatten:
                 el_x = el_x.flatten()
-    
-            X.append(el_x)
-            y.append(el_y)
+            
+            if len(el_x) == self.day_window_size * self.activity_reader.activity_data.shape[-1]:
+                X.append(el_x)
+                y.append(el_y)
         
         return np.stack(X), np.stack(y)
 
