@@ -4,6 +4,7 @@ import numpy as np
 from numpy.core.shape_base import vstack
 import pandas as pd
 from torchmetrics.classification.auroc import AUROC
+from torchmetrics.regression import explained_variance
 import wandb
 import copy
 from wandb.plot.roc_curve import roc_curve
@@ -13,7 +14,10 @@ from wandb.data_types import Table
 import torch
 
 import torchmetrics
-from torchmetrics import BinnedPrecisionRecallCurve, BinnedAveragePrecision, BootStrapper, MetricCollection, Metric
+from torchmetrics import (BinnedPrecisionRecallCurve, BinnedAveragePrecision, 
+                          BootStrapper, MetricCollection, Metric, CosineSimilarity,
+                          ExplainedVariance)
+                          
 from torchmetrics.functional import auc as tm_auc
 from torchmetrics.functional import precision_recall_curve as tm_precision_recall_curve
 from torchmetrics.utilities.data import dim_zero_cat
@@ -67,6 +71,63 @@ class TorchPrecisionRecallAUC(AUROC):
         target = dim_zero_cat(self.target)
         precisions, recalls, _ = tm_precision_recall_curve(preds,target)
         return tm_auc(recalls,precisions)
+
+
+class TorchMetricRegression(MetricCollection):
+    def __init__(self, bootstrap_cis=False,
+                 n_boostrap_samples=100,
+                 prefix=""):
+        self.add_prefix = prefix
+        self.bootstrap_cis = bootstrap_cis
+        metrics = {}
+
+        if bootstrap_cis:
+            cosine_sim = BootStrapper(CosineSimilarity(),
+                                    num_bootstraps=n_boostrap_samples)
+            explained_variance = BootStrapper(ExplainedVariance(),
+                                  num_bootstraps=n_boostrap_samples)
+        else:    
+            cosine_sim = CosineSimilarity()
+            explained_variance = ExplainedVariance()
+
+        metrics["consine_sim"] = cosine_sim
+        metrics["explained_variance"] = explained_variance
+        
+
+        self.best_metrics = {"cosine_sim":(max,0),
+                             "explained_variance":(max,0)}
+
+        super(TorchMetricRegression,self).__init__(metrics)
+
+    
+    def compute(self) -> Dict[str, Any]:
+        results = super().compute()
+        if self.bootstrap_cis:
+
+            cosine_sim = results["cosine_sim"]["mean"] 
+            cosine_sim_std = results["cosine_sim"]["std"] 
+            results["cosine_sim_ci_high"] = cosine_sim + 2*cosine_sim_std
+            results["cosine_sim_ci_low"] = cosine_sim - 2*cosine_sim_std
+            results["cosine_sim"] = results["roc_auc"]["mean"]
+        
+            explained_variance = results["explained_variance"]["mean"] 
+            pr_std = results["explained_variance"]["std"] 
+            results["explained_variance_ci_high"] = explained_variance + 2*pr_std
+            results["explained_variance_ci_low"] = explained_variance - 2*pr_std
+            results["explained_variance"] = results["explained_variance"]["mean"]
+        
+        for metric , (operator,old_value) in self.best_metrics.items():
+            
+            gt_max = (operator == max) and (results[metric] >= old_value)
+            lt_min = (operator == min) and (results[metric] <= old_value)
+            if gt_max or lt_min:
+                self.best_metrics[metric] = (operator,results[metric])
+                results[f"best_{metric}"] = results[metric]
+
+        if self.add_prefix:
+            return add_prefix(results,self.add_prefix)
+        else:
+            return results
 
 class TorchMetricClassification(MetricCollection):
     def __init__(self, bootstrap_cis=False,
@@ -317,7 +378,7 @@ def roc_auc(pred,labels,get_ci=False,n_samples=10000):
     else:
         return score
     
-def autoencode_eval(pred, labels):
+def regression_eval(pred, labels):
     # Remove indices with pad tokens
     results = {}
 

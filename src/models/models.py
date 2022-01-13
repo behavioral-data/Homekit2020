@@ -34,7 +34,7 @@ from src.models.losses import build_loss_fn
 from src.SAnD.core import modules
 from src.utils import get_logger
 from src.models.eval import (wandb_roc_curve, wandb_pr_curve, wandb_detection_error_tradeoff_curve,
-                            classification_eval,  TorchMetricClassification)
+                            classification_eval,  TorchMetricClassification, TorchMetricRegression)
 from torch import Tensor
 from torch.utils.data.dataloader import DataLoader
 from wandb.plot.roc_curve import roc_curve
@@ -232,10 +232,18 @@ class CNNToTransformerEncoder(pl.LightningModule):
         if model_head == "classification":
             self.head = modules.ClassificationModule(self.d_model, final_length, num_labels,
                                                     dropout_p=clf_dropout_rate)
+            metric_class = TorchMetricClassification
+
         elif model_head == "regression":
             self.head = modules.RegressionModule(self.d_model, final_length, num_labels)
+            metric_class = TorchMetricRegression
 
+        self.train_metrics = metric_class(bootstrap_cis=False, prefix="train/")
+        self.eval_metrics = metric_class(bootstrap_cis=True, prefix="eval/")
+        self.test_metrics = metric_class(bootstrap_cis=True, prefix="test/")
+        
         self.provided_train_dataloader = None
+        
         self.criterion = build_loss_fn(model_specific_kwargs, task_type=model_head)
         if num_attention_heads > 0:
             self.name = "CNNToTransformerEncoder"
@@ -263,12 +271,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.train_dataset = None
         self.eval_dataset=None
 
-        self.train_metrics = TorchMetricClassification(bootstrap_cis=False,
-                                                       prefix="train/")
-        self.eval_metrics = TorchMetricClassification(bootstrap_cis=True,
-                                                      prefix="eval/")
-        self.test_metrics = TorchMetricClassification(bootstrap_cis=True,
-                                                      prefix="test/")
+        
         self.skip_cnn = skip_cnn
         self.save_hyperparameters()
 
