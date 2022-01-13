@@ -196,13 +196,11 @@ class CNNToTransformerEncoder(pl.LightningModule):
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, learning_rate=1e-3, warmup_steps=100,
                 max_positional_embeddings = 1440*5, factor=64, inital_batch_size=100, clf_dropout_rate=0.0,
                 train_mix_positives_back_in=False, train_mixin_batch_size=3, skip_cnn=False, wandb_id=None, 
-                positional_encoding = False,#wandb_id is run id saved as hyperparameter
+                positional_encoding = False, model_head="classification",
                 **model_specific_kwargs) -> None:
+        
         self.config = get_config_from_locals(locals())
-
         super(CNNToTransformerEncoder, self).__init__()
-        
-        
 
         self.learning_rate = learning_rate
         self.warmup_steps = warmup_steps
@@ -231,10 +229,14 @@ class CNNToTransformerEncoder(pl.LightningModule):
         ])
         
         # self.dense_interpolation = modules.DenseInterpolation(final_length, factor)
-        self.clf = modules.ClassificationModule(self.d_model, final_length, num_labels,
-                                                dropout_p=clf_dropout_rate)
+        if model_head == "classification":
+            self.head = modules.ClassificationModule(self.d_model, final_length, num_labels,
+                                                    dropout_p=clf_dropout_rate)
+        elif model_head == "regression":
+            self.head = modules.RegressionModule(self.d_model, final_length, num_labels)
+
         self.provided_train_dataloader = None
-        self.criterion = build_loss_fn(model_specific_kwargs)
+        self.criterion = build_loss_fn(model_specific_kwargs, task_type=model_head)
         if num_attention_heads > 0:
             self.name = "CNNToTransformerEncoder"
         else:
@@ -273,9 +275,9 @@ class CNNToTransformerEncoder(pl.LightningModule):
 
     def forward(self, inputs_embeds,labels):
         encoding = self.encode(inputs_embeds)
-        logits = self.clf(encoding)
-        loss =  self.criterion(logits,labels)
-        return loss, logits
+        preds = self.head(encoding)
+        loss =  self.criterion(preds,labels)
+        return loss, preds
 
     def encode(self, inputs_embeds):
         if not self.skip_cnn:
