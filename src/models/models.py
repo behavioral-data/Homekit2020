@@ -229,12 +229,13 @@ class CNNToTransformerEncoder(pl.LightningModule):
         ])
         
         # self.dense_interpolation = modules.DenseInterpolation(final_length, factor)
-        if model_head == "classification":
+        self.is_classification = model_head == "classification"
+        if self.is_classification:
             self.head = modules.ClassificationModule(self.d_model, final_length, num_labels,
                                                     dropout_p=clf_dropout_rate)
             metric_class = TorchMetricClassification
 
-        elif model_head == "regression":
+        else:
             self.head = modules.RegressionModule(self.d_model, final_length, num_labels)
             metric_class = TorchMetricRegression
 
@@ -338,22 +339,22 @@ class CNNToTransformerEncoder(pl.LightningModule):
                 x = torch.cat([x] + pos_samples, axis=0)
                 y = torch.cat([y, y.new([1] * self.train_mixin_batch_size)], axis=0)
 
-        loss,logits = self.forward(x,y)
+        loss,preds = self.forward(x,y)
         
         self.log("train/loss", loss.item(),on_step=True)
-        probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
+        # probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
         
-        self.train_metrics.update(probs,y)
+        self.train_metrics.update(preds,y)
 
-        self.train_probs.append(probs.detach())
+        self.train_probs.append(preds.detach())
         self.train_labels.append(y.detach())
-        return {"loss":loss, "preds": logits, "labels":y}
+        return {"loss":loss, "preds": preds, "labels":y}
 
     def on_train_epoch_end(self):
         train_preds = torch.cat(self.train_probs, dim=0)
         train_labels = torch.cat(self.train_labels, dim=0)
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
-        if os.environ.get("LOCAL_RANK","0") == "0":
+        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classification:
             self.logger.experiment.log({"train/roc": wandb_roc_curve(train_preds,train_labels, limit = 9999)}, commit=False)
             self.logger.experiment.log({"train/pr": wandb_pr_curve(train_preds,train_labels)}, commit=False)
             self.logger.experiment.log({"train/det": wandb_detection_error_tradeoff_curve(train_preds,train_labels, limit=9999)}, commit=False)
@@ -380,7 +381,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         test_labels = torch.cat(self.test_labels, dim=0)
 
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
-        if os.environ.get("LOCAL_RANK","0") == "0":
+        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classification:
             self.logger.experiment.log({"test/roc": wandb_roc_curve(test_preds,test_labels, limit = 9999)}, commit=False)
             self.logger.experiment.log({"test/pr": wandb_pr_curve(test_preds,test_labels)}, commit=False)
             self.logger.experiment.log({"test/det": wandb_detection_error_tradeoff_curve(test_preds,test_labels, limit=9999)}, commit=False)
@@ -412,16 +413,14 @@ class CNNToTransformerEncoder(pl.LightningModule):
         x = batch["inputs_embeds"].type(torch.cuda.FloatTensor)
         y = batch["label"]
         
-        loss,logits = self.forward(x,y)
+        loss,preds = self.forward(x,y)
 
-        self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
-        
-        probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
-        self.test_probs.append(probs.detach())
+        self.log("test/loss", loss.item(),on_step=True,sync_dist=True)
+        self.test_probs.append(preds.detach())
         self.test_labels.append(y.detach())
         
-        self.test_metrics.update(probs,y)
-        return {"loss":loss, "preds": logits, "labels":y}
+        self.test_metrics.update(preds,y)
+        return {"loss":loss, "preds": preds, "labels":y}
         
 
     def on_validation_epoch_end(self):
@@ -429,9 +428,9 @@ class CNNToTransformerEncoder(pl.LightningModule):
         eval_labels = torch.cat(self.eval_labels, dim=0)
 
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
-        if os.environ.get("LOCAL_RANK","0") == "0":
+        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classification:
             self.logger.experiment.log({"eval/roc": wandb_roc_curve(eval_preds,eval_labels, limit = 9999)}, commit=False)
-            self.logger.experiment.log({"eval/pr": wandb_pr_curve(eval_preds,eval_labels)}, commit=False)
+            self.logger.experiment.log({"eval/pr":  wandb_pr_curve(eval_preds,eval_labels)}, commit=False)
             self.logger.experiment.log({"eval/det": wandb_detection_error_tradeoff_curve(eval_preds,eval_labels, limit=9999)}, commit=False)
         
         metrics = self.eval_metrics.compute()
@@ -448,16 +447,14 @@ class CNNToTransformerEncoder(pl.LightningModule):
         x = batch["inputs_embeds"].type(torch.cuda.FloatTensor)
         y = batch["label"]
         
-        loss,logits = self.forward(x,y)
-
-        self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
+        loss,preds = self.forward(x,y)
         
-        probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
-        self.eval_probs.append(probs.detach())
+        self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
+        self.eval_probs.append(preds.detach())
         self.eval_labels.append(y.detach())
         
-        self.eval_metrics.update(probs,y)
-        return {"loss":loss, "preds": logits, "labels":y}
+        self.eval_metrics.update(preds,y)
+        return {"loss":loss, "preds": preds, "labels":y}
     
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)

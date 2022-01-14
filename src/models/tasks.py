@@ -50,7 +50,8 @@ import src.data.task_datasets as td
 from src.models.eval import classification_eval, regression_eval
 from src.data.utils import load_processed_table, load_cached_activity_reader, url_from_path
 from src.utils import get_logger, read_yaml
-from src.models.lablers import FluPosLabler, ClauseLabler, EvidationILILabler, DayOfWeekLabler, AudereObeseLabler
+from src.models.lablers import (FluPosLabler, ClauseLabler, EvidationILILabler, 
+                                 DayOfWeekLabler, AudereObeseLabler, DailyFeaturesLabler)
 
 logger = get_logger(__name__)
 
@@ -122,9 +123,16 @@ class Task(object):
                         batch_size=batch_size,
                         collate_fn=default_data_collator
                     )
-                            
-class ClassificationMixin():
+
+class TaskTypeMixin():
     def __init__(self):
+        self.is_regression=False                            
+        self.is_classification=False
+        self.is_autoencoder=False
+
+class ClassificationMixin(TaskTypeMixin):
+    def __init__(self):
+        TaskTypeMixin.__init__(self)
         self.is_classification = True
 
     def evaluate_results(self,logits,labels,threshold=0.5):
@@ -136,11 +144,11 @@ class ClassificationMixin():
             logits = pred.predictions
             return self.evaluate_results(logits,labels,threshold=threshold)
         return evaluator
-
-class AutoencodeMixin():
+class RegressionMixin(TaskTypeMixin):
     def __init__(self):
-        self.is_autoencoder = True
-
+        TaskTypeMixin.__init__(self)
+        self.is_regression=True
+    
     def evaluate_results(self,preds,labels):
         return regression_eval(preds,labels)
 
@@ -150,6 +158,10 @@ class AutoencodeMixin():
             preds = predictions.predictions
             return self.evaluate_results(preds,labels)
         return evaluator
+class AutoencodeMixin(RegressionMixin):
+    def __init__(self):
+        self.is_autoencoder = True
+        super(AutoencodeMixin,self).__init__()
 
 def verify_backend(backend,
                   limit_train_frac,
@@ -353,7 +365,7 @@ class ActivityTask(Task):
                     
                     results.append(feature_vector.T)
 
-                label = int(labler(participant_id,start,end))
+                label = labler(participant_id,start,end)
                 return {"inputs_embeds": np.vstack(results).T,
                         "label": label,
                         "id": data_id,
@@ -472,6 +484,39 @@ class GeqMeanSteps(ActivityTask, ClassificationMixin):
             logits = pred.predictions
             return self.evaluate_results(logits,labels,threshold=threshold)
         return evaluator
+
+
+class PredictDailyFeatures(ActivityTask, RegressionMixin):
+    """Predict whether a participant was positive
+       given a rolling window of minute level activity data.
+       We validate on data after split_date, but before
+       max_date, if provided"""
+
+    def __init__(self,dataset_args={}, activity_level = "minute",
+                window_size=7,
+                **kwargs):
+        self.labler = DailyFeaturesLabler(window_size=window_size)
+
+        dataset_args["labeler"] = self.labler
+        self.keys = ['heart_rate',
+                     'missing_heart_rate',
+                     'missing_steps',
+                     'sleep_classic_0',
+                     'sleep_classic_1',
+                     'sleep_classic_2',
+                     'sleep_classic_3', 
+                     'steps']
+
+        ActivityTask.__init__(self,td.CustomLabler,dataset_args=dataset_args,
+                                 activity_level=activity_level,**kwargs)
+        RegressionMixin.__init__(self)
+        
+
+    def get_name(self):
+        return "PredictDailyFeatures"
+    
+    def get_labler(self):
+        return self.labler
 
 class PredictFluPos(ActivityTask, ClassificationMixin):
     """Predict whether a participant was positive

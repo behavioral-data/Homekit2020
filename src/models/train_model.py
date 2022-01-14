@@ -343,6 +343,13 @@ def train_cnn_transformer(
                                               eval_path=eval_path,
                                               test_path=test_path)
     
+    if task.is_classification:
+        model_head = "classification"
+        num_labels = 2
+    else:
+        model_head = "regression"
+        num_labels = task.labler.label_size
+
     if model_path:
         if use_huggingface:
             model = load_model_from_huggingface_checkpoint(model_path)
@@ -350,6 +357,9 @@ def train_cnn_transformer(
             model = CNNToTransformerEncoder.load_from_checkpoint(model_path, 
                                                                 strict=False,
                                                                **model_specific_kwargs)
+            # If using this arg we typically don't want to override a wandb run
+            model.hparams.wandb_id = None
+
     elif resume_model_from_ckpt:
             model = CNNToTransformerEncoder.load_from_checkpoint(resume_model_from_ckpt, 
                                                                 strict=False,
@@ -360,7 +370,7 @@ def train_cnn_transformer(
                             n_timesteps=n_timesteps,
                             num_attention_heads = num_attention_heads,
                             num_hidden_layers = num_hidden_layers,
-                            num_labels=2,
+                            num_labels=num_labels,
                             learning_rate =learning_rate,
                             warmup_steps = warmup_steps,
                             inital_batch_size=train_batch_size,
@@ -370,13 +380,14 @@ def train_cnn_transformer(
                             out_channels=out_channels,
                             train_mixin_batch_size = train_mixin_batch_size,
                             train_mix_positives_back_in = train_mix_positives_back_in,
+                            model_head=model_head,
                             **model_specific_kwargs)
         if model_config:
             model_kwargs.update(model_config)
         model = CNNToTransformerEncoder(**model_kwargs)
 
     if reset_cls_params and hasattr(model,"clf"):
-        model.clf.reset_parameters()
+        model.head.reset_parameters()
 
     if freeze_encoder:
         for param in model.blocks.parameters():
@@ -386,11 +397,6 @@ def train_cnn_transformer(
         for param in model.positional_encoding.parameters():
             param.requires_grad = False
             
-    if task.is_classification:
-        metrics = task.get_huggingface_metrics(threshold=classification_threshold)
-    else:
-        metrics=None
-
     if tune:
         output_dir = ray.tune.get_trial_dir()
 
@@ -813,13 +819,6 @@ def run_pytorch_lightning(model, task,
         do_eval = bool(task.eval_url)
     else:
         do_eval = hasattr(task,"eval_dataset")
-    
-    if do_eval and early_stopping:
-        # val_epochs = training_args["check_val_every_n_epoch"]
-        early_stopping_callback = EarlyStopping(monitor="eval/roc_auc",patience=2,mode="max")
-
-
-        callbacks.append(early_stopping_callback)
 
     if not no_wandb:
         # Creating two wandb runs here?
@@ -844,15 +843,30 @@ def run_pytorch_lightning(model, task,
         else:
             logger = True
 
+        if do_eval:
+            if task.is_classification:
+                checkpoint_metric = "eval/roc_auc"
+                mode = "max"
+            else:
+                checkpoint_metric = "eval/loss"
+                mode = "min"
+
+            if early_stopping:
+                early_stopping_callback = EarlyStopping(monitor=checkpoint_metric,patience=2,mode="max")
+                callbacks.append(early_stopping_callback)
+        else:
+            checkpoint_metric = "train/loss"
+            mode = "min"
+
         checkpoint_callback = ModelCheckpoint(
                             # dirpath=logger.experiment.dir,
                             filename='{epoch}-',
                             # save_last=True,
                             save_top_k=3,
-                            save_on_train_epoch_end = not do_eval,
-                            monitor="eval/roc_auc" if do_eval else "train/loss" ,
+                            save_on_train_epoch_end = True,
+                            monitor=checkpoint_metric,
                             every_n_epochs=1,
-                            mode='max' if do_eval else "min")
+                            mode=mode)
         
         callbacks.append(checkpoint_callback)
 
