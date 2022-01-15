@@ -8,7 +8,6 @@ TASKS=(
     "PredictMobilityDifficulty"
     "PredictWeekend"
     "PredictSevereSymptoms"
-    "PredictTrigger"
     "PredictCough"
     "PredictFatigue"
 )

@@ -8,7 +8,6 @@ TASKS=(
     "PredictMobilityDifficulty"
     "PredictWeekend"
     "PredictSevereSymptoms"
-    "PredictTrigger"
     "PredictCough"
     "PredictFatigue"
 )
@@ -16,5 +15,5 @@ TASKS=(
 for task in ${TASKS[*]} 
   do
     pythonCommand="$BASE_COMMAND --task_config ./src/data/task_configs/$task.yaml"
-    eval "$pythonCommand"
+    echo "$pythonCommand"
   done
