@@ -834,6 +834,7 @@ def run_pytorch_lightning(model, task,
                               reinit=True,
                               resume = 'allow',
                               allow_val_change=True,
+                              settings=wandb.Settings(start_method="fork"),
                               id = model.hparams.wandb_id)   #id of run to resume from, None if model is not from checkpoint. Alternative: directly use id = model.logger.experiment.id, or try setting WANDB_RUN_ID env variable                
             logger.experiment.summary["task"] = task.get_name()
             logger.experiment.summary["model"] = model.base_model_prefix
