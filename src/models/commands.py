@@ -133,6 +133,7 @@ class CNNTransformer(NeuralCommand):
             click.Option(("--reload_dataloaders",),default=0, help="Reload the dataloaders every n epochs"),
             click.Option(("--positional_encoding",),is_flag=True, help="Use positional encodings"),
             click.Option(("--early_stopping",),is_flag=True, help="Use early stopping"),
+            click.Option(("--no_bootstrap",),is_flag=True, help="Turn off bootstrapping for metrics"),
         ]
         self.params = self.params + loss_options + cnn_transformer_params + petastorm_options
 

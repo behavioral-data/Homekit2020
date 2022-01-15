@@ -196,7 +196,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, learning_rate=1e-3, warmup_steps=100,
                 max_positional_embeddings = 1440*5, factor=64, inital_batch_size=100, clf_dropout_rate=0.0,
                 train_mix_positives_back_in=False, train_mixin_batch_size=3, skip_cnn=False, wandb_id=None, 
-                positional_encoding = False, model_head="classification",
+                positional_encoding = False, model_head="classification", no_bootstrap=False,
                 **model_specific_kwargs) -> None:
         
         self.config = get_config_from_locals(locals())
@@ -240,8 +240,8 @@ class CNNToTransformerEncoder(pl.LightningModule):
             metric_class = TorchMetricRegression
 
         self.train_metrics = metric_class(bootstrap_cis=False, prefix="train/")
-        self.eval_metrics = metric_class(bootstrap_cis=True, prefix="eval/")
-        self.test_metrics = metric_class(bootstrap_cis=True, prefix="test/")
+        self.eval_metrics = metric_class(bootstrap_cis=not no_bootstrap, prefix="eval/")
+        self.test_metrics = metric_class(bootstrap_cis=not no_bootstrap, prefix="test/")
         
         self.provided_train_dataloader = None
         
@@ -479,6 +479,26 @@ class CNNToTransformerEncoder(pl.LightningModule):
         on_tpu=False, using_native_amp=False, using_lbfgs=False,
     ):
         optimizer.step(closure=optimizer_closure)
+
+    
+    def on_load_checkpoint(self, checkpoint: dict) -> None:
+        state_dict = checkpoint["state_dict"]
+        model_state_dict = self.state_dict()
+        is_changed = False
+        for k in state_dict:
+            if k in model_state_dict:
+                if state_dict[k].shape != model_state_dict[k].shape:
+                    logger.info(f"Skip loading parameter: {k}, "
+                                f"required shape: {model_state_dict[k].shape}, "
+                                f"loaded shape: {state_dict[k].shape}")
+                    state_dict[k] = model_state_dict[k]
+                    is_changed = True
+            else:
+                logger.info(f"Dropping parameter {k}")
+                is_changed = True
+
+        if is_changed:
+            checkpoint.pop("optimizer_states", None)
 
 class CNNToTransformerAutoEncoder(pl.LightningModule):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, 

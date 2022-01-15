@@ -295,6 +295,7 @@ def train_cnn_transformer(
                 downsample_negative_frac=None,
                 reload_dataloaders = 0, #to be passed to the pytorch lightning Trainer instance. Reload dataloaders every n epochs (default 0, don't reload)
                 early_stopping=False,
+                no_bootstrap=False,
                 **model_specific_kwargs):
 
     if auto_set_gpu:
@@ -349,24 +350,9 @@ def train_cnn_transformer(
     else:
         model_head = "regression"
         num_labels = task.labler.label_size
-
-    if model_path:
-        if use_huggingface:
-            model = load_model_from_huggingface_checkpoint(model_path)
-        else:
-            model = CNNToTransformerEncoder.load_from_checkpoint(model_path, 
-                                                                strict=False,
-                                                               **model_specific_kwargs)
-            # If using this arg we typically don't want to override a wandb run
-            model.hparams.wandb_id = None
-
-    elif resume_model_from_ckpt:
-            model = CNNToTransformerEncoder.load_from_checkpoint(resume_model_from_ckpt, 
-                                                                strict=False,
-                                                                **model_specific_kwargs)                                                          
-    else:
-        n_timesteps, n_features = task.data_shape
-        model_kwargs = dict(input_features=n_features,
+    
+    n_timesteps, n_features = task.data_shape        
+    model_kwargs = dict(input_features=n_features,
                             n_timesteps=n_timesteps,
                             num_attention_heads = num_attention_heads,
                             num_hidden_layers = num_hidden_layers,
@@ -381,9 +367,25 @@ def train_cnn_transformer(
                             train_mixin_batch_size = train_mixin_batch_size,
                             train_mix_positives_back_in = train_mix_positives_back_in,
                             model_head=model_head,
+                            no_bootstrap=no_bootstrap,
                             **model_specific_kwargs)
-        if model_config:
-            model_kwargs.update(model_config)
+    if model_config:
+        model_kwargs.update(model_config) 
+    if model_path:
+        if use_huggingface:
+            model = load_model_from_huggingface_checkpoint(model_path)
+        else:
+            model = CNNToTransformerEncoder.load_from_checkpoint(model_path, 
+                                                                strict=False,
+                                                                **model_kwargs)
+            # If using this arg we typically don't want to override a wandb run
+            model.hparams.wandb_id = None
+
+    elif resume_model_from_ckpt:
+            model = CNNToTransformerEncoder.load_from_checkpoint(resume_model_from_ckpt, 
+                                                                strict=False,
+                                                                **model_specific_kwargs)                                                          
+    else:
         model = CNNToTransformerEncoder(**model_kwargs)
 
     if reset_cls_params and hasattr(model,"clf"):
