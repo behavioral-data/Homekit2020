@@ -191,53 +191,21 @@ class CNNDecoder(nn.Module):
                     max_pool_stride_size=None
                 )
             
-class CNNToTransformerEncoder(pl.LightningModule):
+class CNNTransformerBase(pl.LightningModule):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, learning_rate=1e-3, warmup_steps=100,
-                max_positional_embeddings = 1440*5, factor=64, inital_batch_size=100, clf_dropout_rate=0.0,
-                train_mix_positives_back_in=False, train_mixin_batch_size=3, skip_cnn=False, wandb_id=None, 
-                positional_encoding = False,#wandb_id is run id saved as hyperparameter
+                max_positional_embeddings = 1440*5, inital_batch_size=100, 
+                train_mix_positives_back_in=False, train_mixin_batch_size=3, skip_cnn=False, wandb_id=None, #wandb_id is run id saved as hyperparameter
+                positional_encoding = False,
                 **model_specific_kwargs) -> None:
+        
+        super().__init__()
         self.config = get_config_from_locals(locals())
-
-        super(CNNToTransformerEncoder, self).__init__()
-        
-        
 
         self.learning_rate = learning_rate
         self.warmup_steps = warmup_steps
         self.input_dim = (n_timesteps,input_features)
 
-        self.input_embedding = CNNEncoder(input_features, n_timesteps=n_timesteps, kernel_sizes=kernel_sizes,
-                                out_channels=out_channels, stride_sizes=stride_sizes)
-        
-        if not skip_cnn:
-            self.d_model = out_channels[-1]
-            final_length = self.input_embedding.final_output_length
-        else:
-            self.d_model = input_features
-            final_length = n_timesteps
-
-        if self.input_embedding.final_output_length < 1:
-            raise ValueError("CNN final output dim is <1 ")                                
-        
-        if positional_encoding:
-            self.positional_encoding = modules.PositionalEncoding(self.d_model, final_length)
-        else:
-            self.positional_encoding = None
-
-        self.blocks = nn.ModuleList([
-            modules.EncoderBlock(self.d_model, num_attention_heads, dropout_rate) for _ in range(num_hidden_layers)
-        ])
-        
-        # self.dense_interpolation = modules.DenseInterpolation(final_length, factor)
-        self.clf = modules.ClassificationModule(self.d_model, final_length, num_labels,
-                                                dropout_p=clf_dropout_rate)
-        self.provided_train_dataloader = None
-        self.criterion = build_loss_fn(model_specific_kwargs)
-
-        self.name = "CNNToTransformerEncoder"
-        self.base_model_prefix = self.name
         
         self.train_probs = []
         self.train_labels = []
@@ -267,29 +235,6 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.skip_cnn = skip_cnn
         self.save_hyperparameters()
 
-
-    def forward(self, inputs_embeds,labels):
-        encoding = self.encode(inputs_embeds)
-        logits = self.clf(encoding)
-        loss =  self.criterion(logits,labels)
-        return loss, logits
-
-    def encode(self, inputs_embeds):
-        if not self.skip_cnn:
-            x = inputs_embeds.transpose(1, 2)
-            x = self.input_embedding(x)
-            x = x.transpose(1, 2)
-        else:
-            x = inputs_embeds
-        
-        if self.positional_encoding:
-            x = self.positional_encoding(x)
-
-        for l in self.blocks:
-            x = l(x)
-        
-        # x = self.dense_interpolation(x)
-        return x
 
     def set_train_dataset(self,dataset):
         self.train_dataset = dataset
@@ -473,6 +418,132 @@ class CNNToTransformerEncoder(pl.LightningModule):
         on_tpu=False, using_native_amp=False, using_lbfgs=False,
     ):
         optimizer.step(closure=optimizer_closure)
+
+class CNNToTransformerEncoder(CNNTransformerBase):
+    def __init__(self, clf_dropout_rate=0.0, **kwargs):
+        super().__init__(**kwargs)
+
+        self.name = "CNNToTransformerEncoder"
+        self.base_model_prefix = self.name
+
+        self.input_embedding = CNNEncoder(kwargs.get('input_features'), n_timesteps=kwargs.get('n_timesteps'), kernel_sizes=kwargs.get('kernel_sizes'),
+                        out_channels=kwargs.get('out_channels'), stride_sizes=kwargs.get('stride_sizes'))
+        
+        if not kwargs.get('skip_cnn'):
+            self.d_model = kwargs.get('out_channels')[-1]
+            final_length = self.input_embedding.final_output_length
+        else:
+            self.d_model = kwargs.get('input_features')
+            final_length = kwargs.get('n_timesteps')
+
+
+        if self.input_embedding.final_output_length < 1:
+            raise ValueError("CNN final output dim is <1 ")                                
+        
+        if kwargs.get('positional_encoding'):
+            self.positional_encoding = modules.PositionalEncoding(self.d_model, final_length)
+        else:
+            self.positional_encoding = None
+
+        self.blocks = nn.ModuleList([
+            modules.EncoderBlock(self.d_model, kwargs.get('num_attention_heads'), kwargs.get('dropout_rate')) for _ in range(kwargs.get('num_hidden_layers'))
+        ])
+        
+        # self.dense_interpolation = modules.DenseInterpolation(final_length, factor)
+        self.clf = modules.ClassificationModule(self.d_model, final_length, kwargs.get('num_labels'),
+                                                dropout_p=clf_dropout_rate)
+        self.provided_train_dataloader = None
+        self.criterion = build_loss_fn(kwargs)
+
+        self.save_hyperparameters()
+
+
+    def forward(self, inputs_embeds,labels):
+        encoding = self.encode(inputs_embeds)
+        logits = self.clf(encoding)
+        loss =  self.criterion(logits,labels)
+        return loss, logits    
+
+    def encode(self, inputs_embeds):
+        if not self.skip_cnn:
+            x = inputs_embeds.transpose(1, 2)
+            x = self.input_embedding(x)
+            x = x.transpose(1, 2)
+        else:
+            x = inputs_embeds
+        
+        if self.positional_encoding:
+            x = self.positional_encoding(x)
+
+        for l in self.blocks:
+            x = l(x)
+        
+        # x = self.dense_interpolation(x)
+        return x
+
+
+
+class EncoderLayerForSAnD(nn.Module):
+    def __init__(self, input_features, n_heads, n_layers, d_model=128, dropout_rate=0.2) -> None:
+        super(EncoderLayerForSAnD, self).__init__()
+        self.d_model = d_model
+
+        self.input_embedding = nn.Conv1d(input_features, d_model, 1)
+        self.positional_encoding = modules.PositionalEncoding(d_model, input_features)
+        self.blocks = nn.ModuleList([
+            modules.EncoderBlock(d_model, n_heads, dropout_rate) for _ in range(n_layers)
+        ])
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x = x.transpose(1, 2)
+        x = self.input_embedding(x)
+        x = x.transpose(1, 2)
+
+        x = self.positional_encoding(x)
+
+        for l in self.blocks:
+            x = l(x)
+
+        return x
+class LightningSAnD(CNNTransformerBase):
+    """
+    Simply Attend and Diagnose model
+
+    The Thirty-Second AAAI Conference on Artificial Intelligence (AAAI-18)
+
+    `Attend and Diagnose: Clinical Time Series Analysis Using Attention Models <https://arxiv.org/abs/1711.03905>`_
+    Huan Song, Deepta Rajan, Jayaraman J. Thiagarajan, Andreas Spanias
+
+    NOTE: dropout_rate default value changes from 0.2 to 0.5  
+    """
+    def __init__(
+            self,
+            **kwargs) -> None: #NOTE defaults passed here are really ignored when also using kwargs.get()
+        
+        super().__init__(**kwargs)
+        self.encoder = EncoderLayerForSAnD(kwargs.get('n_timesteps'), #if any of these arguments is not passed, it becomes None and breaks execution
+                                            kwargs.get('num_attention_heads'), 
+                                            kwargs.get('num_hidden_layers'), 
+                                            kwargs.get('d_model', 128), 
+                                            kwargs.get('dropout_rate'))
+        self.dense_interpolation = modules.DenseInterpolation(kwargs.get('input_features'), kwargs.get('factor', 256))
+        self.clf = modules.ClassificationModule(kwargs.get('d_model', 128), kwargs.get('factor', 256), kwargs.get('num_labels'))
+        self.name = "SAnD"
+        self.base_model_prefix = self.name
+        
+        loss_weights = torch.tensor([float(kwargs.get('neg_class_weight',1)),float(kwargs.get('pos_class_weight',1))])
+        self.criterion = nn.CrossEntropyLoss(weight=loss_weights)
+        self.n_class = kwargs.get('num_labels')
+
+        self.save_hyperparameters()
+
+    def forward(self, inputs_embeds: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        x = self.encoder(inputs_embeds)
+        x = self.dense_interpolation(x)
+        x = self.clf(x)
+        loss =  self.criterion(x.view(-1,self.n_class),labels.view(-1))
+        return loss, x
+
 
 class CNNToTransformerAutoEncoder(pl.LightningModule):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, 
