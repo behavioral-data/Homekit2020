@@ -5,4 +5,5 @@ dataset_args:
   max_missing_days_in_window: 2
   shuffle: 1
   split_date: 2020-02-10
-  clause: "symptom_severity__fever_q_3 > 0"
+  clause: "symptom_severity__fever_q_3 > 0 | symptom_severity__fever_q_2 > 0"
+
