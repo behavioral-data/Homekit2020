@@ -74,10 +74,41 @@ class TorchPrecisionRecallAUC(AUROC):
         return tm_auc(recalls,precisions)
 
 
+class TorchMetricAutoencode(MetricCollection):
+    def __init__(self, bootstrap_cis=False,
+                 n_boostrap_samples=1000,
+                 prefix=""):
+        # self.add_prefix = prefix
+        # self.bootstrap_cis = bootstrap_cis
+        # metrics = {}
+
+        # if bootstrap_cis:
+        #     cosine_sim = BootStrapper(CosineSimilarity(),
+        #                             num_bootstraps=n_boostrap_samples)
+        #     explained_variance = BootStrapper(ExplainedVariance(),
+        #                           num_bootstraps=n_boostrap_samples)
+        # else:    
+        #     cosine_sim = CosineSimilarity()
+        #     explained_variance = ExplainedVariance()
+
+        # metrics["cosine_sim"] = cosine_sim
+        # metrics["explained_variance"] = explained_variance
+        
+
+        # self.best_metrics = {"cosine_sim":(max,0),
+        #                      "explained_variance":(max,0)}
+
+        super().__init__([])
+
+    
+    def compute(self) -> Dict[str, Any]:
+        
+        return {}
+
 
 class TorchMetricRegression(MetricCollection):
     def __init__(self, bootstrap_cis=False,
-                 n_boostrap_samples=100,
+                 n_boostrap_samples=1000,
                  prefix=""):
         self.add_prefix = prefix
         self.bootstrap_cis = bootstrap_cis
