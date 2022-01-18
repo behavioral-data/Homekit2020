@@ -4,6 +4,7 @@ import numpy as np
 from numpy.core.shape_base import vstack
 import pandas as pd
 from torchmetrics.classification.auroc import AUROC
+from torchmetrics.regression import explained_variance
 import wandb
 import copy
 from wandb.plot.roc_curve import roc_curve
@@ -11,9 +12,13 @@ from wandb.viz import CustomChart
 from wandb.data_types import Table
 
 import torch
+import scipy
 
 import torchmetrics
-from torchmetrics import BinnedPrecisionRecallCurve, BinnedAveragePrecision, BootStrapper, MetricCollection, Metric
+from torchmetrics import (BinnedPrecisionRecallCurve, BinnedAveragePrecision, 
+                          BootStrapper, MetricCollection, Metric, CosineSimilarity,
+                          ExplainedVariance)
+                          
 from torchmetrics.functional import auc as tm_auc
 from torchmetrics.functional import precision_recall_curve as tm_precision_recall_curve
 from torchmetrics.utilities.data import dim_zero_cat
@@ -68,6 +73,64 @@ class TorchPrecisionRecallAUC(AUROC):
         precisions, recalls, _ = tm_precision_recall_curve(preds,target)
         return tm_auc(recalls,precisions)
 
+
+
+class TorchMetricRegression(MetricCollection):
+    def __init__(self, bootstrap_cis=False,
+                 n_boostrap_samples=100,
+                 prefix=""):
+        self.add_prefix = prefix
+        self.bootstrap_cis = bootstrap_cis
+        metrics = {}
+
+        if bootstrap_cis:
+            cosine_sim = BootStrapper(CosineSimilarity(),
+                                    num_bootstraps=n_boostrap_samples)
+            explained_variance = BootStrapper(ExplainedVariance(),
+                                  num_bootstraps=n_boostrap_samples)
+        else:    
+            cosine_sim = CosineSimilarity()
+            explained_variance = ExplainedVariance()
+
+        metrics["cosine_sim"] = cosine_sim
+        metrics["explained_variance"] = explained_variance
+        
+
+        self.best_metrics = {"cosine_sim":(max,0),
+                             "explained_variance":(max,0)}
+
+        super(TorchMetricRegression,self).__init__(metrics)
+
+    
+    def compute(self) -> Dict[str, Any]:
+        results = super().compute()
+        if self.bootstrap_cis:
+
+            cosine_sim = results["cosine_sim"]["mean"] 
+            cosine_sim_std = results["cosine_sim"]["std"] 
+            results["cosine_sim_ci_high"] = cosine_sim + 2*cosine_sim_std
+            results["cosine_sim_ci_low"] = cosine_sim - 2*cosine_sim_std
+            results["cosine_sim"] = results["cosine_sim"]["mean"]
+        
+            explained_variance = results["explained_variance"]["mean"] 
+            explained_variance_std = results["explained_variance"]["std"] 
+            results["explained_variance_ci_high"] = explained_variance + 2*explained_variance_std
+            results["explained_variance_ci_low"] = explained_variance - 2*explained_variance_std
+            results["explained_variance"] = results["explained_variance"]["mean"]
+        
+        for metric , (operator,old_value) in self.best_metrics.items():
+            
+            gt_max = (operator == max) and (results[metric] >= old_value)
+            lt_min = (operator == min) and (results[metric] <= old_value)
+            if gt_max or lt_min:
+                self.best_metrics[metric] = (operator,results[metric])
+                results[f"best_{metric}"] = results[metric]
+
+        if self.add_prefix:
+            return add_prefix(results,self.add_prefix)
+        else:
+            return results
+
 class TorchMetricClassification(MetricCollection):
     def __init__(self, bootstrap_cis=False,
                  n_boostrap_samples=100,
@@ -91,7 +154,10 @@ class TorchMetricClassification(MetricCollection):
         metrics["support"] = Support()
 
         super(TorchMetricClassification,self).__init__(metrics)
-    
+
+        self.best_metrics = {"pr_auc":(max,0),
+                             "roc_auc":(max,0)}
+
     def compute(self) -> Dict[str, Any]:
         results = super().compute()
         if self.bootstrap_cis:
@@ -108,12 +174,22 @@ class TorchMetricClassification(MetricCollection):
             results["pr_auc_ci_low"] = pr_auc - 2*pr_std
             results["pr_auc"] = results["pr_auc"]["mean"]
         
+        for metric , (operator,old_value) in self.best_metrics.items():
+            
+            gt_max = (operator == max) and (results[metric] >= old_value)
+            lt_min = (operator == min) and (results[metric] <= old_value)
+            if gt_max or lt_min:
+                self.best_metrics[metric] = (operator,results[metric])
+                results[f"best_{metric}"] = results[metric]
+
         if self.add_prefix:
             return add_prefix(results,self.add_prefix)
         else:
             return results
 
-
+    def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:  # type: ignore
+        probs = torch.nn.functional.softmax(preds,dim=1)[:,-1]
+        return super().update(probs, target)
 
 def make_ci_bootsrapper(estimator):
     """  """ 
@@ -197,8 +273,11 @@ def wandb_pr_curve(preds,labels,thresholds=50, num_classes=1):
     # preds = preds.cpu().numpy()
     # labels = labels.cpu().numpy()
     # preds = preds.cpu().numpy()
+
     pr_curve = BinnedPrecisionRecallCurve(thresholds=thresholds, num_classes=num_classes).to(preds.device)
-    precision, recall, _thresholds = pr_curve(preds, labels)
+    
+    probs = torch.nn.functional.softmax(preds,dim=1)[:,-1]
+    precision, recall, _thresholds = pr_curve(probs, labels)
     label_markers = ["Positive"] * len(precision)
     table = Table(columns= ["class","precision","recall"], data=list(zip(label_markers,precision,recall)))
 
@@ -219,8 +298,9 @@ def wandb_pr_curve(preds,labels,thresholds=50, num_classes=1):
 def wandb_detection_error_tradeoff_curve(preds,labels,return_table=False,limit=999):
     preds = preds.cpu().numpy()
     labels = labels.cpu().numpy()
-  
-    fpr, fnr, _ = det_curve(labels, preds)
+    
+    probs = scipy.special.softmax(preds,axis=1)[:,-1]
+    fpr, fnr, _ = det_curve(labels, probs)
     if limit and limit < len(fpr):
         inds = np.random.choice(len(fpr), size=limit,replace=False)
         fpr = fpr[inds]
@@ -244,7 +324,8 @@ def wandb_detection_error_tradeoff_curve(preds,labels,return_table=False,limit=9
     return plot
 
 def wandb_roc_curve(preds,labels, return_table=False,limit=999):
-    fpr, tpr, _ = torchmetrics.functional.roc(preds, labels, pos_label=1)
+    probs = torch.nn.functional.softmax(preds,dim=1)[:,-1]
+    fpr, tpr, _ = torchmetrics.functional.roc(probs, labels, pos_label=1)
     if limit and limit < len(fpr):
         inds = np.random.choice(len(fpr), size=limit,replace=False)
         fpr = fpr[inds]
@@ -306,7 +387,7 @@ def roc_auc(pred,labels,get_ci=False,n_samples=10000):
     else:
         return score
     
-def autoencode_eval(pred, labels):
+def regression_eval(pred, labels):
     # Remove indices with pad tokens
     results = {}
 

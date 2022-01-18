@@ -34,7 +34,7 @@ from pytorch_lightning.accelerators import accelerator
 from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.loggers.base import DummyExperiment
 from pytorch_lightning.profiler import AdvancedProfiler
-from pytorch_lightning.callbacks import LearningRateMonitor
+from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
 
 from torch.utils.data import DataLoader
 
@@ -74,7 +74,6 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 
-from tensorflow.keras.callbacks import EarlyStopping # type: ignore
 import pandas as pd
 from PIL import Image
 import torch
@@ -296,6 +295,8 @@ def train_cnn_transformer(
                 pl_seed=2494,
                 downsample_negative_frac=None,
                 reload_dataloaders = 0, #to be passed to the pytorch lightning Trainer instance. Reload dataloaders every n epochs (default 0, don't reload)
+                early_stopping=False,
+                no_bootstrap=False,
                 **model_specific_kwargs):
 
     if auto_set_gpu:
@@ -344,24 +345,19 @@ def train_cnn_transformer(
                                               eval_path=eval_path,
                                               test_path=test_path)
     
-    if model_path:
-        if use_huggingface:
-            model = load_model_from_huggingface_checkpoint(model_path)
-        else:
-            model = CNNToTransformerEncoder.load_from_checkpoint(model_path, 
-                                                                strict=False,
-                                                               **model_specific_kwargs)
-    elif resume_model_from_ckpt:
-            model = CNNToTransformerEncoder.load_from_checkpoint(resume_model_from_ckpt, 
-                                                                strict=False,
-                                                                **model_specific_kwargs)                                                          
+    if task.is_classification:
+        model_head = "classification"
+        num_labels = 2
     else:
-        n_timesteps, n_features = task.data_shape
-        model_kwargs = dict(input_features=n_features,
+        model_head = "regression"
+        num_labels = task.labler.label_size
+    
+    n_timesteps, n_features = task.data_shape        
+    model_kwargs = dict(input_features=n_features,
                             n_timesteps=n_timesteps,
                             num_attention_heads = num_attention_heads,
                             num_hidden_layers = num_hidden_layers,
-                            num_labels=2,
+                            num_labels=num_labels,
                             learning_rate =learning_rate,
                             warmup_steps = warmup_steps,
                             inital_batch_size=train_batch_size,
@@ -371,13 +367,30 @@ def train_cnn_transformer(
                             out_channels=out_channels,
                             train_mixin_batch_size = train_mixin_batch_size,
                             train_mix_positives_back_in = train_mix_positives_back_in,
+                            model_head=model_head,
+                            no_bootstrap=no_bootstrap,
                             **model_specific_kwargs)
-        if model_config:
-            model_kwargs.update(model_config)
+    if model_config:
+        model_kwargs.update(model_config) 
+    if model_path:
+        if use_huggingface:
+            model = load_model_from_huggingface_checkpoint(model_path)
+        else:
+            model = CNNToTransformerEncoder.load_from_checkpoint(model_path, 
+                                                                strict=False,
+                                                                **model_kwargs)
+            # If using this arg we typically don't want to override a wandb run
+            model.hparams.wandb_id = None
+
+    elif resume_model_from_ckpt:
+            model = CNNToTransformerEncoder.load_from_checkpoint(resume_model_from_ckpt, 
+                                                                strict=False,
+                                                                **model_specific_kwargs)                                                          
+    else:
         model = CNNToTransformerEncoder(**model_kwargs)
 
     if reset_cls_params and hasattr(model,"clf"):
-        model.clf.reset_parameters()
+        model.head.reset_parameters()
 
     if freeze_encoder:
         for param in model.blocks.parameters():
@@ -387,11 +400,6 @@ def train_cnn_transformer(
         for param in model.positional_encoding.parameters():
             param.requires_grad = False
             
-    if task.is_classification:
-        metrics = task.get_huggingface_metrics(threshold=classification_threshold)
-    else:
-        metrics=None
-
     if tune:
         output_dir = ray.tune.get_trial_dir()
 
@@ -417,9 +425,10 @@ def train_cnn_transformer(
             resume_from_checkpoint=resume_model_from_ckpt,
             log_every_n_steps=log_steps
         )
+        
         run_pytorch_lightning(model,task,training_args=pl_training_args,backend=backend, 
                                 reload_dataloaders = reload_dataloaders,
-                                notes=notes)
+                                notes=notes, early_stopping=early_stopping)
     else:
         training_args = TrainingArguments(
             output_dir=results_dir,          # output directorz
@@ -565,6 +574,8 @@ def train_sand( task_config=None,
             model = LightningSAnD.load_from_checkpoint(model_path, 
                                                                 strict=False,
                                                                **model_specific_kwargs)
+            model.hparams.wandb_id = None
+            
         elif resume_model_from_ckpt:
             model = LightningSAnD.load_from_checkpoint(resume_model_from_ckpt, 
                                                                 strict=False,
@@ -889,13 +900,17 @@ def run_pytorch_lightning(model, task,
                         no_wandb=False,
                         notes=None,
                         backend="petastorm",
-                        reload_dataloaders = 0): #to be passed to the pytorch lightning Trainer instance. Reload dataloaders every n epochs (default 0, don't reload)      
+                        reload_dataloaders = 0,
+                        early_stopping=False): #to be passed to the pytorch lightning Trainer instance. Reload dataloaders every n epochs (default 0, don't reload)      
 
+    
+    callbacks = [LearningRateMonitor(logging_interval='step')]
+    
     if backend == "petastorm":
         do_eval = bool(task.eval_url)
     else:
         do_eval = hasattr(task,"eval_dataset")
-        
+
     if not no_wandb:
         # Creating two wandb runs here?
         import wandb
@@ -908,37 +923,53 @@ def run_pytorch_lightning(model, task,
                               reinit=True,
                               resume = 'allow',
                               allow_val_change=True,
+                              settings=wandb.Settings(start_method="fork"),
                               id = model.hparams.wandb_id)   #id of run to resume from, None if model is not from checkpoint. Alternative: directly use id = model.logger.experiment.id, or try setting WANDB_RUN_ID env variable                
             logger.experiment.summary["task"] = task.get_name()
             logger.experiment.summary["model"] = model.base_model_prefix
             logger.experiment.config.update(model.hparams, allow_val_change=True)
             model.hparams.wandb_id = logger.experiment.id  
-
             model_img_path = visualize_model(model, dir=wandb.run.dir)
             # wandb.log({"model_img": [wandb.Image(Image.open(model_img_path), caption="Model Graph")]})
             
         else:
             logger = True
 
+        if do_eval:
+            if task.is_classification:
+                checkpoint_metric = "eval/roc_auc"
+                mode = "max"
+            else:
+                checkpoint_metric = "eval/loss"
+                mode = "min"
+
+            if early_stopping:
+                early_stopping_callback = EarlyStopping(monitor=checkpoint_metric,patience=2,mode="max")
+                callbacks.append(early_stopping_callback)
+        else:
+            checkpoint_metric = "train/loss"
+            mode = "min"
+
         checkpoint_callback = ModelCheckpoint(
                             # dirpath=logger.experiment.dir,
                             filename='{epoch}-',
                             # save_last=True,
                             save_top_k=3,
-                            save_on_train_epoch_end = not do_eval,
-                            monitor="eval/roc_auc" if do_eval else "train/loss" ,
+                            save_on_train_epoch_end = True,
+                            monitor=checkpoint_metric,
                             every_n_epochs=1,
-                            mode='max' if do_eval else "min")
+                            mode=mode)
+        
+        callbacks.append(checkpoint_callback)
 
     else:
         checkpoint_callback = True
         logger=True
     
-    lr_monitor = LearningRateMonitor(logging_interval='step')
     debug_mode = os.environ.get("DEBUG_MODE")
     trainer = pl.Trainer(logger=logger,
                          checkpoint_callback=True,
-                         callbacks=[checkpoint_callback, lr_monitor],
+                         callbacks=callbacks,
                          gpus = -1,
                          accelerator="ddp",
                          terminate_on_nan=True,

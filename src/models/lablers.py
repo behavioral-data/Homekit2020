@@ -1,4 +1,7 @@
+from email.policy import default
 import pandas as pd
+import numpy as np
+
 from pandas.core.computation.eval import eval as _eval
 from pandas.core.indexes.datetimes import date_range
 from pyspark.sql.functions import window
@@ -35,10 +38,49 @@ class FluPosLabler(object):
                                  
     def __call__(self,participant_id,start_date,end_date):
         is_pos_on_date = self.result_lookup.get((participant_id,end_date.normalize()),False)
-        return is_pos_on_date
+        return int(is_pos_on_date)
 
     def get_positive_keys(self):
         return set([(x[0], x[1].normalize()) for x in self.result_lookup.keys()])
+
+class DailyFeaturesLabler(object):
+    def __init__(self, window_size=7,
+                       data_location=None,
+                       normalize=True) -> None:
+
+        super().__init__()
+        self.df = load_processed_table("fitbit_day_level_activity", 
+                                        path=data_location)
+        feature_cols = ['resting_heart_rate',
+                        'main_in_bed_minutes', 'main_efficiency', 'nap_count',
+                        'total_asleep_minutes', 'total_in_bed_minutes', 'activityCalories',
+                        'caloriesOut', 'caloriesBMR', 'marginalCalories', 'sedentaryMinutes',
+                        'lightlyActiveMinutes', 'fairlyActiveMinutes', 'veryActiveMinutes',
+                        'missing_hr', 'missing_sleep', 'missing_steps', 'missing_day']
+        
+        self.label_size = len(feature_cols) * window_size  
+        if normalize:
+            self.df[feature_cols] = (self.df[feature_cols]-self.df[feature_cols].mean())/self.df[feature_cols].std()
+            
+        self.df["features"] = self.df[feature_cols].to_numpy().tolist()
+        self.result_lookup = {}
+
+        n_non_missing = sum([not "missing" in x for x in feature_cols])
+        
+        self.default_features = np.array(([0]*n_non_missing  + [1]*(len(feature_cols)-n_non_missing)) * window_size).astype(np.float32)
+
+        for user, group in iter(self.df.groupby("participant_id")):
+            windows = list(group.set_index("date")["features"].rolling(f"{window_size}D",
+                                                                              min_periods=window_size))
+            for window in windows:
+                if not len(window) == window_size:
+                    continue
+
+                concat_features = np.concatenate(window).astype(np.float32)
+                self.result_lookup[(user,window.index[-1].normalize())] = concat_features
+    
+    def __call__(self,participant_id,start_date,end_date):
+        return self.result_lookup.get((participant_id,end_date.normalize()),self.default_features)
 
 class DayOfWeekLabler(object):
     """ Returns true if `end_date` is on one of `days`"""
@@ -62,7 +104,7 @@ class AudereObeseLabler(object):
 
 
     def __call__(self,participant_id,start_date,end_date):
-        return self.results_lookup.get(participant_id,False)
+        return int(self.results_lookup.get(participant_id,False))
 
 class EvidationILILabler(object):
     def __init__(self,feather_path,
@@ -114,7 +156,7 @@ class EvidationILILabler(object):
                            
     def __call__(self,participant_id,start_date,end_date):
         is_pos_on_date = self.result_lookup.get((participant_id,end_date.normalize()),False)
-        return is_pos_on_date
+        return int(is_pos_on_date)
     
     def get_positive_keys(self):
         return set([(x[0], x[1].normalize()) for x in self.result_lookup.keys()])
@@ -135,7 +177,7 @@ class ClauseLabler(object):
 
     def __call__(self,participant_id,start_date,end_date):
         result = self.survey_lookup.get((participant_id,end_date.normalize()),False)
-        return result
+        return int(result)
 
     def get_positive_keys(self):
         return set([(x[0], x[1].normalize()) for x in self.survey_lookup.keys()])

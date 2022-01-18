@@ -18,25 +18,26 @@ def get_loss_with_name(name):
     raise TypeError(f"{name} is not a valid loss function.")
 
 
-def build_loss_fn(kwargs):
+def build_loss_fn(kwargs,task_type="classification"):
     loss_fn = kwargs.pop("loss_fn",None)
     
-    if loss_fn is None:
-        raise ValueError("Must pass a loss function name")
-    
-    if loss_fn == "CrossEntropyLoss":
-        neg_class_weight = kwargs.pop("neg_class_weight",1)
-        pos_class_weight = kwargs.pop("pos_class_weight",1)
-        loss_weights = torch.tensor([float(neg_class_weight),float(pos_class_weight)])
-        return nn.CrossEntropyLoss(weight=loss_weights)
-    
-    elif loss_fn == "FocalLoss":
-        alpha = kwargs.pop("focal_alpha",0.25)
-        gamma = kwargs.pop("focal_gamma",2.0)
-        return FocalLoss(alpha=alpha,gamma=gamma)
+    if task_type == "classification":
+        if loss_fn == "FocalLoss":
+            alpha = kwargs.pop("focal_alpha",0.25)
+            gamma = kwargs.pop("focal_gamma",2.0)
+            return FocalLoss(alpha=alpha,gamma=gamma)
+        
+        else:
+            neg_class_weight = kwargs.pop("neg_class_weight",1)
+            pos_class_weight = kwargs.pop("pos_class_weight",1)
+            loss_weights = torch.tensor([float(neg_class_weight),float(pos_class_weight)])
+            return nn.CrossEntropyLoss(weight=loss_weights)
+
+    elif task_type == "regression":
+        return nn.MSELoss()
 
     else:
-        raise ValueError(f"{loss_fn} is not a valid loss function!")
+        raise ValueError(f"{task_type} is not a valid task type!")
 
 class FocalLoss(nn.Module):
     """

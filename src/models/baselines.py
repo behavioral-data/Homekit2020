@@ -1,7 +1,6 @@
 import click
 import numpy as np
 from json import loads
-from ray import tune
 import xgboost as xgb
 from matplotlib import pyplot as plt
 from xgboost import callback
@@ -62,11 +61,15 @@ def train_xgboost(task_config,
                 data_location=None,
                 limit_train_frac=None,
                 max_depth=2,
+                day_window_size=7,
                 eta=1,
                 objective="binary:logistic",
                 task_ray_obj_ref=None,
                 only_with_lab_results=False,
                 cached_task_path=None,
+                train_participant_dates=None,
+                eval_participant_dates=None,
+                test_participant_dates=None,
                 **_):
 
     """ Baseline for classification tasks that uses daily aggregated features"""
@@ -74,6 +77,7 @@ def train_xgboost(task_config,
     dataset_args = task_config["dataset_args"]
 
     logger.info(f"Training XGBoost on {task_name}")
+    dataset_args["day_window_size"] = day_window_size
     dataset_args["add_features_path"] = add_features_path
     dataset_args["data_location"] = data_location
     dataset_args["data_location"] = data_location
@@ -90,13 +94,21 @@ def train_xgboost(task_config,
                                             only_with_lab_results=only_with_lab_results,
                                             activity_level="day",
                                             backend="dask",
-                                            limit_train_frac=limit_train_frac)
+                                            limit_train_frac=limit_train_frac,
+                                            train_participant_dates=train_participant_dates,
+                                            eval_participant_dates=eval_participant_dates,
+                                            test_participant_dates=test_participant_dates,
+                                            )
 
     if not task.is_classification:
         raise ValueError(f"{task_name} is not a classification task")
 
     train = task.get_train_dataset().to_dmatrix()
     eval = task.get_eval_dataset().to_dmatrix()
+    if test_participant_dates:
+        test = task.get_test_dataset().to_dmatrix()
+    else:
+        test = None
     
     param = {'max_depth': max_depth, 'eta': eta, 'objective': objective}
     param['nthread'] = 4
@@ -107,19 +119,24 @@ def train_xgboost(task_config,
         wandb.init(project=CONFIG["WANDB_PROJECT"],
                    entity=CONFIG["WANDB_USERNAME"],
                    notes=notes)
-        wandb.run.summary["task"] = task.get_name()
+        wandb.log({"task":task.get_name()}) 
 
         if add_features_path:
             model_name = "XGBoost-ExpertFeatures"
         else:
             model_name = "XGBoost"
-        wandb.run.summary["model"] = model_name
+        wandb.log({"model":model_name}) 
         callbacks.append(xgb_wandb_callback())
     
-    bst = xgb.train(param, train, 10, evallist, callbacks=callbacks)
-    eval_pred = bst.predict(eval)
-    eval_logits = np.stack([1-eval_pred,eval_pred],axis=1)
-    results = classification_eval(eval_pred,eval.get_label(),prefix="eval/") # results = classification_eval(eval_logits,eval.get_label(),prefix="eval/") JM
+    if test:
+        bst = xgb.train(param, train, 10, evallist, callbacks=callbacks)
+        test_pred = bst.predict(test)
+        results = classification_eval(test_pred,test.get_label(),prefix="test/") 
+
+        if not no_wandb:
+            wandb.log(results)
+    
+        print(results)
 
 
     if not no_wandb:
@@ -127,6 +144,3 @@ def train_xgboost(task_config,
         plt.tight_layout()
         wandb.log({"feature_importance": wandb.Image(plt)})
         wandb.log(results)
-
-    if tune:
-        ray.tune.report(**results)

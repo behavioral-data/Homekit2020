@@ -2,6 +2,9 @@ import click
 import wandb
 import os
 
+from dotenv import dotenv_values
+CONFIG = dotenv_values(".env")
+
 import pytorch_lightning as pl
 from pytorch_lightning.loggers.wandb import WandbLogger
 
@@ -35,25 +38,19 @@ def main(ctx, ckpt_path, task_config, predict_path, wandb_mode="offline",
 
     local_rank = os.environ.get("LOCAL_RANK",0)
     if local_rank == 0:
-        logger = WandbLogger(project="flu",
-                                entity="mikeamerrill", #TODO make argument
-                                log_model=True,
-                                notes=notes,
-                                reinit=True)
-
-        logger.experiment.summary["task"] = task.get_name()
-        logger.experiment.summary["model"] = model.base_model_prefix
-        logger.experiment.config.update(model.hparams)
-    else:
-        logger = True
-
+        logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],
+                            entity=CONFIG["WANDB_USERNAME"],
+                            notes=notes,
+                            log_model=True, #saves checkpoints to wandb as artifacts, might add overhead 
+                            reinit=True,
+                            resume = 'allow',
+                            allow_val_change=True,
+                            id = model.hparams.wandb_id) 
 
     trainer = pl.Trainer(logger=logger,
-                         gpus = -1,
-                         accelerator="dp",
-                         terminate_on_nan=True,
-                         num_sanity_val_steps=0,
-                         limit_train_batches=10)
+                         gpus = 1,
+                         accelerator="ddp",
+                         resume_from_checkpoint=ckpt_path)
 
     with PetastormDataLoader(make_reader(task.test_url,transform_spec=task.transform),
                                    batch_size=3*model.batch_size) as test_dataset:

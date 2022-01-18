@@ -34,7 +34,7 @@ from src.models.losses import build_loss_fn
 from src.SAnD.core import modules
 from src.utils import get_logger
 from src.models.eval import (wandb_roc_curve, wandb_pr_curve, wandb_detection_error_tradeoff_curve,
-                            classification_eval,  TorchMetricClassification)
+                            classification_eval,  TorchMetricClassification, TorchMetricRegression)
 from torch import Tensor
 from torch.utils.data.dataloader import DataLoader
 from wandb.plot.roc_curve import roc_curve
@@ -196,7 +196,7 @@ class CNNTransformerBase(pl.LightningModule):
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, learning_rate=1e-3, warmup_steps=100,
                 max_positional_embeddings = 1440*5, inital_batch_size=100, 
                 train_mix_positives_back_in=False, train_mixin_batch_size=3, skip_cnn=False, wandb_id=None, #wandb_id is run id saved as hyperparameter
-                positional_encoding = False,
+                positional_encoding = False, factor=64, model_head="classification", no_bootstrap=False, clf_dropout_rate=0.0,
                 **model_specific_kwargs) -> None:
         
         super().__init__()
@@ -206,7 +206,6 @@ class CNNTransformerBase(pl.LightningModule):
         self.warmup_steps = warmup_steps
         self.input_dim = (n_timesteps,input_features)
 
-        
         self.train_probs = []
         self.train_labels = []
         self.train_mix_positives_back_in = train_mix_positives_back_in
@@ -225,13 +224,8 @@ class CNNTransformerBase(pl.LightningModule):
         self.batch_size = inital_batch_size
         self.train_dataset = None
         self.eval_dataset=None
+
         
-        self.train_metrics = TorchMetricClassification(bootstrap_cis=False,
-                                                       prefix="train/")
-        self.eval_metrics = TorchMetricClassification(bootstrap_cis=True,
-                                                      prefix="eval/")
-        self.test_metrics = TorchMetricClassification(bootstrap_cis=True,
-                                                      prefix="test/")
         self.skip_cnn = skip_cnn
         self.save_hyperparameters()
 
@@ -255,6 +249,7 @@ class CNNTransformerBase(pl.LightningModule):
             return DataLoader(self.eval_dataset, batch_size=3*self.batch_size, pin_memory=True)
     
     def on_train_start(self) -> None:
+
         self.train_metrics.apply(lambda x: x.to(self.device))
         self.eval_metrics.apply(lambda x: x.to(self.device))
         return super().on_train_start()
@@ -274,22 +269,22 @@ class CNNTransformerBase(pl.LightningModule):
                 x = torch.cat([x] + pos_samples, axis=0)
                 y = torch.cat([y, y.new([1] * self.train_mixin_batch_size)], axis=0)
 
-        loss,logits = self.forward(x,y)
+        loss,preds = self.forward(x,y)
         
         self.log("train/loss", loss.item(),on_step=True)
-        probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
+        # probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
         
-        self.train_metrics.update(probs,y)
+        self.train_metrics.update(preds,y)
 
-        self.train_probs.append(probs.detach())
+        self.train_probs.append(preds.detach())
         self.train_labels.append(y.detach())
-        return {"loss":loss, "preds": logits, "labels":y}
+        return {"loss":loss, "preds": preds, "labels":y}
 
     def on_train_epoch_end(self):
         train_preds = torch.cat(self.train_probs, dim=0)
         train_labels = torch.cat(self.train_labels, dim=0)
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
-        if os.environ.get("LOCAL_RANK","0") == "0":
+        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classification:
             self.logger.experiment.log({"train/roc": wandb_roc_curve(train_preds,train_labels, limit = 9999)}, commit=False)
             self.logger.experiment.log({"train/pr": wandb_pr_curve(train_preds,train_labels)}, commit=False)
             self.logger.experiment.log({"train/det": wandb_detection_error_tradeoff_curve(train_preds,train_labels, limit=9999)}, commit=False)
@@ -316,7 +311,7 @@ class CNNTransformerBase(pl.LightningModule):
         test_labels = torch.cat(self.test_labels, dim=0)
 
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
-        if os.environ.get("LOCAL_RANK","0") == "0":
+        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classification:
             self.logger.experiment.log({"test/roc": wandb_roc_curve(test_preds,test_labels, limit = 9999)}, commit=False)
             self.logger.experiment.log({"test/pr": wandb_pr_curve(test_preds,test_labels)}, commit=False)
             self.logger.experiment.log({"test/det": wandb_detection_error_tradeoff_curve(test_preds,test_labels, limit=9999)}, commit=False)
@@ -348,16 +343,14 @@ class CNNTransformerBase(pl.LightningModule):
         x = batch["inputs_embeds"].type(torch.cuda.FloatTensor)
         y = batch["label"]
         
-        loss,logits = self.forward(x,y)
+        loss,preds = self.forward(x,y)
 
-        self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
-        
-        probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
-        self.test_probs.append(probs.detach())
+        self.log("test/loss", loss.item(),on_step=True,sync_dist=True)
+        self.test_probs.append(preds.detach())
         self.test_labels.append(y.detach())
         
-        self.test_metrics.update(probs,y)
-        return {"loss":loss, "preds": logits, "labels":y}
+        self.test_metrics.update(preds,y)
+        return {"loss":loss, "preds": preds, "labels":y}
         
 
     def on_validation_epoch_end(self):
@@ -365,9 +358,9 @@ class CNNTransformerBase(pl.LightningModule):
         eval_labels = torch.cat(self.eval_labels, dim=0)
 
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
-        if os.environ.get("LOCAL_RANK","0") == "0":
+        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classification:
             self.logger.experiment.log({"eval/roc": wandb_roc_curve(eval_preds,eval_labels, limit = 9999)}, commit=False)
-            self.logger.experiment.log({"eval/pr": wandb_pr_curve(eval_preds,eval_labels)}, commit=False)
+            self.logger.experiment.log({"eval/pr":  wandb_pr_curve(eval_preds,eval_labels)}, commit=False)
             self.logger.experiment.log({"eval/det": wandb_detection_error_tradeoff_curve(eval_preds,eval_labels, limit=9999)}, commit=False)
         
         metrics = self.eval_metrics.compute()
@@ -384,16 +377,14 @@ class CNNTransformerBase(pl.LightningModule):
         x = batch["inputs_embeds"].type(torch.cuda.FloatTensor)
         y = batch["label"]
         
-        loss,logits = self.forward(x,y)
-
-        self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
+        loss,preds = self.forward(x,y)
         
-        probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
-        self.eval_probs.append(probs.detach())
+        self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
+        self.eval_probs.append(preds.detach())
         self.eval_labels.append(y.detach())
         
-        self.eval_metrics.update(probs,y)
-        return {"loss":loss, "preds": logits, "labels":y}
+        self.eval_metrics.update(preds,y)
+        return {"loss":loss, "preds": preds, "labels":y}
     
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
@@ -419,11 +410,34 @@ class CNNTransformerBase(pl.LightningModule):
     ):
         optimizer.step(closure=optimizer_closure)
 
+    def on_load_checkpoint(self, checkpoint: dict) -> None:
+        state_dict = checkpoint["state_dict"]
+        model_state_dict = self.state_dict()
+        is_changed = False
+        for k in state_dict:
+            if k in model_state_dict:
+                if state_dict[k].shape != model_state_dict[k].shape:
+                    logger.info(f"Skip loading parameter: {k}, "
+                                f"required shape: {model_state_dict[k].shape}, "
+                                f"loaded shape: {state_dict[k].shape}")
+                    state_dict[k] = model_state_dict[k]
+                    is_changed = True
+            else:
+                logger.info(f"Dropping parameter {k}")
+                is_changed = True
+
+        if is_changed:
+            checkpoint.pop("optimizer_states", None)
+
 class CNNToTransformerEncoder(CNNTransformerBase):
     def __init__(self, clf_dropout_rate=0.0, **kwargs):
+        
         super().__init__(**kwargs)
-
-        self.name = "CNNToTransformerEncoder"
+        if kwargs.get('num_attention_heads') > 0:
+            self.name = "CNNToTransformerEncoder"
+        else:
+            self.name = "CNN"
+            
         self.base_model_prefix = self.name
 
         self.input_embedding = CNNEncoder(kwargs.get('input_features'), n_timesteps=kwargs.get('n_timesteps'), kernel_sizes=kwargs.get('kernel_sizes'),
@@ -436,9 +450,23 @@ class CNNToTransformerEncoder(CNNTransformerBase):
             self.d_model = kwargs.get('input_features')
             final_length = kwargs.get('n_timesteps')
 
-
         if self.input_embedding.final_output_length < 1:
             raise ValueError("CNN final output dim is <1 ")                                
+        
+        self.is_classification = kwargs.get('model_head', 'classification') == "classification"
+        if self.is_classification:
+            self.head = modules.ClassificationModule(self.d_model, final_length, kwargs.get('num_labels',2),
+                                                    dropout_p=clf_dropout_rate)
+            metric_class = TorchMetricClassification
+
+        else:
+            self.head = modules.RegressionModule(self.d_model, final_length, kwargs.get('num_labels',2))
+            metric_class = TorchMetricRegression
+
+        self.train_metrics = metric_class(bootstrap_cis=False, prefix="train/")
+        self.eval_metrics = metric_class(bootstrap_cis=not kwargs.get('no_bootstrap',False), prefix="eval/")
+        self.test_metrics = metric_class(bootstrap_cis=not kwargs.get('no_bootstrap',False), prefix="test/")
+        
         
         if kwargs.get('positional_encoding'):
             self.positional_encoding = modules.PositionalEncoding(self.d_model, final_length)
@@ -460,9 +488,9 @@ class CNNToTransformerEncoder(CNNTransformerBase):
 
     def forward(self, inputs_embeds,labels):
         encoding = self.encode(inputs_embeds)
-        logits = self.clf(encoding)
-        loss =  self.criterion(logits,labels)
-        return loss, logits    
+        preds = self.head(encoding)
+        loss =  self.criterion(preds,labels)
+        return loss, preds    
 
     def encode(self, inputs_embeds):
         if not self.skip_cnn:
@@ -518,29 +546,41 @@ class LightningSAnD(CNNTransformerBase):
     """
     def __init__(
             self,
-            **kwargs) -> None: #NOTE defaults passed here are really ignored when also using kwargs.get()
+            **kwargs) -> None: #NOTE default value for one argument passed here are really ignored when also using kwargs.get(argument)
         
         super().__init__(**kwargs)
+        self.name = "SAnD"
+        self.base_model_prefix = self.name
+
         self.encoder = EncoderLayerForSAnD(kwargs.get('n_timesteps'), #if any of these arguments is not passed, it becomes None and breaks execution
                                             kwargs.get('num_attention_heads'), 
                                             kwargs.get('num_hidden_layers'), 
                                             kwargs.get('d_model', 128), 
                                             kwargs.get('dropout_rate'))
         self.dense_interpolation = modules.DenseInterpolation(kwargs.get('input_features'), kwargs.get('factor', 256))
-        self.clf = modules.ClassificationModule(kwargs.get('d_model', 128), kwargs.get('factor', 256), kwargs.get('num_labels'))
-        self.name = "SAnD"
-        self.base_model_prefix = self.name
+        
+        self.is_classification = kwargs.get('model_head', 'classification') == "classification"
+        if self.is_classification:
+            self.head = modules.ClassificationModule(kwargs.get('d_model', 128), kwargs.get('factor', 256), kwargs.get('num_labels'))
+            metric_class = TorchMetricClassification
+        else:
+            self.head = modules.RegressionModule(kwargs.get('d_model', 128), kwargs.get('factor', 256), kwargs.get('num_labels'))
+            metric_class = TorchMetricRegression
         
         loss_weights = torch.tensor([float(kwargs.get('neg_class_weight',1)),float(kwargs.get('pos_class_weight',1))])
         self.criterion = nn.CrossEntropyLoss(weight=loss_weights)
         self.n_class = kwargs.get('num_labels')
+        
+        self.train_metrics = metric_class(bootstrap_cis=False, prefix="train/")
+        self.eval_metrics = metric_class(bootstrap_cis=not kwargs.get('no_bootstrap',False), prefix="eval/")
+        self.test_metrics = metric_class(bootstrap_cis=not kwargs.get('no_bootstrap',False), prefix="test/")
 
         self.save_hyperparameters()
 
     def forward(self, inputs_embeds: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         x = self.encoder(inputs_embeds)
         x = self.dense_interpolation(x)
-        x = self.clf(x)
+        x = self.head(x)
         loss =  self.criterion(x.view(-1,self.n_class),labels.view(-1))
         return loss, x
 
