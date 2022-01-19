@@ -390,7 +390,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         train_preds = torch.cat(self.train_probs, dim=0)
         train_labels = torch.cat(self.train_labels, dim=0)
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
-        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classifier:
+        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classifier and isinstance(self.logger, WandbLogger):
             self.logger.experiment.log({"train/roc": wandb_roc_curve(train_preds,train_labels, limit = 9999)}, commit=False)
             self.logger.experiment.log({"train/pr": wandb_pr_curve(train_preds,train_labels)}, commit=False)
             self.logger.experiment.log({"train/det": wandb_detection_error_tradeoff_curve(train_preds,train_labels, limit=9999)}, commit=False)
@@ -417,7 +417,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         test_labels = torch.cat(self.test_labels, dim=0)
 
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
-        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classifier:
+        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classifier and isinstance(self.logger, WandbLogger):
             self.logger.experiment.log({"test/roc": wandb_roc_curve(test_preds,test_labels, limit = 9999)}, commit=False)
             self.logger.experiment.log({"test/pr": wandb_pr_curve(test_preds,test_labels)}, commit=False)
             self.logger.experiment.log({"test/det": wandb_detection_error_tradeoff_curve(test_preds,test_labels, limit=9999)}, commit=False)
@@ -431,7 +431,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.test_labels = []
         
         super().on_validation_epoch_end()
-
+    
     def predict_step(self, batch: Any) -> Any:
         x = batch["inputs_embeds"]
         y = batch["label"]
