@@ -56,7 +56,7 @@ class Support(Metric):
         self.counts += values
 
     def compute(self) -> Dict[AnyStr,torch.Tensor]:
-        return {i:self.counts[i] for i in range(self.n_classes + 1)}
+        return {str(i):self.counts[i] for i in range(self.n_classes + 1)}
 
 class TorchPrecisionRecallAUC(AUROC):
     """A note about this implementation. It would be much more memory
