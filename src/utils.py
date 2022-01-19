@@ -2,7 +2,7 @@ import os
 import json 
 import logging
 import gc
-
+import wandb
 
 import dotenv
 import yaml
@@ -12,6 +12,9 @@ import torch
 import pynvml
 from torchviz import make_dot
 import subprocess
+
+from dotenv import dotenv_values
+config = dotenv_values(".env")
 
 def load_dotenv():
     project_dir = os.path.join(os.path.dirname(__file__), os.pardir)
@@ -105,3 +108,21 @@ def describe_resident_tensors():
         except:
             pass
     return tensors
+
+
+def update_wandb_run(run_id,vals):
+    project = config["WANDB_PROJECT"]
+    entity = config["WANDB_USERNAME"]
+    api = wandb.Api()
+    run_url = f"{entity}/{project}/{run_id}"
+    run = api.run(run_url)
+    for k,v in vals.items():
+        update_run(run,k,v)
+    run.summary.update()
+    return  f"https://wandb.ai/{entity}/{project}/runs/{run_id}"
+
+
+def update_run(run, k, v):
+    if (isinstance(run.summary, wandb.old.summary.Summary) and k not in run.summary):
+        run.summary._root_set(run.summary._path, [(k, {})])
+    run.summary[k] = v
