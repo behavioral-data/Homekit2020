@@ -15,6 +15,8 @@ architecture.
 """
 
 from copy import copy
+from doctest import OutputChecker
+from errno import ENXIO
 
 from typing import Dict,  Union, Any, Optional
 import os
@@ -34,7 +36,7 @@ from src.models.losses import build_loss_fn
 from src.SAnD.core import modules
 from src.utils import get_logger
 from src.models.eval import (wandb_roc_curve, wandb_pr_curve, wandb_detection_error_tradeoff_curve,
-                            classification_eval,  TorchMetricClassification, TorchMetricRegression)
+                            classification_eval,  TorchMetricClassification, TorchMetricRegression, TorchMetricAutoencode)
 from torch import Tensor
 from torch.utils.data.dataloader import DataLoader
 from wandb.plot.roc_curve import roc_curve
@@ -60,15 +62,18 @@ def get_final_conv_l_out(l_in,kernel_sizes,stride_sizes,
     return int(l_out)
 
 def convtrans_l_out(l_in,kernel_size,stride,padding=0, dilation=1):
-    return (l_in -1) *  stride - 2 * padding + dilation * (kernel_size - 1)
+    return (l_in -1) *  stride - 2 * padding + dilation * (kernel_size - 1) + 1
+
+def max_pool_l_out(l_in,kernel_size, stride, padding=0):
+    return (l_in-1)*stride - 2*padding + kernel_size
 
 def get_final_convtrans_l_out(l_in,kernel_sizes,stride_sizes,
                         max_pool_kernel_size=None, max_pool_stride_size=None):
     l_out = l_in
     for kernel_size, stride_size in zip(kernel_sizes,stride_sizes):
-        l_out = conv_l_out(l_out,kernel_size,stride_size)
+        l_out = convtrans_l_out(l_out,kernel_size,stride_size)
         if max_pool_kernel_size and max_pool_kernel_size:
-            l_out = conv_l_out(l_out, max_pool_kernel_size,max_pool_stride_size)
+            l_out = max_pool_l_out(l_out, max_pool_kernel_size,max_pool_stride_size)
     return int(l_out)
 
 def get_config_from_locals(locals,model_type=None):
@@ -96,10 +101,11 @@ class CNNEncoder(nn.Module):
         self.stride_sizes = stride_sizes
         self.max_pool_stride_size = max_pool_stride_size
         self.max_pool_kernel_size = max_pool_kernel_size
+        self.conv_output_sizes = []
 
         super().__init__()
         self.input_features = input_features
-
+        
         layers = []
         l_out = n_timesteps
         for i in range(n_layers):
@@ -113,25 +119,35 @@ class CNNEncoder(nn.Module):
                                     stride = stride_sizes[i]))
             layers.append(nn.ReLU())
             l_out = conv_l_out(l_out,kernel_sizes[i],stride_sizes[i])
+            self.conv_output_sizes.append((l_out,))
             if max_pool_stride_size and max_pool_kernel_size:
                 l_out = conv_l_out(l_out, max_pool_kernel_size,max_pool_stride_size)
-                layers.append(nn.MaxPool1d(max_pool_kernel_size, stride=max_pool_stride_size))
+                
+                layers.append(nn.MaxPool1d(max_pool_kernel_size, stride=max_pool_stride_size, return_indices=True))
             layers.append(nn.LayerNorm([out_channels[i],l_out]))
+
         self.layers = nn.ModuleList(layers)
         self.final_output_length = get_final_conv_l_out(n_timesteps,kernel_sizes,stride_sizes, 
                                                         max_pool_kernel_size=max_pool_kernel_size, 
                                                         max_pool_stride_size=max_pool_stride_size)
 
+        # Is used in the max pool decoder:
+        self.max_indices = []
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for l in self.layers:
-            x = l(x)
+            if isinstance(l, nn.MaxPool1d):
+                x, indices = l(x)
+                self.max_indices.append(indices)
+            else:
+                x = l(x)
         return x
 
 class CNNDecoder(nn.Module):
     def __init__(self, input_features, input_length,
                 kernel_sizes=[1], out_channels = [128], 
                 stride_sizes=[1], max_pool_kernel_size = 3,
-                max_pool_stride_size=2) -> None:
+                max_pool_stride_size=2, max_indices=None,
+                unpool_output_sizes=None) -> None:
 
         n_layers = len(kernel_sizes)
         assert len(out_channels) == n_layers
@@ -142,10 +158,13 @@ class CNNDecoder(nn.Module):
         self.stride_sizes = stride_sizes
         self.max_pool_stride_size = max_pool_stride_size
         self.max_pool_kernel_size = max_pool_kernel_size
+        
+        # A symmetric encoder
+        self.max_indices = max_indices
 
         super(CNNDecoder,self).__init__()
         self.input_features = input_features
-
+        logger.warning("The CNN Decoder uses hard-coded features and will probably break if you try anything fancy")
         layers = []
         for i in range(n_layers):
             if i == 0:
@@ -155,41 +174,66 @@ class CNNDecoder(nn.Module):
 
             # if i == n_layers - 1:
             #     out_channels = 2
+            if max_pool_stride_size and max_pool_kernel_size:
+                layers.append(nn.MaxUnpool1d(max_pool_kernel_size, stride=max_pool_stride_size))
+
+            if i in (1,2):
+                output_padding=(1,)
+            else:
+                output_padding = (0,)
+
             layers.append(nn.ConvTranspose1d(in_channels = in_channels,
                                     out_channels = out_channels[i],
                                     kernel_size=kernel_sizes[i],
-                                    stride = stride_sizes[i]))
+                                    stride = stride_sizes[i],
+                                    output_padding=output_padding))
             layers.append(nn.ReLU())
-            if max_pool_stride_size and max_pool_kernel_size:
-                layers.append(nn.MaxPool1d(max_pool_kernel_size, stride=max_pool_stride_size))
+            
         self.layers = nn.ModuleList(layers)
+        self.unpool_output_sizes = unpool_output_sizes
+
+        # self.layers = nn.ModuleList([
+        #     nn.MaxUnpool1d(kernel_size=(3,), stride=(2,), padding=(0,)),
+        #     nn.ConvTranspose1d(32, 16, kernel_size=(2,), stride=(2,), output_padding=(1,)),
+        #     nn.ReLU(),
+        #     nn.MaxUnpool1d(kernel_size=(3,), stride=(2,), padding=(0,)),
+        #     nn.ConvTranspose1d(16, 8, kernel_size=(5,), stride=(3,), output_padding=(0,)),
+        #     nn.ReLU(),
+        #     nn.MaxUnpool1d(kernel_size=(3,), stride=(2,), padding=(0,)),
+        #     nn.ConvTranspose1d(8, 8, kernel_size=(5,), stride=(5,), output_padding=(0,)),
+        #     nn.ReLU()]
+        # )
         self.final_output_length = get_final_conv_l_out(input_length,kernel_sizes,stride_sizes, 
                                                         max_pool_kernel_size=max_pool_kernel_size, 
                                                         max_pool_stride_size=max_pool_stride_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.transpose(1,2)
+        max_pool_id = 0
         for l in self.layers:
-            x = l(x)
+            if isinstance(l,nn.MaxUnpool1d):
+                inds = self.max_indices.pop(-1)
+                x = l(x,indices=inds, output_size=self.unpool_output_sizes[max_pool_id])
+                max_pool_id+=1
+            else:
+                x = l(x)
+        x = x.transpose(1,2)
         return x
 
     @staticmethod
     def from_inverse_of_encoder(encoder):
-        if encoder.max_pool_stride_size or encoder.max_pool_kernel_size:
-            raise ValueError("Can't invert encoders with MaxPool")
-        else:
-            print
-            if isinstance(encoder,CNNEncoder):
-                print("In instance ")
-                # decoder_out_channels = encoder.out_channels[::-1]
-                return CNNDecoder(
-                    encoder.out_channels[-1],
-                    encoder.final_output_length,
-                    out_channels = encoder.out_channels[:-1][::-1] + [encoder.input_features],
-                    stride_sizes = encoder.stride_sizes[::-1],
-                    kernel_sizes = encoder.kernel_sizes[::-1],
-                    max_pool_kernel_size=None,
-                    max_pool_stride_size=None
-                )
+            # decoder_out_channels = encoder.out_channels[::-1]
+            return CNNDecoder(
+                encoder.out_channels[-1],
+                encoder.final_output_length,
+                out_channels = encoder.out_channels[:-1][::-1] + [encoder.input_features],
+                stride_sizes = encoder.stride_sizes[::-1],
+                kernel_sizes = encoder.kernel_sizes[::-1],
+                max_pool_kernel_size=encoder.max_pool_kernel_size,
+                max_pool_stride_size=encoder.max_pool_stride_size,
+                max_indices=encoder.max_indices,
+                unpool_output_sizes=encoder.conv_output_sizes[::-1]
+            )
             
 class CNNToTransformerEncoder(pl.LightningModule):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
@@ -229,11 +273,17 @@ class CNNToTransformerEncoder(pl.LightningModule):
         ])
         
         # self.dense_interpolation = modules.DenseInterpolation(final_length, factor)
-        self.is_classification = model_head == "classification"
-        if self.is_classification:
+        self.is_classifier = model_head == "classification"
+        self.is_autoencoder = model_head == "autoencoder"
+
+        if self.is_classifier:
             self.head = modules.ClassificationModule(self.d_model, final_length, num_labels,
                                                     dropout_p=clf_dropout_rate)
             metric_class = TorchMetricClassification
+        
+        elif self.is_autoencoder:
+            self.head = CNNDecoder.from_inverse_of_encoder(self.input_embedding)
+            metric_class = TorchMetricAutoencode
 
         else:
             self.head = modules.RegressionModule(self.d_model, final_length, num_labels)
@@ -246,6 +296,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.provided_train_dataloader = None
         
         self.criterion = build_loss_fn(model_specific_kwargs, task_type=model_head)
+        
         if num_attention_heads > 0:
             self.name = "CNNToTransformerEncoder"
         else:
@@ -346,18 +397,22 @@ class CNNToTransformerEncoder(pl.LightningModule):
         
         self.train_metrics.update(preds,y)
 
-        self.train_probs.append(preds.detach())
-        self.train_labels.append(y.detach())
+        if self.is_classifier:
+            self.train_probs.append(preds.detach())
+            self.train_labels.append(y.detach())
+
         return {"loss":loss, "preds": preds, "labels":y}
 
     def on_train_epoch_end(self):
-        train_preds = torch.cat(self.train_probs, dim=0)
-        train_labels = torch.cat(self.train_labels, dim=0)
+        
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
-        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classification:
+        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classifier and isinstance(self.logger, WandbLogger):
+            train_preds = torch.cat(self.train_probs, dim=0)
+            train_labels = torch.cat(self.train_labels, dim=0)
             self.logger.experiment.log({"train/roc": wandb_roc_curve(train_preds,train_labels, limit = 9999)}, commit=False)
             self.logger.experiment.log({"train/pr": wandb_pr_curve(train_preds,train_labels)}, commit=False)
             self.logger.experiment.log({"train/det": wandb_detection_error_tradeoff_curve(train_preds,train_labels, limit=9999)}, commit=False)
+        
         metrics = self.train_metrics.compute()
         self.log_dict(metrics, on_step=False, on_epoch=True)
         
@@ -375,13 +430,10 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.test_probs = []
     
     def on_test_epoch_end(self):
-
-
-        test_preds = torch.cat(self.test_probs, dim=0)
-        test_labels = torch.cat(self.test_labels, dim=0)
-
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
-        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classification:
+        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classifier and isinstance(self.logger, WandbLogger):
+            test_preds = torch.cat(self.test_probs, dim=0)
+            test_labels = torch.cat(self.test_labels, dim=0)
             self.logger.experiment.log({"test/roc": wandb_roc_curve(test_preds,test_labels, limit = 9999)}, commit=False)
             self.logger.experiment.log({"test/pr": wandb_pr_curve(test_preds,test_labels)}, commit=False)
             self.logger.experiment.log({"test/det": wandb_detection_error_tradeoff_curve(test_preds,test_labels, limit=9999)}, commit=False)
@@ -395,7 +447,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.test_labels = []
         
         super().on_validation_epoch_end()
-
+    
     def predict_step(self, batch: Any) -> Any:
         x = batch["inputs_embeds"]
         y = batch["label"]
@@ -424,11 +476,10 @@ class CNNToTransformerEncoder(pl.LightningModule):
         
 
     def on_validation_epoch_end(self):
-        eval_preds = torch.cat(self.eval_probs, dim=0)
-        eval_labels = torch.cat(self.eval_labels, dim=0)
-
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
-        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classification:
+        if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classifier:
+            eval_preds = torch.cat(self.eval_probs, dim=0)
+            eval_labels = torch.cat(self.eval_labels, dim=0)
             self.logger.experiment.log({"eval/roc": wandb_roc_curve(eval_preds,eval_labels, limit = 9999)}, commit=False)
             self.logger.experiment.log({"eval/pr":  wandb_pr_curve(eval_preds,eval_labels)}, commit=False)
             self.logger.experiment.log({"eval/det": wandb_detection_error_tradeoff_curve(eval_preds,eval_labels, limit=9999)}, commit=False)
@@ -450,8 +501,10 @@ class CNNToTransformerEncoder(pl.LightningModule):
         loss,preds = self.forward(x,y)
         
         self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
-        self.eval_probs.append(preds.detach())
-        self.eval_labels.append(y.detach())
+        
+        if self.is_classifier:
+            self.eval_probs.append(preds.detach())
+            self.eval_labels.append(y.detach())
         
         self.eval_metrics.update(preds,y)
         return {"loss":loss, "preds": preds, "labels":y}
@@ -527,15 +580,14 @@ class CNNToTransformerAutoEncoder(pl.LightningModule):
                     train_mix_positives_back_in=False, train_mixin_batch_size=3, 
                     **model_specific_kwargs)
 
-        self.decoder = CNN
+        self.decoder = CNNDecoder.from_inverse_of_encoder(self.encoder)
         self.criterion = nn.MSELoss()
         self.name = "CNNToTransformerAutoEncoder"
         self.base_model_prefix = self.name
 
     def forward(self, inputs_embeds,labels):
         encoding = self.encoder.encode(inputs_embeds)
-        
-
+        decoded = self.decoder(encoding)
+        loss = self.criterion(inputs_embeds,decoded)
+        return decoded, loss
     
-    def decode(inputs_embeds):
-        ...

@@ -1,3 +1,4 @@
+from unittest import result
 import click
 import wandb
 import os
@@ -14,6 +15,7 @@ from petastorm.pytorch import DataLoader as PetastormDataLoader
 from src.models.models import CNNToTransformerEncoder
 from src.models.tasks import get_task_with_name
 from src.models.commands import validate_yaml_or_json
+from src.utils import update_wandb_run
 
 @click.command(name='main', context_settings=dict(
     ignore_unknown_options=True,
@@ -36,26 +38,29 @@ def main(ctx, ckpt_path, task_config, predict_path, wandb_mode="offline",
                                                          backend="petastorm",
                                                          test_path=predict_path)
 
-    local_rank = os.environ.get("LOCAL_RANK",0)
-    if local_rank == 0:
-        logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],
-                            entity=CONFIG["WANDB_USERNAME"],
-                            notes=notes,
-                            log_model=True, #saves checkpoints to wandb as artifacts, might add overhead 
-                            reinit=True,
-                            resume = 'allow',
-                            allow_val_change=True,
-                            id = model.hparams.wandb_id) 
+    # local_rank = os.environ.get("LOCAL_RANK",0)
+    # if local_rank == 0:
+    #     logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],
+    #                         entity=CONFIG["WANDB_USERNAME"],
+    #                         notes=notes,
+    #                         log_model=True, #saves checkpoints to wandb as artifacts, might add overhead 
+    #                         reinit=True,
+    #                         resume = 'allow',
+    #                         allow_val_change=True,
+    #                         id = model.hparams.wandb_id) 
 
-    trainer = pl.Trainer(logger=logger,
+    trainer = pl.Trainer(logger=True,
                          gpus = 1,
                          accelerator="ddp",
                          resume_from_checkpoint=ckpt_path)
 
     with PetastormDataLoader(make_reader(task.test_url,transform_spec=task.transform),
                                    batch_size=3*model.batch_size) as test_dataset:
-        trainer.test(model,test_dataloaders=test_dataset)
+        results = trainer.test(model,test_dataloaders=test_dataset)
 
+    if hasattr(model.hparams,"wandb_id"):
+        run_address = update_wandb_run(model.hparams.wandb_id,results[0])
+        print(f"Updated {run_address}")
 
 if __name__ == "__main__":
     main()

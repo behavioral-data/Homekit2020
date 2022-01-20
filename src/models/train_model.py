@@ -344,14 +344,20 @@ def train_cnn_transformer(
                                               eval_path=eval_path,
                                               test_path=test_path)
     
+
+    n_timesteps, n_features = task.data_shape  
+
     if task.is_classification:
         model_head = "classification"
         num_labels = 2
+
+    elif task.is_autoencoder:
+        model_head = "autoencoder"
+        num_labels = n_timesteps
     else:
         model_head = "regression"
         num_labels = task.labler.label_size
-    
-    n_timesteps, n_features = task.data_shape        
+        
     model_kwargs = dict(input_features=n_features,
                             n_timesteps=n_timesteps,
                             num_attention_heads = num_attention_heads,
@@ -840,7 +846,7 @@ def run_pytorch_lightning(model, task,
             logger.experiment.summary["model"] = model.base_model_prefix
             logger.experiment.config.update(model.hparams, allow_val_change=True)
             model.hparams.wandb_id = logger.experiment.id  
-            model_img_path = visualize_model(model, dir=wandb.run.dir)
+            #model_img_path = visualize_model(model, dir=wandb.run.dir)
             # wandb.log({"model_img": [wandb.Image(Image.open(model_img_path), caption="Model Graph")]})
             
         else:

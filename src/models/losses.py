@@ -33,7 +33,7 @@ def build_loss_fn(kwargs,task_type="classification"):
             loss_weights = torch.tensor([float(neg_class_weight),float(pos_class_weight)])
             return nn.CrossEntropyLoss(weight=loss_weights)
 
-    elif task_type == "regression":
+    elif task_type == "regression" or task_type == "autoencoder" :
         return nn.MSELoss()
 
     else:

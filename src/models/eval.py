@@ -56,7 +56,7 @@ class Support(Metric):
         self.counts += values
 
     def compute(self) -> Dict[AnyStr,torch.Tensor]:
-        return {i:self.counts[i] for i in range(self.n_classes + 1)}
+        return {str(i):self.counts[i] for i in range(self.n_classes + 1)}
 
 class TorchPrecisionRecallAUC(AUROC):
     """A note about this implementation. It would be much more memory
@@ -74,10 +74,26 @@ class TorchPrecisionRecallAUC(AUROC):
         return tm_auc(recalls,precisions)
 
 
+class TorchMetricAutoencode(MetricCollection):
+    def __init__(self, bootstrap_cis=False,
+                 n_boostrap_samples=1000,
+                 prefix=""):
+        """Dummy class because autoencode metrics
+           would take up too much memory since we'd
+           be storing the whole dataset twice"""
+        super().__init__([])
+
+    
+    def compute(self) -> Dict[str, Any]:
+        return {}
+    
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        return
+
 
 class TorchMetricRegression(MetricCollection):
     def __init__(self, bootstrap_cis=False,
-                 n_boostrap_samples=100,
+                 n_boostrap_samples=1000,
                  prefix=""):
         self.add_prefix = prefix
         self.bootstrap_cis = bootstrap_cis

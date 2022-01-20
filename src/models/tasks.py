@@ -364,9 +364,13 @@ class ActivityTask(Task):
                             feature_vector = (feature_vector - mu) / sigma
                     
                     results.append(feature_vector.T)
+                inputs_embeds = np.vstack(results).T
+                if not self.is_autoencoder:
+                    label = labler(participant_id,start,end)
+                else:
+                    label = inputs_embeds
 
-                label = labler(participant_id,start,end)
-                return {"inputs_embeds": np.vstack(results).T,
+                return {"inputs_embeds": inputs_embeds,
                         "label": label,
                         "id": data_id,
                         "participant_id": participant_id,
@@ -883,8 +887,18 @@ class AutoencodeEarlyDetection(AutoencodeMixin, EarlyDetection):
 class Autoencode(AutoencodeMixin, ActivityTask):
     """Autoencode minute level data"""
 
-    def __init__(self,dataset_args={}):
-        ActivityTask.__init__(self,td.AutoencodeDataset,dataset_args=dataset_args)
+    def __init__(self,dataset_args={},**kwargs):
+
+        self.keys = ['heart_rate',
+                     'missing_heart_rate',
+                     'missing_steps',
+                     'sleep_classic_0',
+                     'sleep_classic_1',
+                     'sleep_classic_2',
+                     'sleep_classic_3', 
+                     'steps']
+                     
+        ActivityTask.__init__(self,td.AutoencodeDataset,dataset_args=dataset_args, **kwargs)
         AutoencodeMixin.__init__(self)
         self.is_autoencoder = True
 
