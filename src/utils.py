@@ -121,8 +121,21 @@ def update_wandb_run(run_id,vals):
     run.summary.update()
     return  f"https://wandb.ai/{entity}/{project}/runs/{run_id}"
 
-
 def update_run(run, k, v):
     if (isinstance(run.summary, wandb.old.summary.Summary) and k not in run.summary):
         run.summary._root_set(run.summary._path, [(k, {})])
     run.summary[k] = v
+
+
+def upload_pandas_df_to_wandb(run_id,filename,df):
+    project = config["WANDB_PROJECT"]
+    entity = config["WANDB_USERNAME"]
+    api = wandb.Api()
+    run_url = f"{entity}/{project}/{run_id}"
+    run = api.run(run_url)
+    model_table = wandb.Table(dataframe=df)
+    run.summary[filename] = model_table
+    run.summary.update()
+
+    
+    

@@ -1,3 +1,4 @@
+from statistics import mode
 from unittest import result
 import click
 import wandb
@@ -15,7 +16,7 @@ from petastorm.pytorch import DataLoader as PetastormDataLoader
 from src.models.models import CNNToTransformerEncoder
 from src.models.tasks import get_task_with_name
 from src.models.commands import validate_yaml_or_json
-from src.utils import update_wandb_run
+from src.utils import update_wandb_run, upload_pandas_df_to_wandb
 
 @click.command(name='main', context_settings=dict(
     ignore_unknown_options=True,
@@ -52,6 +53,7 @@ def main(ctx, ckpt_path, task_config, predict_path, wandb_mode="offline",
     trainer = pl.Trainer(logger=True,
                          gpus = 1,
                          accelerator="ddp",
+                         
                          resume_from_checkpoint=ckpt_path)
 
     with PetastormDataLoader(make_reader(task.test_url,transform_spec=task.transform),
@@ -60,7 +62,9 @@ def main(ctx, ckpt_path, task_config, predict_path, wandb_mode="offline",
 
     if hasattr(model.hparams,"wandb_id"):
         run_address = update_wandb_run(model.hparams.wandb_id,results[0])
-        print(f"Updated {run_address}")
+        model.upload_predictions_to_wandb()
+        print(f"Updated {run_address}") 
+
 
 if __name__ == "__main__":
     main()

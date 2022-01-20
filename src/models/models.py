@@ -26,6 +26,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
+import pandas as pd
 
 from petastorm.pytorch import BatchedDataLoader
 from petastorm.reader import Reader
@@ -34,7 +35,7 @@ from pytorch_lightning.loggers.wandb import WandbLogger
 
 from src.models.losses import build_loss_fn
 from src.SAnD.core import modules
-from src.utils import get_logger
+from src.utils import get_logger, upload_pandas_df_to_wandb
 from src.models.eval import (wandb_roc_curve, wandb_pr_curve, wandb_detection_error_tradeoff_curve,
                             classification_eval,  TorchMetricClassification, TorchMetricRegression, TorchMetricAutoencode)
 from torch import Tensor
@@ -376,12 +377,10 @@ class CNNToTransformerEncoder(pl.LightningModule):
         return super().on_train_start()
         
     def training_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
-        
-        if not isinstance(batch,list):
-            batch = [batch]
+  
 
-        x = torch.cat([x["inputs_embeds"] for x in batch],axis=0).type(torch.cuda.FloatTensor)
-        y = torch.cat([x["label"] for x in batch], axis=0)
+        x = batch["inputs_embeds"]
+        y = batch["label"]
 
         if self.train_mix_positives_back_in and self.current_epoch > 0:
             self.positive_cache.extend(x[torch.where(y)].detach())
@@ -431,9 +430,13 @@ class CNNToTransformerEncoder(pl.LightningModule):
     
     def on_test_epoch_end(self):
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
+        test_preds = torch.cat(self.test_probs, dim=0)
+        test_labels = torch.cat(self.test_labels, dim=0)
+        test_dates = np.concatenate(self.test_dates, axis=0)
+        test_participant_ids = np.concatenate(self.test_dates, axis=0)
+
         if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classifier and isinstance(self.logger, WandbLogger):
-            test_preds = torch.cat(self.test_probs, dim=0)
-            test_labels = torch.cat(self.test_labels, dim=0)
+            
             self.logger.experiment.log({"test/roc": wandb_roc_curve(test_preds,test_labels, limit = 9999)}, commit=False)
             self.logger.experiment.log({"test/pr": wandb_pr_curve(test_preds,test_labels)}, commit=False)
             self.logger.experiment.log({"test/det": wandb_detection_error_tradeoff_curve(test_preds,test_labels, limit=9999)}, commit=False)
@@ -441,11 +444,20 @@ class CNNToTransformerEncoder(pl.LightningModule):
         metrics = self.test_metrics.compute()
         self.log_dict(metrics, on_step=False, on_epoch=True, sync_dist=True)
         
+        self.predictions_df = pd.DataFrame(zip(test_participant_ids,test_dates,test_labels.cpu().numpy(),test_preds.cpu().numpy()),
+                                        columns = ["participant_id","date","label","pred"])
+        # self.log("predictions",predictions_df)                                        
+
         # Clean up
         self.test_metrics.reset()
         self.test_probs = []
         self.test_labels = []
-        
+        self.test_participant_ids = []
+        self.test_dates = []
+
+
+
+
         super().on_validation_epoch_end()
     
     def predict_step(self, batch: Any) -> Any:
@@ -464,13 +476,18 @@ class CNNToTransformerEncoder(pl.LightningModule):
 
         x = batch["inputs_embeds"].type(torch.cuda.FloatTensor)
         y = batch["label"]
-        
+        dates = batch["end_date_str"]
+        participant_ids = batch["participant_id"]
+
         loss,preds = self.forward(x,y)
 
         self.log("test/loss", loss.item(),on_step=True,sync_dist=True)
+        
         self.test_probs.append(preds.detach())
         self.test_labels.append(y.detach())
-        
+        self.test_participant_ids.append(participant_ids)
+        self.test_dates.append(dates)
+
         self.test_metrics.update(preds,y)
         return {"loss":loss, "preds": preds, "labels":y}
         
@@ -553,6 +570,10 @@ class CNNToTransformerEncoder(pl.LightningModule):
         if is_changed:
             checkpoint.pop("optimizer_states", None)
 
+    def upload_predictions_to_wandb(self):
+        upload_pandas_df_to_wandb(run_id=self.hparams.wandb_id,
+                                  filename="test_predictions",
+                                  df=self.predictions_df)
 class CNNToTransformerAutoEncoder(pl.LightningModule):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, 
                     n_timesteps, kernel_sizes=[5, 3, 1], out_channels=[256, 128, 64], 
