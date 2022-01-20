@@ -377,11 +377,8 @@ class CNNToTransformerEncoder(pl.LightningModule):
         
     def training_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
         
-        if not isinstance(batch,list):
-            batch = [batch]
-
-        x = torch.cat([x["inputs_embeds"] for x in batch],axis=0).type(torch.cuda.FloatTensor)
-        y = torch.cat([x["label"] for x in batch], axis=0)
+        x = batch["inputs_embeds"]
+        y = batch["label"]
 
         if self.train_mix_positives_back_in and self.current_epoch > 0:
             self.positive_cache.extend(x[torch.where(y)].detach())
@@ -398,8 +395,8 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.train_metrics.update(preds,y)
 
         if self.is_classifier:
-            self.train_probs.append(preds.detach())
-            self.train_labels.append(y.detach())
+            self.train_probs.append(preds.detach().cpu())
+            self.train_labels.append(y.detach().cpu())
 
         return {"loss":loss, "preds": preds, "labels":y}
 
