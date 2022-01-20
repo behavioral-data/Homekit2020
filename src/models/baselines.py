@@ -7,6 +7,7 @@ from xgboost import callback
 import wandb
 import ray
 import pickle
+import os
 
 from src.models.tasks import get_task_with_name
 from src.utils import get_logger
@@ -132,10 +133,14 @@ def train_xgboost(task_config,
         bst = xgb.train(param, train, 10, evallist, callbacks=callbacks)
         test_pred = bst.predict(test)
         results = classification_eval(test_pred,test.get_label(),prefix="test/") 
-
+        
         if not no_wandb:
             wandb.log(results)
-    
+            project = wandb.run.project
+            checkpoint_path = os.path.join(project,wandb.run.id,"checkpoints")
+            os.makedirs(checkpoint_path)
+            bst.save_model(os.path.join(checkpoint_path, "best.json"))
+            
         print(results)
 
 
