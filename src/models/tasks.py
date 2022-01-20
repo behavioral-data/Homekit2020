@@ -367,8 +367,10 @@ class ActivityTask(Task):
                 inputs_embeds = np.vstack(results).T
                 if not self.is_autoencoder:
                     label = labler(participant_id,start,end)
+                    
                 else:
-                    label = inputs_embeds
+                    label = inputs_embeds.astype(np.float32)
+                    
 
                 return {"inputs_embeds": inputs_embeds,
                         "label": label,
@@ -376,8 +378,13 @@ class ActivityTask(Task):
                         "participant_id": participant_id,
                         "end_date_str": str(end)}
             
+            if not self.is_autoencoder:
+                label_type = np.int_
+            else:
+                label_type = np.float32
+
             new_fields = [("inputs_embeds",np.float32,None,False),
-                        ("label",np.int_,None,False),
+                        ("label",label_type,None,False),
                         ("participant_id",np.str_,None,False),
                         ("id",np.int32,None,False),
                         ("end_date_str",np.str_,None,False)]
