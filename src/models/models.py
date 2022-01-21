@@ -134,7 +134,9 @@ class CNNEncoder(nn.Module):
 
         # Is used in the max pool decoder:
         self.max_indices = []
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        self.max_indices = []
         for l in self.layers:
             if isinstance(l, nn.MaxPool1d):
                 x, indices = l(x)
@@ -378,7 +380,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         
     def training_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
 
-        x = batch["inputs_embeds"]
+        x = batch["inputs_embeds"].type(torch.cuda.FloatTensor)
         y = batch["label"]
 
         if self.train_mix_positives_back_in and self.current_epoch > 0:
@@ -394,6 +396,9 @@ class CNNToTransformerEncoder(pl.LightningModule):
         # probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
         
         self.train_metrics.update(preds,y)
+        
+        preds = preds.detach()
+        y = y.detach()
 
         if self.is_classifier:
             self.train_probs.append(preds.detach().cpu())
@@ -460,7 +465,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         super().on_validation_epoch_end()
     
     def predict_step(self, batch: Any) -> Any:
-        x = batch["inputs_embeds"]
+        x = batch["inputs_embeds"].type(torch.cuda.FloatTensor)
         y = batch["label"]
 
         with torch.no_grad():
