@@ -861,7 +861,7 @@ def run_pytorch_lightning(model, task,
                 mode = "min"
 
             if early_stopping:
-                early_stopping_callback = EarlyStopping(monitor=checkpoint_metric,patience=2,mode="max")
+                early_stopping_callback = EarlyStopping(monitor=checkpoint_metric,patience=2,mode=mode)
                 callbacks.append(early_stopping_callback)
         else:
             checkpoint_metric = "train/loss"
