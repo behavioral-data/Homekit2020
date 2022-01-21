@@ -136,7 +136,11 @@ class CNNEncoder(nn.Module):
         self.max_indices = []
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        self.max_indices = []
+
+        # Since max_indices might be referenced elsewhere we clear the contents 
+        # rather than making a new list
+        
+        self.max_indices[:] = []
         for l in self.layers:
             if isinstance(l, nn.MaxPool1d):
                 x, indices = l(x)
@@ -180,7 +184,7 @@ class CNNDecoder(nn.Module):
             if max_pool_stride_size and max_pool_kernel_size:
                 layers.append(nn.MaxUnpool1d(max_pool_kernel_size, stride=max_pool_stride_size))
 
-            if i in (1,2):
+            if i in (0,):
                 output_padding=(1,)
             else:
                 output_padding = (0,)
@@ -237,7 +241,7 @@ class CNNDecoder(nn.Module):
                 max_indices=encoder.max_indices,
                 unpool_output_sizes=encoder.conv_output_sizes[::-1]
             )
-            
+
 class CNNToTransformerEncoder(pl.LightningModule):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, learning_rate=1e-3, warmup_steps=100,
@@ -458,10 +462,6 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.test_labels = []
         self.test_participant_ids = []
         self.test_dates = []
-
-
-
-
         super().on_validation_epoch_end()
     
     def predict_step(self, batch: Any) -> Any:
@@ -578,6 +578,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         upload_pandas_df_to_wandb(run_id=self.hparams.wandb_id,
                                   filename="test_predictions",
                                   df=self.predictions_df)
+
 class CNNToTransformerAutoEncoder(pl.LightningModule):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, 
                     n_timesteps, kernel_sizes=[5, 3, 1], out_channels=[256, 128, 64], 
