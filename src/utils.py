@@ -128,14 +128,15 @@ def update_run(run, k, v):
 
 
 def upload_pandas_df_to_wandb(run_id,filename,df):
-    project = config["WANDB_PROJECT"]
-    entity = config["WANDB_USERNAME"]
-    api = wandb.Api()
-    run_url = f"{entity}/{project}/{run_id}"
-    run = api.run(run_url)
+    run = get_historical_run(run_id)
     model_table = wandb.Table(dataframe=df)
-    run.summary[filename] = model_table
-    run.summary.update()
+    run.log({filename:model_table})
+
+
+def get_historical_run(run_id: str):
+    """Allows restoring an historical run to a writable state
+    """
+    return wandb.init(id=run_id, resume='allow')
 
     
     

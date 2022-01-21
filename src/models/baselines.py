@@ -8,10 +8,13 @@ import wandb
 import ray
 import pickle
 import os
+import pandas as pd
 
 from src.models.tasks import get_task_with_name
 from src.utils import get_logger
 from src.models.eval import classification_eval
+from src.utils import upload_pandas_df_to_wandb
+
 from dotenv import dotenv_values
 
 logger = get_logger(__name__)
@@ -133,12 +136,21 @@ def train_xgboost(task_config,
         bst = xgb.train(param, train, 10, evallist, callbacks=callbacks)
         test_pred = bst.predict(test)
         results = classification_eval(test_pred,test.get_label(),prefix="test/") 
+        test_participant_dates = task.get_test_dataset().participant_dates
         
         if not no_wandb:
             wandb.log(results)
             project = wandb.run.project
             checkpoint_path = os.path.join(project,wandb.run.id,"checkpoints")
             os.makedirs(checkpoint_path)
+
+            participant_ids = [pid for pid, _date in test_participant_dates]
+            dates = [date for _pid, date in test_participant_dates]
+            result_df = pd.DataFrame(zip(participant_ids, dates,  test.get_label(),test_pred,),
+                                    columns = ["participant_id","date","label","pred"])
+            
+            upload_pandas_df_to_wandb(wandb.run.id,"test_predictions",result_df)
+
             bst.save_model(os.path.join(checkpoint_path, "best.json"))
             
         print(results)
