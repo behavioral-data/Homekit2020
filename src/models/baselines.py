@@ -131,9 +131,14 @@ def train_xgboost(task_config,
             model_name = "XGBoost"
         wandb.log({"model":model_name}) 
         callbacks.append(xgb_wandb_callback())
+    bst = xgb.train(param, train, 10, evallist, callbacks=callbacks)
+
+    if not no_wandb:   
+        xgb.plot_importance(bst)
+        plt.tight_layout()
+        wandb.log({"feature_importance": wandb.Image(plt)})
     
     if test:
-        bst = xgb.train(param, train, 10, evallist, callbacks=callbacks)
         test_pred = bst.predict(test)
         results = classification_eval(test_pred,test.get_label(),prefix="test/",bootstrap_cis=True) 
         test_participant_dates = task.get_test_dataset().participant_dates
@@ -149,15 +154,8 @@ def train_xgboost(task_config,
             result_df = pd.DataFrame(zip(participant_ids, dates,  test.get_label(),test_pred,),
                                     columns = ["participant_id","date","label","pred"])
             
-            upload_pandas_df_to_wandb(wandb.run.id,"test_predictions",result_df)
+            upload_pandas_df_to_wandb(wandb.run.id,"test_predictions",result_df,run=wandb.run)
 
             bst.save_model(os.path.join(checkpoint_path, "best.json"))
             
         print(results)
-
-
-    if not no_wandb:
-        xgb.plot_importance(bst)
-        plt.tight_layout()
-        wandb.log({"feature_importance": wandb.Image(plt)})
-        wandb.log(results)

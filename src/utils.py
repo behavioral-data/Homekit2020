@@ -128,16 +128,19 @@ def update_run(run, k, v):
     run.summary[k] = v
 
 
-def upload_pandas_df_to_wandb(run_id,table_name,df):
-    with get_historical_run(run_id) as run:
-        model_table = wandb.Table(dataframe=df)
+def upload_pandas_df_to_wandb(run_id,table_name,df,run=None):
+    
+    model_table = wandb.Table(dataframe=df)
+    if run:
         run.log({table_name:model_table})
-
+    else:
+        with get_historical_run(run_id) as run:
+            run.log({table_name:model_table})
 
 def get_historical_run(run_id: str):
     """Allows restoring an historical run to a writable state
     """
-    return wandb.init(id=run_id, resume='allow')
+    return wandb.init(id=run_id, resume='allow', settings=wandb.Settings(start_method='fork'))
 
     
 def binary_logits_to_pos_probs(arr,pos_index=-1):
