@@ -35,7 +35,7 @@ from pytorch_lightning.loggers.wandb import WandbLogger
 
 from src.models.losses import build_loss_fn
 from src.SAnD.core import modules
-from src.utils import get_logger, upload_pandas_df_to_wandb
+from src.utils import get_logger, upload_pandas_df_to_wandb, binary_logits_to_pos_probs
 from src.models.eval import (wandb_roc_curve, wandb_pr_curve, wandb_detection_error_tradeoff_curve,
                             classification_eval,  TorchMetricClassification, TorchMetricRegression, TorchMetricAutoencode)
 from torch import Tensor
@@ -441,7 +441,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
         test_preds = torch.cat(self.test_probs, dim=0)
         test_labels = torch.cat(self.test_labels, dim=0)
         test_dates = np.concatenate(self.test_dates, axis=0)
-        test_participant_ids = np.concatenate(self.test_dates, axis=0)
+        test_participant_ids = np.concatenate(self.test_participant_ids, axis=0)
 
         if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classifier and isinstance(self.logger, WandbLogger):
             
@@ -452,7 +452,9 @@ class CNNToTransformerEncoder(pl.LightningModule):
         metrics = self.test_metrics.compute()
         self.log_dict(metrics, on_step=False, on_epoch=True, sync_dist=True)
         
-        self.predictions_df = pd.DataFrame(zip(test_participant_ids,test_dates,test_labels.cpu().numpy(),test_preds.cpu().numpy()),
+        #TODO This should probably be in its own method
+        pos_probs = binary_logits_to_pos_probs(test_preds.cpu().numpy()) 
+        self.predictions_df = pd.DataFrame(zip(test_participant_ids,test_dates,test_labels.cpu().numpy(),pos_probs),
                                         columns = ["participant_id","date","label","pred"])
         # self.log("predictions",predictions_df)                                        
 
@@ -576,7 +578,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
 
     def upload_predictions_to_wandb(self):
         upload_pandas_df_to_wandb(run_id=self.hparams.wandb_id,
-                                  filename="test_predictions",
+                                  table_name="test_predictions",
                                   df=self.predictions_df)
 
 class CNNToTransformerAutoEncoder(pl.LightningModule):

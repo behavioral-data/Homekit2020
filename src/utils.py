@@ -12,6 +12,7 @@ import torch
 import pynvml
 from torchviz import make_dot
 import subprocess
+from scipy.special import softmax
 
 from dotenv import dotenv_values
 config = dotenv_values(".env")
@@ -127,10 +128,10 @@ def update_run(run, k, v):
     run.summary[k] = v
 
 
-def upload_pandas_df_to_wandb(run_id,filename,df):
-    run = get_historical_run(run_id)
-    model_table = wandb.Table(dataframe=df)
-    run.log({filename:model_table})
+def upload_pandas_df_to_wandb(run_id,table_name,df):
+    with get_historical_run(run_id) as run:
+        model_table = wandb.Table(dataframe=df)
+        run.log({table_name:model_table})
 
 
 def get_historical_run(run_id: str):
@@ -139,4 +140,6 @@ def get_historical_run(run_id: str):
     return wandb.init(id=run_id, resume='allow')
 
     
-    
+def binary_logits_to_pos_probs(arr,pos_index=-1):
+    probs = softmax(arr,axis=1)
+    return probs[:,pos_index]
