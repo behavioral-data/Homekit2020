@@ -5,8 +5,7 @@ BASE_COMMAND="python src/__main__.py train-cnn-transformer --train_batch_size 70
 TASKS=(
     "PredictFluPos"
     "PredictFluSymptoms"
-    "PredictMobilityDifficulty"
-    "PredictWeekend"
+    "PredictSevereFever"
     "PredictSevereSymptoms"
     "PredictCough"
     "PredictFatigue"
@@ -15,5 +14,5 @@ TASKS=(
 for task in ${TASKS[*]} 
   do
     pythonCommand="$BASE_COMMAND --task_config ./src/data/task_configs/$task.yaml"
-    eval "python slurm-utils/launch_on_slurm.py  -n 1 -m '64G' --num-gpus 2 --num-cpus 10 --dir . --exp-name $task --command \"$pythonCommand\""
+    echo "python slurm-utils/launch_on_slurm.py  -n 1 -m '64G' --num-gpus 2 --num-cpus 10 --dir . --exp-name $task --command \"$pythonCommand\""
   done
