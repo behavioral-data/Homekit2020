@@ -4,6 +4,7 @@ import logging
 import gc
 import wandb
 
+import pandas as pd
 import dotenv
 import yaml
 import numpy as np
@@ -122,10 +123,29 @@ def update_wandb_run(run_id,vals):
     run.summary.update()
     return  f"https://wandb.ai/{entity}/{project}/runs/{run_id}"
 
+
 def update_run(run, k, v):
     if (isinstance(run.summary, wandb.old.summary.Summary) and k not in run.summary):
         run.summary._root_set(run.summary._path, [(k, {})])
     run.summary[k] = v
+
+def get_wandb_summaries(runids):
+    results = [] 
+    api = wandb.Api()
+    project = config["WANDB_PROJECT"]
+    entity = config["WANDB_USERNAME"]
+    for run_id in runids:
+        run_url = f"{entity}/{project}/{run_id}"
+        run = api.run(run_url)
+        summary = run.summary._json_dict
+        
+        meta = json.load(run.file("wandb-metadata.json").download(replace=True))
+        summary["command"] = " ".join(["python", meta["program"]] +  meta["args"]) 
+
+        summary["id"] = run_id
+        results.append(summary)
+    
+    return results
 
 
 def upload_pandas_df_to_wandb(run_id,table_name,df,run=None):
@@ -146,3 +166,12 @@ def get_historical_run(run_id: str):
 def binary_logits_to_pos_probs(arr,pos_index=-1):
     probs = softmax(arr,axis=1)
     return probs[:,pos_index]
+
+def download_table(run_id, table_name):
+    api = wandb.Api()
+    entity = config["WANDB_USERNAME"]
+    project = config["WANDB_PROJECT"]
+    artifact = api.artifact(f"{entity}/{project}/run-{run_id}-{table_name}:latest")
+    table = artifact.get(table_name)
+    print(table)
+    return pd.DataFrame(table.data, columns=table.columns)
