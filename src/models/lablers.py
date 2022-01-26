@@ -161,6 +161,30 @@ class EvidationILILabler(object):
     def get_positive_keys(self):
         return set([(x[0], x[1].normalize()) for x in self.result_lookup.keys()])
 
+
+class CovidLabler(object):
+    def __init__(self,path):
+        """
+        Designed for data like:
+       "/projects/bdata/datasets/covid-fitbit/processed/covid_diagnosis_dates.csv"
+        """
+        self.results = pd.read_csv(path)
+        self.results["covid_diagnosis_dates"] = pd.to_datetime(self.results["covid_diagnosis_dates"])
+        self.result_lookup = (self.results\
+                                 .reset_index()\
+                                 .groupby(["participant_id","covid_diagnosis_dates"])\
+                                 .size() > 0)\
+                                 .to_dict()
+                           
+    def __call__(self,participant_id,start_date,end_date):
+        is_pos_on_date = self.result_lookup.get((participant_id,end_date.normalize()),False)
+        return int(is_pos_on_date)
+    
+    def get_positive_keys(self):
+        return set([(x[0], x[1].normalize()) for x in self.result_lookup.keys()])
+
+
+
 class ClauseLabler(object):
     def __init__(self, survey_respones, clause):
         self.clause = clause

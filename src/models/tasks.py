@@ -51,7 +51,8 @@ from src.models.eval import classification_eval, regression_eval
 from src.data.utils import load_processed_table, load_cached_activity_reader, url_from_path
 from src.utils import get_logger, read_yaml
 from src.models.lablers import (FluPosLabler, ClauseLabler, EvidationILILabler, 
-                                 DayOfWeekLabler, AudereObeseLabler, DailyFeaturesLabler)
+                                 DayOfWeekLabler, AudereObeseLabler, DailyFeaturesLabler,
+                                 CovidLabler)
 
 logger = get_logger(__name__)
 
@@ -639,6 +640,52 @@ class PredictEvidationILI(ActivityTask, ClassificationMixin):
     def get_name(self):
         return f"PredictEvidationILI-types:{self.ili_types}-window_onset_min:{self.window_onset_min}"\
                f"-window_onset_max:{self.window_onset_max}-file:{self.filename}"
+    
+    def get_labler(self):
+        return self.labler
+
+
+
+class PredictCovidSmall(ActivityTask, ClassificationMixin):
+    """Predict the whether a participant was diagnosed with
+    covid on the final day of the window
+    
+    This was designed for data from Mirsha et. al,
+    and uses the processed results from 
+    /projects/bdata/datasets/covid-fitbit/processed/covid_dates.csv
+    """
+
+    def __init__(self, dates_path,
+                       dataset_args={}, 
+                       activity_level = "minute",
+                       ili_types=[1,2,3],
+                       window_onset_min = -5,
+                       window_onset_max = 1,
+                       **kwargs):
+        
+        self.keys =  ['heart_rate',
+                     'missing_heart_rate',
+                     'missing_steps',
+                     'sleep_classic_0',
+                     'sleep_classic_1',
+                     'sleep_classic_2',
+                     'sleep_classic_3', 
+                     'steps']
+        
+        self.dates_path = dates_path,
+        self.filename = os.path.basename(dates_path)
+
+        self.labler = CovidLabler(dates_path)
+
+        dataset_args["labeler"] = self.labler
+
+        ActivityTask.__init__(self,td.CustomLabler,dataset_args=dataset_args,
+                                 activity_level=activity_level,**kwargs)
+        ClassificationMixin.__init__(self)
+        
+
+    def get_name(self):
+        return "PredictCovidSmall"
     
     def get_labler(self):
         return self.labler

@@ -1,0 +1,10 @@
+task_name:
+  PredictCovidSmall
+dataset_args:  
+  day_window_size: 4
+  max_missing_days_in_window: 2
+  shuffle: 1
+  split_date: 2020-02-10
+  clause: "have_flu > 0"
+task_args:
+  dates_path: data/processed/covid_diagnosis_dates.csv
