@@ -75,7 +75,8 @@ def explode_str_column(df: pd.DataFrame, target_col: str,
                    rename_target_column: Optional[str] = None,
                    start_col: Optional[str] = None,
                    dur_col: Optional[str] = None,
-                   clip_max: int = 200) -> dict:
+                   clip_max: int = 200,
+                   single_val=False) -> dict:
 
     # tqdm.pandas(desc="Getting new indices...")
     # logger.info("Getting new indices....")
@@ -95,17 +96,19 @@ def explode_str_column(df: pd.DataFrame, target_col: str,
 
 
     # mapper = lambda x: str_col_to_list(x, sep_char=sep_char, default_len=default_len)                                        
-    df["val"] = df[target_col].str.split(sep_char)
+    if not single_val:
+        df["val"] = df[target_col].str.split(sep_char)
+    else:
+        df["val"] = df.apply(lambda x: [x[target_col]] * len(x["timestamp"]), axis=1)
     # logger.info("Exploding column...")
-    
     df = df[["timestamp","val"]].explode(["timestamp","val"])
     df["val"] = pd.to_numeric(df["val"],downcast="unsigned").clip(upper=clip_max)
-    
-    
-
+    df = df.sort_values("timestamp")
+    df = df.drop_duplicates(subset="timestamp",keep="last")
     df = df.rename(columns={"val":val_col_name})
     # logger.info("Setting index...")
-    return df.set_index("timestamp").sort_index()
+    df = df.set_index("timestamp").sort_index()
+    return df
     
 
 def get_new_index(item: dict, target_column: str,

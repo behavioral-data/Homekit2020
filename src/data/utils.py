@@ -352,10 +352,11 @@ def process_minute_level_pandas(minute_level_path=None, minute_level_df=None,
                                     dtype = bool)
                                         
     
-    minute_level_df["date"] = minute_level_df.index.date
+    
 
 
     minute_level_df = fill_missing_minutes(minute_level_df)
+    minute_level_df["date"] = minute_level_df.index.date
     minute_level_df = minute_level_df.reset_index()
     sleep_cols = [f"sleep_classic_{i}" for i in range(4)]
     for col in sleep_cols:

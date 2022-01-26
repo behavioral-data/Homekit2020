@@ -82,7 +82,7 @@ def get_active_spark_context() -> SparkSession:
 
 
 @click.command()
-@click.argument("input_path", type=click.Path(file_okay=False,exists=True))
+@click.argument("input_path", type=click.Path(file_okay=True,exists=True))
 @click.argument("output_path", type=click.Path(file_okay=False,exists=False))
 @click.option("--max_missing_days_in_window", type=int, default=2)
 @click.option("--min_windows", type=int, default=1)
@@ -139,9 +139,9 @@ def main(input_path, output_path, max_missing_days_in_window,
     rowgroup_size_mb = 256
 
     configuation_properties = [
-    ("spark.master","local[95]"),
+    ("spark.master","local[16]"),
     ("spark.ui.port","4050"),
-    ("spark.executor.memory","750g"),
+    ("spark.executor.memory","32g"),
     ('spark.driver.memory',  '2000g'),
     ("spark.driver.maxResultSize", '0'), # unlimited
     ("spark.network.timeout",            "10000001"),

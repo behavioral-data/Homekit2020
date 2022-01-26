@@ -319,7 +319,7 @@ class ActivtyDataset(Dataset):
                        min_windows=1,
                        scaler = MinMaxScaler,
                        time_encoding=None,
-                       return_dict=False,
+                       return_dict=True,
                        return_global_attention_mask = False,
                        add_absolute_embedding = False,
                        add_cls=False,
@@ -429,6 +429,8 @@ class ActivtyDataset(Dataset):
             
             item["inputs_embeds"] = embeds
             item["label"] = label
+            item["participant_id"] = participant_id
+            item["end_date"] = end_date
 
             if self.return_global_attention_mask:
                 mask = np.zeros(embeds.shape[0])
@@ -444,32 +446,42 @@ class ActivtyDataset(Dataset):
         
         return result
     
-    def to_stacked_numpy(self,flatten = False):
+    def to_stacked_numpy(self,flatten = False, return_user_dates=False):
         
         if len(self)==0:
             return np.array([]), np.array([])
         X = []
         y = []
+        user_dates=[]
 
-        for el_x, el_y in tqdm(self, desc = "Converting to np Array"): 
+        for item in tqdm(self, desc = "Converting to np Array"): 
+            el_x, el_y = item["inputs_embeds"], item["label"]
+            user_date = (item["participant_id"],item["end_date"])
+
             if flatten:
                 el_x = el_x.flatten()
             
             if len(el_x) == self.day_window_size * self.activity_reader.activity_data.shape[-1]:
                 X.append(el_x)
                 y.append(el_y)
+                user_dates.append(user_date)
         
+        if return_user_dates:
+            return np.stack(X), np.stack(y), user_dates
+
         return np.stack(X), np.stack(y)
 
     def to_dmatrix(self,flatten=True):
-        X,y = self.to_stacked_numpy(flatten=flatten)
+        X,y,user_dates = self.to_stacked_numpy(flatten=flatten, return_user_dates=True)
         feature_names = self.get_feature_names()
         n_days = int(X.shape[-1] / len(feature_names))
         day_names = []
         for i in range(n_days):
             for name in feature_names:
                 day_names.append(f"T-minus-{n_days-i-1}-{name}")
-        return xgb.DMatrix(X,label=y, feature_names=day_names)
+        mtx = xgb.DMatrix(X,label=y, feature_names=day_names)
+        mtx.user_dates = user_dates
+        return mtx
 
     def get_feature_names(self):
         names =list(self.activity_data.columns.values)
