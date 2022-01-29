@@ -32,13 +32,16 @@ def main(ctx, ckpt_path, task_config, predict_path, wandb_mode="offline",
         notes=None):
     os.environ["WANDB_MODE"] = wandb_mode
 
-    extra_args = {ctx.args[i][2:]: ctx.args[i+1] for i in range(0, len(ctx.args), 2)}
-    model = CNNToTransformerEncoder.load_from_checkpoint(ckpt_path,**extra_args) #TODO support other models
+     #TODO support other models
     task =  get_task_with_name(task_config["task_name"])(dataset_args = task_config["dataset_args"],
                                                          activity_level="minute",
                                                          backend="petastorm",
-                                                         test_path=predict_path)
-
+                                                         test_path=predict_path,
+                                                         **task_config.get("task_args",{}))
+    
+    extra_args = {ctx.args[i][2:]: ctx.args[i+1] for i in range(0, len(ctx.args), 2)}
+    model = CNNToTransformerEncoder.load_from_checkpoint(ckpt_path,model_head="classification",
+                                                        **extra_args)
     # local_rank = os.environ.get("LOCAL_RANK",0)
     # if local_rank == 0:
     #     logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],

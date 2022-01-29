@@ -134,6 +134,7 @@ class CNNTransformer(NeuralCommand):
             click.Option(("--positional_encoding",),is_flag=True, help="Use positional encodings"),
             click.Option(("--early_stopping",),is_flag=True, help="Use early stopping"),
             click.Option(("--no_bootstrap",),is_flag=True, help="Turn off bootstrapping for metrics"),
+            click.Option(("--multitask_daily_features",),is_flag=True, help="Add a loss term for regressing daily features"),
         ]
         self.params = self.params + loss_options + cnn_transformer_params + petastorm_options
 

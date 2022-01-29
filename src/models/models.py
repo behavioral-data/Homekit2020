@@ -247,7 +247,8 @@ class CNNToTransformerEncoder(pl.LightningModule):
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, learning_rate=1e-3, warmup_steps=100,
                 max_positional_embeddings = 1440*5, factor=64, inital_batch_size=100, clf_dropout_rate=0.0,
                 train_mix_positives_back_in=False, train_mixin_batch_size=3, skip_cnn=False, wandb_id=None, 
-                positional_encoding = False, model_head="classification", no_bootstrap=False,
+                positional_encoding = False, model_head="classification", no_bootstrap=False, multitask_daily_features=False,
+                multitask_num_labels=None,
                 **model_specific_kwargs) -> None:
         
         self.config = get_config_from_locals(locals())
@@ -295,6 +296,12 @@ class CNNToTransformerEncoder(pl.LightningModule):
         else:
             self.head = modules.RegressionModule(self.d_model, final_length, num_labels)
             metric_class = TorchMetricRegression
+        
+        self.multitask_daily_features = multitask_daily_features
+        if self.multitask_daily_features:
+            #TODO 18 shouldnt be hardcoded.
+            self.multitask_head = modules.RegressionModule(self.d_model, final_length, 18)
+            self.multitask_loss = nn.MSELoss()
 
         self.train_metrics = metric_class(bootstrap_cis=False, prefix="train/")
         self.eval_metrics = metric_class(bootstrap_cis=not no_bootstrap, prefix="eval/")
@@ -336,9 +343,20 @@ class CNNToTransformerEncoder(pl.LightningModule):
 
 
     def forward(self, inputs_embeds,labels):
+
+        if self.multitask_daily_features:
+            daily_features = labels[:,1:]
+            labels = labels[:,0].type(torch.int64)
+
         encoding = self.encode(inputs_embeds)
         preds = self.head(encoding)
         loss =  self.criterion(preds,labels)
+        
+        if self.multitask_daily_features:
+            multitask_preds = self.multitask_head(encoding)
+            multitask_loss = self.multitask_loss(multitask_preds,daily_features)
+            loss = loss + multitask_loss
+
         return loss, preds
 
     def encode(self, inputs_embeds):
@@ -399,10 +417,15 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.log("train/loss", loss.item(),on_step=True)
         # probs = torch.nn.functional.softmax(logits,dim=1)[:,-1]
         
-        self.train_metrics.update(preds,y)
+        
         
         preds = preds.detach()
+        
+        if self.multitask_daily_features:
+            y = y[:,0].type(torch.int64)
+
         y = y.detach()
+        self.train_metrics.update(preds,y)
 
         if self.is_classifier:
             self.train_probs.append(preds.detach().cpu())
@@ -488,7 +511,10 @@ class CNNToTransformerEncoder(pl.LightningModule):
         loss,preds = self.forward(x,y)
 
         self.log("test/loss", loss.item(),on_step=True,sync_dist=True)
-        
+
+        if self.multitask_daily_features:
+            y = y[:,0].type(torch.int64)
+
         self.test_probs.append(preds.detach())
         self.test_labels.append(y.detach())
         self.test_participant_ids.append(participant_ids)
@@ -525,6 +551,9 @@ class CNNToTransformerEncoder(pl.LightningModule):
         
         self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
         
+        if self.multitask_daily_features:
+            y = y[:,0].type(torch.int64)
+            
         if self.is_classifier:
             self.eval_probs.append(preds.detach())
             self.eval_labels.append(y.detach())
@@ -619,3 +648,55 @@ class CNNToTransformerAutoEncoder(pl.LightningModule):
         loss = self.criterion(inputs_embeds,decoded)
         return decoded, loss
     
+class CNNToTransformerDoubleEncoder(CNNToTransformerEncoder):
+    def __init__(self, *model_args, **model_specific_kwargs) -> None:
+
+        super().__init__(*model_args, **model_specific_kwargs)
+
+    def forward(self, inputs_embeds_l, inputs_embeds_r,labels):
+        encoding_l = self.encode(inputs_embeds_l)
+        encoding_r = self.encode(inputs_embeds_r)
+        concat = torch.mean(torch.stack([encoding_l,encoding_r]),axis=0)
+        preds = self.head(concat)
+        loss = self.criterion(preds,labels)
+        return  loss, preds
+    
+    def training_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
+
+        x_l = batch["inputs_embeds_l"].type(torch.cuda.FloatTensor)
+        x_r = batch["inputs_embeds_r"].type(torch.cuda.FloatTensor)
+        y = batch["label"]
+
+        loss,preds = self.forward(x_l,x_r,y)
+
+        self.log("train/loss", loss.item(),on_step=True)
+
+        preds = preds.detach()
+        y = y.detach()
+
+        self.train_metrics.update(preds,y)
+
+        if self.is_classifier:
+            self.train_probs.append(preds.detach().cpu())
+            self.train_labels.append(y.detach().cpu())
+
+        return {"loss":loss, "preds": preds, "labels":y}
+    
+    def validation_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
+        x_l = batch["inputs_embeds_l"].type(torch.cuda.FloatTensor)
+        x_r = batch["inputs_embeds_r"].type(torch.cuda.FloatTensor)
+        y = batch["label"]
+
+        loss,preds = self.forward(x_l,x_r,y)
+        
+        self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
+        
+        if self.multitask_daily_features:
+            y = y[:,0].type(torch.int64)
+            
+        if self.is_classifier:
+            self.eval_probs.append(preds.detach())
+            self.eval_labels.append(y.detach())
+        
+        self.eval_metrics.update(preds,y)
+        return {"loss":loss, "preds": preds, "labels":y}

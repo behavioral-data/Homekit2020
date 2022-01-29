@@ -29,6 +29,7 @@ __docformat__ = 'reStructuredText'
 
 import sys
 import datetime
+from unicodedata import normalize
 from warnings import WarningMessage
 import os
 
@@ -52,7 +53,7 @@ from src.data.utils import load_processed_table, load_cached_activity_reader, ur
 from src.utils import get_logger, read_yaml
 from src.models.lablers import (FluPosLabler, ClauseLabler, EvidationILILabler, 
                                  DayOfWeekLabler, AudereObeseLabler, DailyFeaturesLabler,
-                                 CovidLabler)
+                                 CovidLabler, SameParticipantLabler, SequentialLabler)
 
 logger = get_logger(__name__)
 
@@ -88,6 +89,22 @@ def get_task_from_config_path(path,**kwargs):
                       **config.get("task_args",{}),                      
                       **kwargs)
     return task
+
+def stack_keys(keys,row, normalize_numerical=True):
+    results = []
+    for k in keys:
+        feature_vector = row[k]
+        is_numerical = np.issubdtype(feature_vector.dtype, np.number)
+        
+        if normalize_numerical and is_numerical:
+            mu = feature_vector.mean()
+            sigma = feature_vector.std()
+            if sigma != 0:
+                feature_vector = (feature_vector - mu) / sigma
+        
+        results.append(feature_vector.T)
+        
+    return np.vstack(results).T
 
 class Task(object):
     def __init__(self):
@@ -130,6 +147,7 @@ class TaskTypeMixin():
         self.is_regression=False                            
         self.is_classification=False
         self.is_autoencoder=False
+        self.is_double_encoding = False
 
 class ClassificationMixin(TaskTypeMixin):
     def __init__(self):
@@ -208,6 +226,9 @@ class ActivityTask(Task):
                      shape=None,
                      keys=None,
                      normalize_numerical=True,
+                     append_daily_features=False,
+                     daily_features_path=None,
+                     double_encode=False,
                      backend="petastorm"):
         
         super(ActivityTask,self).__init__()
@@ -231,6 +252,12 @@ class ActivityTask(Task):
         data_location = dataset_args.get("data_location",None)
         lab_results_reader = td.LabResultsReader()
         
+        self.daily_features_appended = append_daily_features
+        if self.daily_features_appended:
+            self.daily_features_labler = DailyFeaturesLabler(data_location=daily_features_path, window_size=1)
+        else:
+            self.daily_features_labler = None
+
         verify_backend(backend = backend,
                        limit_train_frac = limit_train_frac,
                        data_location = data_location,
@@ -334,65 +361,121 @@ class ActivityTask(Task):
                 raise ValueError("Must provide at least one of {}"
                                 "train_path, eval_path, or test_path"
                                 "to use the petatstorm backend")
+            
+            if double_encode:
+                schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
+                fields = [k for k in schema.fields.keys() if not k in ["participant_id_l","id_l", "participant_id_r","id_r"]]
         
-            schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
-            fields = [k for k in schema.fields.keys() if not k in ["participant_id","id"]]
-            # features = [k for k in schema.fields.keys() if not k in ["start","end","participant_id"]]
+                def _transform_row(row):
+                    labler = self.get_labler()
+                    start_l = pd.to_datetime(row.pop("start_l"))
+                    start_r = pd.to_datetime(row.pop("start_r"))
+
+                    #Because spark windows have and exclusive right boundary:
+                    end_l = pd.to_datetime(row.pop("end_l")) - pd.to_timedelta("1ms")
+                    end_r = pd.to_datetime(row.pop("end_r")) - pd.to_timedelta("1ms")
+
+                    participant_id_l = row.pop("participant_id_l")
+                    participant_id_r = row.pop("participant_id_r")
+                    
+                    data_id_r = row.pop("id_r")
+                    data_id_l = row.pop("id_l")
+                    
+
+                    if hasattr(self,"keys"):
+                        keys = self.keys
+                    else:
+                        keys = sorted(row.keys())
+                    
+                    l_keys = [k for k in keys if k[-2:] == "_l"]
+                    r_keys = [k for k in keys if k[-2:] == "_r"]
+
+                    inputs_embeds_l = stack_keys(l_keys,row,normalize_numerical=normalize_numerical)
+                    inputs_embeds_r = stack_keys(r_keys,row,normalize_numerical=normalize_numerical)
+
+                    if not self.is_autoencoder:
+                        label = labler(participant_id_l,start_l,end_l,
+                                       participant_id_r,start_r,end_r)                 
+
+                    return {"inputs_embeds_l": inputs_embeds_l,
+                            "inputs_embeds_r": inputs_embeds_r,
+                            "label": label,
+                            "id_l": data_id_l,
+                            "id_r": data_id_r,
+                            "participant_id_l": participant_id_l,
+                            "participant_id_r": participant_id_r,
+                            "end_date_str_l": str(end_l),
+                            "end_date_str_r": str(end_r)}
+                
             
-            def _transform_row(row):
-                labler = self.get_labler()
-                start = pd.to_datetime(row.pop("start"))
-                #Because spark windows have and exclusive right boundary:
-                end = pd.to_datetime(row.pop("end")) - pd.to_timedelta("1ms")
-
-                participant_id = row.pop("participant_id")
-                data_id = row.pop("id")
-
-                if hasattr(self,"keys"):
-                    keys = self.keys
-                else:
-                    keys = sorted(row.keys())
-
-                results = []
-                for k in keys:
-                    feature_vector = row[k]
-                    is_numerical = np.issubdtype(feature_vector.dtype, np.number)
-                    
-                    if normalize_numerical and is_numerical:
-                        mu = feature_vector.mean()
-                        sigma = feature_vector.std()
-                        if sigma != 0:
-                            feature_vector = (feature_vector - mu) / sigma
-                    
-                    results.append(feature_vector.T)
-                inputs_embeds = np.vstack(results).T
-                if not self.is_autoencoder:
-                    label = labler(participant_id,start,end)
-                    
-                else:
-                    label = inputs_embeds.astype(np.float32)
-                    
-
-                return {"inputs_embeds": inputs_embeds,
-                        "label": label,
-                        "id": data_id,
-                        "participant_id": participant_id,
-                        "end_date_str": str(end)}
-            
-            if not self.is_autoencoder:
-                label_type = np.int_
-            else:
                 label_type = np.float32
+                new_fields = []
+                for side in ["l","r"]:    
+                    new_fields+=   [(f"inputs_embeds_{side}",np.float32,None,False),
+                                    (f"participant_id_{side}",np.str_,None,False),
+                                    (f"id_{side}",np.int32,None,False),
+                                    (f"end_date_str_{side}",np.str_,None,False)]
+                new_fields +=[("label",label_type,None,False)]
+            
+            else: 
+                schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
+                fields = [k for k in schema.fields.keys() if not k in ["participant_id","id"]]
+                # features = [k for k in schema.fields.keys() if not k in ["start","end","participant_id"]]
+            
+                def _transform_row(row):
+                    labler = self.get_labler()
+                    start = pd.to_datetime(row.pop("start"))
+                    #Because spark windows have and exclusive right boundary:
+                    end = pd.to_datetime(row.pop("end")) - pd.to_timedelta("1ms")
 
-            new_fields = [("inputs_embeds",np.float32,None,False),
-                        ("label",label_type,None,False),
-                        ("participant_id",np.str_,None,False),
-                        ("id",np.int32,None,False),
-                        ("end_date_str",np.str_,None,False)]
+                    participant_id = row.pop("participant_id")
+                    data_id = row.pop("id")
+
+                    if hasattr(self,"keys"):
+                        keys = self.keys
+                    else:
+                        keys = sorted(row.keys())
+
+                    results = []
+                    for k in keys:
+                        feature_vector = row[k]
+                        is_numerical = np.issubdtype(feature_vector.dtype, np.number)
+                        
+                        if normalize_numerical and is_numerical:
+                            mu = feature_vector.mean()
+                            sigma = feature_vector.std()
+                            if sigma != 0:
+                                feature_vector = (feature_vector - mu) / sigma
+                        
+                        results.append(feature_vector.T)
+                    inputs_embeds = np.vstack(results).T
+                    if not self.is_autoencoder:
+                        label = labler(participant_id,start,end)
+                        
+                    else:
+                        label = inputs_embeds.astype(np.float32)
+                        
+
+                    return {"inputs_embeds": inputs_embeds,
+                            "label": label,
+                            "id": data_id,
+                            "participant_id": participant_id,
+                            "end_date_str": str(end)}
+            
+                if not self.is_autoencoder:
+                    label_type = np.int_
+                else:
+                    label_type = np.float32
+
+                new_fields = [("inputs_embeds",np.float32,None,False),
+                            ("label",label_type,None,False),
+                            ("participant_id",np.str_,None,False),
+                            ("id",np.int32,None,False),
+                            ("end_date_str",np.str_,None,False)]
 
             self.transform = TransformSpec(_transform_row,removed_fields=fields,
                                                     edit_fields= new_fields)
-            
+                
             # Infer the shape of the data
             lengths = set()
             for k in self.keys:
@@ -403,7 +486,10 @@ class ActivityTask(Task):
             else: 
                 data_length = list(lengths)[0]
             
-            self.data_shape = (data_length,len(self.keys))
+            if double_encode:
+                self.data_shape = (data_length,len(self.keys)//2)
+            else:
+                self.data_shape = (data_length,len(self.keys))
         
         elif backend == "dynamic":
             self.data_shape = shape 
@@ -944,13 +1030,13 @@ class Autoencode(AutoencodeMixin, ActivityTask):
     def __init__(self,dataset_args={},**kwargs):
 
         self.keys = ['heart_rate',
-                     'missing_heart_rate',
-                     'missing_steps',
-                     'sleep_classic_0',
-                     'sleep_classic_1',
-                     'sleep_classic_2',
-                     'sleep_classic_3', 
-                     'steps']
+                'missing_heart_rate',
+                'missing_steps',
+                'sleep_classic_0',
+                'sleep_classic_1',
+                'sleep_classic_2',
+                'sleep_classic_3', 
+                'steps']
                      
         ActivityTask.__init__(self,td.AutoencodeDataset,dataset_args=dataset_args, **kwargs)
         AutoencodeMixin.__init__(self)
@@ -967,4 +1053,74 @@ class Autoencode(AutoencodeMixin, ActivityTask):
     
     def get_name(self):
         return "Autoencode"
+
+class PredictSameParticipant(ActivityTask,ClassificationMixin):
+    """Predict the whether a participant triggered the 
+       test on the last day of a range of data"""
+
+    def __init__(self,dataset_args={}, activity_level="minute", **kwargs):
+        self.keys = ['heart_rate_l',
+                     'missing_heart_rate_l',
+                     'missing_steps_l',
+                     'sleep_classic_0_l',
+                     'sleep_classic_1_l',
+                     'sleep_classic_2_l',
+                     'sleep_classic_3_l', 
+                     'steps_l',
+                     'heart_rate_r',
+                     'missing_heart_rate_r',
+                     'missing_steps_r',
+                     'sleep_classic_0_r',
+                     'sleep_classic_1_r',
+                     'sleep_classic_2_r',
+                     'sleep_classic_3_r', 
+                     'steps_r']
+        self.labler = SameParticipantLabler()
+        ActivityTask.__init__(self,td.PredictTriggerDataset,dataset_args=dataset_args,
+                               activity_level = activity_level, double_encode=True,
+                            **kwargs)
+
+        ClassificationMixin.__init__(self)
+        self.is_double_encoding = True
+
+    def get_name(self):
+        return "PredictSameParticipant"
     
+    def get_labler(self):
+        return self.labler
+
+
+
+class PredictSequential(ActivityTask,ClassificationMixin):
+    """Predict whether two days of data follow one another"""
+
+    def __init__(self,dataset_args={}, activity_level="minute", **kwargs):
+        self.keys = ['heart_rate_l',
+                     'missing_heart_rate_l',
+                     'missing_steps_l',
+                     'sleep_classic_0_l',
+                     'sleep_classic_1_l',
+                     'sleep_classic_2_l',
+                     'sleep_classic_3_l', 
+                     'steps_l',
+                     'heart_rate_r',
+                     'missing_heart_rate_r',
+                     'missing_steps_r',
+                     'sleep_classic_0_r',
+                     'sleep_classic_1_r',
+                     'sleep_classic_2_r',
+                     'sleep_classic_3_r', 
+                     'steps_r']
+        self.labler = SequentialLabler()
+        ActivityTask.__init__(self,td.PredictTriggerDataset,dataset_args=dataset_args,
+                               activity_level = activity_level, double_encode=True,
+                            **kwargs)
+
+        ClassificationMixin.__init__(self)
+        self.is_double_encoding = True
+
+    def get_name(self):
+        return "PredictSequential"
+    
+    def get_labler(self):
+        return self.labler

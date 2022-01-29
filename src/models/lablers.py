@@ -206,3 +206,22 @@ class ClauseLabler(object):
     def get_positive_keys(self):
         return set([(x[0], x[1].normalize()) for x in self.survey_lookup.keys()])
 
+
+class SameParticipantLabler(object):
+    def __init__(self):
+        return 
+
+    def __call__(self,participant_id_l,start_l,end_l,
+                      participant_id_r,start_r,end_r):
+        return int(participant_id_l == participant_id_r)
+
+class SequentialLabler(object):
+    def __init__(self):
+        return 
+
+    def __call__(self,participant_id_l,start_l,end_l,
+                      participant_id_r,start_r,end_r):
+        correct_date = (start_r - end_l).days == 0 
+        correct_pid = participant_id_l == participant_id_r
+        label = correct_date and correct_pid
+        return int(label)

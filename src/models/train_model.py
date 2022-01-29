@@ -23,6 +23,7 @@ getting evaluation metrics
 __docformat__ = 'reStructuredText'
 
 import logging
+from operator import mul
 
 import warnings
 import os
@@ -55,7 +56,7 @@ from dotenv import dotenv_values
 from src.models.autoencode import get_autoencoder_by_name, run_autoencoder
 from src.models.tasks import get_task_with_name, Autoencode
 from src.models.neural_baselines import create_neural_model
-from src.models.models import CNNToTransformerEncoder
+from src.models.models import CNNToTransformerEncoder, CNNToTransformerDoubleEncoder
 from src.models.trainer import FluTrainer
 from src.SAnD.core.model import SAnD
 from src.utils import (get_logger, load_dotenv, render_network_plot, set_gpus_automatically, 
@@ -292,6 +293,7 @@ def train_cnn_transformer(
                 log_steps=50,
                 train_mixin_batch_size=3,
                 pl_seed=2494,
+                multitask_daily_features=False,
                 downsample_negative_frac=None,
                 reload_dataloaders = 0, #to be passed to the pytorch lightning Trainer instance. Reload dataloaders every n epochs (default 0, don't reload)
                 early_stopping=False,
@@ -340,6 +342,7 @@ def train_cnn_transformer(
                                               only_with_lab_results = only_with_lab_results,
                                               datareader_ray_obj_ref=datareader_ray_obj_ref,
                                               backend=backend,
+                                              append_daily_features=multitask_daily_features,
                                               train_path=train_path,
                                               eval_path=eval_path,
                                               test_path=test_path)
@@ -374,6 +377,7 @@ def train_cnn_transformer(
                             train_mix_positives_back_in = train_mix_positives_back_in,
                             model_head=model_head,
                             no_bootstrap=no_bootstrap,
+                            multitask_daily_features=multitask_daily_features,
                             **model_specific_kwargs)
     if model_config:
         model_kwargs.update(model_config) 
@@ -389,8 +393,10 @@ def train_cnn_transformer(
 
     elif resume_model_from_ckpt:
             model = CNNToTransformerEncoder.load_from_checkpoint(resume_model_from_ckpt, 
-                                                                strict=False,
-                                                                **model_specific_kwargs)                                                          
+                                                                strict=False, **model_specific_kwargs)                                                          
+    
+    elif task.is_double_encoding:
+        model = CNNToTransformerDoubleEncoder(**model_kwargs)
     else:
         model = CNNToTransformerEncoder(**model_kwargs)
 

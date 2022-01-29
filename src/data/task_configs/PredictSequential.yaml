@@ -1,0 +1,7 @@
+task_name:
+  PredictSequential
+dataset_args:  
+  day_window_size: 4
+  max_missing_days_in_window: 2
+  shuffle: 1
+  split_date: 2020-02-10
