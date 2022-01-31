@@ -1,0 +1,10 @@
+task_name:
+  PredictSurveyClause
+dataset_args:  
+  day_window_size: 4
+  max_missing_days_in_window: 2
+  shuffle: 1
+  split_date: 2020-02-10
+  clause: "(symptom_severity__q_fatigue_2 > 0) | (symptom_severity__q_fatigue_3 > 0)"
+task_args:
+  keys: ["heart_rate","steps","sleep_classic_1","sleep_classic_2","sleep_classic_3"]
