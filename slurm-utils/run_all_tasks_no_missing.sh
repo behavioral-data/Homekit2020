@@ -4,11 +4,11 @@ TEST_PATH="/gscratch/bdata/mikeam/SeattleFluStudy/data/processed/split/audere_sp
 BASE_COMMAND="python src/__main__.py train-cnn-transformer --train_batch_size 700 --dropout_rate=0.4 --focal_gamma=1.7188155817156203 --learning_rate=5e-5 --n_epochs=50 --warmup_steps=20 --val_epochs 2 --model_config model_configs/small_embedding.yaml --train_path $TRAIN_PATH --eval_path $EVAL_PATH --test_path $TEST_PATH --early_stopping"
 
 TASKS=(
-    "PredictFluPos-MissingnessFlags"
-    "PredictFluSymptoms-MissingnessFlags"
-    "PredictSevereFever-MissingnessFlags"
-    "PredictCough-MissingnessFlags"
-    "PredictFatigue-MissingnessFlags"
+    "PredictFluPos-NoMissingnessFlags"
+    "PredictFluSymptoms-NoMissingnessFlags"
+    "PredictSevereFever-NoMissingnessFlags"
+    "PredictCough-NoMissingnessFlags"
+    "PredictFatigue-NoMissingnessFlags"
 )
 
 for task in ${TASKS[*]} 
