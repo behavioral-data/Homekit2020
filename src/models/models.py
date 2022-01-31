@@ -257,6 +257,8 @@ class CNNToTransformerEncoder(pl.LightningModule):
         self.learning_rate = learning_rate
         self.warmup_steps = warmup_steps
         self.input_dim = (n_timesteps,input_features)
+        self.num_labels = num_labels
+          
 
         self.input_embedding = CNNEncoder(input_features, n_timesteps=n_timesteps, kernel_sizes=kernel_sizes,
                                 out_channels=out_channels, stride_sizes=stride_sizes)
@@ -267,7 +269,9 @@ class CNNToTransformerEncoder(pl.LightningModule):
         else:
             self.d_model = input_features
             final_length = n_timesteps
-
+        
+        self.final_length = final_length
+        
         if self.input_embedding.final_output_length < 1:
             raise ValueError("CNN final output dim is <1 ")                                
         
@@ -652,11 +656,12 @@ class CNNToTransformerDoubleEncoder(CNNToTransformerEncoder):
     def __init__(self, *model_args, **model_specific_kwargs) -> None:
 
         super().__init__(*model_args, **model_specific_kwargs)
-
+        self.head = modules.ClassificationModule(self.d_model, self.final_length * 2
+                                                    , self.num_labels)
     def forward(self, inputs_embeds_l, inputs_embeds_r,labels):
         encoding_l = self.encode(inputs_embeds_l)
         encoding_r = self.encode(inputs_embeds_r)
-        concat = torch.mean(torch.stack([encoding_l,encoding_r]),axis=0)
+        concat = torch.concat([encoding_l,encoding_r],axis=1)
         preds = self.head(concat)
         loss = self.criterion(preds,labels)
         return  loss, preds
@@ -700,3 +705,27 @@ class CNNToTransformerDoubleEncoder(CNNToTransformerEncoder):
         
         self.eval_metrics.update(preds,y)
         return {"loss":loss, "preds": preds, "labels":y}
+    
+    def test_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[Tensor, Dict[str, Tensor]]]]:
+
+        x_l = batch["inputs_embeds_l"].type(torch.cuda.FloatTensor)
+        x_r = batch["inputs_embeds_r"].type(torch.cuda.FloatTensor)
+        y = batch["label"]
+        dates = batch["end_date_str_r"]
+        participant_ids = batch["participant_id_r"]
+
+        loss,preds = self.forward(x_l,x_r,y)
+
+        self.log("test/loss", loss.item(),on_step=True,sync_dist=True)
+
+        if self.multitask_daily_features:
+            y = y[:,0].type(torch.int64)
+
+        self.test_probs.append(preds.detach())
+        self.test_labels.append(y.detach())
+        self.test_participant_ids.append(participant_ids)
+        self.test_dates.append(dates)
+
+        self.test_metrics.update(preds,y)
+        return {"loss":loss, "preds": preds, "labels":y}
+        
