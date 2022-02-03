@@ -4,6 +4,8 @@ import multiprocessing
 import click
 import pandas as pd
 from distributed import Client
+from tqdm import tqdm
+tqdm.pandas()
 
 from src.utils import read_yaml, get_logger
 logger = get_logger(__name__)
@@ -31,9 +33,9 @@ def feature_generator_from_config_path(feature_config_path,return_meta=True):
         return gen_features
 
 @click.command()
-@click.argument("config_path", type= click.Path(exists=True))
-@click.argument("out_name", type=str)
-def main(config_path,out_name):
+@click.argument("config_path", type=click.Path(exists=True))
+@click.argument("out_path", type=click.Path(exists=False))
+def main(config_path,out_path):
     generator, meta = feature_generator_from_config_path(config_path)
     logger.info("Genrating features")
     logger.info(f"Features : {list(meta.keys())}")
@@ -41,8 +43,7 @@ def main(config_path,out_name):
     with Client(n_workers=min(n_cores,8), threads_per_worker=1) as client:
         raw = get_dask_df("processed_fitbit_minute_level_activity").compute()
 
-    features = raw.groupby(["participant_id","date"]).apply(generator)
-    out_path = get_features_path(out_name)
+    features = raw.groupby(["participant_id","date"]).progress_apply(generator)
     features.to_csv(out_path)
 
 if __name__ == "__main__":

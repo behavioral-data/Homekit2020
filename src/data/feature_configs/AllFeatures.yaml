@@ -1,0 +1,13 @@
+feature_names:
+  - resting_hr_95th_percentile
+  - resting_hr_50th_percentile
+  - resting_hr_std
+  - hr_awake_95th_percentile
+  - steps_moving_streak_95th_percentile
+  - steps_moving_streak_50th_percentile
+  - total_steps
+  - sleep_minutes
+  - in_bed_minutes
+  - missing_hr
+  - missing_steps
+  - missing_sleep

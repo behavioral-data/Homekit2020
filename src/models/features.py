@@ -44,6 +44,21 @@ def steps_moving_streak_50th_percentile(partition):
     return moving_spans.groupby(moving_spans).apply(len).quantile(0.50)
 
 
-    
+## Simple Features:
+def total_steps(partition):
+    return partition["steps"].sum()
 
+def sleep_minutes(partition):
+    return partition["sleep_classic_2"].sum()
 
+def in_bed_minutes(partition):
+    return partition["sleep_classic_1"].sum()
+
+def missing_hr(partition):
+    return (~partition["missing_heartrate"]).sum() == 0 
+
+def missing_steps(partition):
+    return (~partition["missing_steps"]).sum() == 0 
+
+def missing_sleep(partition):
+    return (~partition["sleep_classic_0"]).sum() == 0 
