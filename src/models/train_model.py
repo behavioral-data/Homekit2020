@@ -408,8 +408,6 @@ def train_cnn_transformer(
             param.requires_grad = False
         for param in model.input_embedding.parameters():
             param.requires_grad = False
-        for param in model.positional_encoding.parameters():
-            param.requires_grad = False
             
     if tune:
         output_dir = ray.tune.get_trial_dir()
