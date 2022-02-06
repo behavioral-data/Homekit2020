@@ -141,7 +141,7 @@ def train_xgboost(task_config,
     if test:
         test_pred = bst.predict(test)
         results = classification_eval(test_pred,test.get_label(),prefix="test/",bootstrap_cis=True) 
-        test_participant_dates = task.get_test_dataset().participant_dates
+        test_participant_dates = test.user_dates
         
         if not no_wandb:
             wandb.log(results)

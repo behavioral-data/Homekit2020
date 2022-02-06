@@ -43,6 +43,10 @@ def read_participant_dates(ctx, param, value) -> List[List]:
     if not value:
         return None
     df = pd.read_csv(value)
+    if not "date" in df:
+        # Try yaml:
+        return read_yaml(value)
+        
     df["date"] = pd.to_datetime(df["date"])
     return df[["participant_id","date"]].values.tolist()
 
