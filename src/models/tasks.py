@@ -301,7 +301,14 @@ class ActivityTask(Task):
                 else:
                     train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
             
-
+            #TODO: Should rename this variable after KDD
+            if isinstance(train_participant_dates[0],str):
+                # Provided a list of participant ids
+                train_participant_dates = activity_reader.get_all_participant_dates_for_participants_ids(train_participant_dates)
+                eval_participant_dates = activity_reader.get_all_participant_dates_for_participants_ids(eval_participant_dates)
+                if test_participant_dates:
+                    test_participant_dates = activity_reader.get_all_participant_dates_for_participants_ids(test_participant_dates)
+                    
             self.train_dataset = base_dataset(activity_reader, lab_results_reader,
                             participant_dates = train_participant_dates,
                             cache=cache,**dataset_args)

@@ -140,6 +140,10 @@ class DayLevelActivityReader(object):
 
         return all_possible_end_dates[mask].rename("dates")
 
+    def get_all_participant_dates_for_participants_ids(self,participant_ids):
+        good_keys = self.daily_data.index.get_level_values(0).intersection(participant_ids)
+        return self.daily_data.loc[good_keys].index.values
+
     def split_participant_dates(self,date=None,eval_frac=None, by_participant=False,
                                 limit_train_frac=False):
             """If random, split a fraction equal to random for eval,
