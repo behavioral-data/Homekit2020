@@ -19,11 +19,11 @@ def get_awake(partition):
 
 def resting_hr_95th_percentile(partition):
     rested = get_rested(partition)
-    return rested["heart_rate"].quantile(0.95)
+    return rested["heart_rate"].astype(int).quantile(0.95)
 
 def resting_hr_50th_percentile(partition):
     rested = get_rested(partition)
-    return rested["heart_rate"].quantile(0.5)
+    return rested["heart_rate"].astype(int).quantile(0.5)
 
 def resting_hr_std(partition):
     rested = get_rested(partition)
@@ -31,7 +31,7 @@ def resting_hr_std(partition):
 
 def hr_awake_95th_percentile(partition):
     awake = get_awake(partition)
-    return awake["heart_rate"].quantile(0.95)
+    return awake["heart_rate"].astype(int).quantile(0.95)
 
 def steps_moving_streak_95th_percentile(partition):
     not_moving = (partition["steps"] == 0 )
@@ -55,7 +55,7 @@ def in_bed_minutes(partition):
     return partition["sleep_classic_1"].sum()
 
 def missing_hr(partition):
-    return (~partition["missing_heartrate"]).sum() == 0 
+    return (~partition["missing_heart_rate"]).sum() == 0 
 
 def missing_steps(partition):
     return (~partition["missing_steps"]).sum() == 0 
