@@ -102,6 +102,7 @@ def train_xgboost(task_config,
                                             train_participant_dates=train_participant_dates,
                                             eval_participant_dates=eval_participant_dates,
                                             test_participant_dates=test_participant_dates,
+                                            **task_config["task_args"]
                                             )
 
     if not task.is_classification:
@@ -156,6 +157,7 @@ def train_xgboost(task_config,
             
             upload_pandas_df_to_wandb(wandb.run.id,"test_predictions",result_df,run=wandb.run)
 
-            bst.save_model(os.path.join(checkpoint_path, "best.json"))
-            
+            model_path = os.path.join(checkpoint_path, "best.json")
+            bst.save_model(model_path)
+            print(f"Saving model to {model_path}")
         print(results)

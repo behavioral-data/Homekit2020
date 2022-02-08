@@ -179,6 +179,7 @@ def train_longformer_command(*args,**kwargs):
 
 @click.command(cls=BaseCommand, name="train-xgboost")
 @click.option("--add_features_path", type = click.Path(dir_okay=False), default=None)
+@click.option("--data_location", type = click.Path(dir_okay=False), default=None)
 @click.option("--train_participant_dates", type = click.Path(dir_okay=False), callback=read_participant_dates, default=None)
 @click.option("--eval_participant_dates", type = click.Path(dir_okay=False), callback=read_participant_dates, default=None)
 @click.option("--test_participant_dates", type = click.Path(dir_okay=False), callback=read_participant_dates, default=None)
