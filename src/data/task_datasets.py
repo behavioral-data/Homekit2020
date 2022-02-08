@@ -102,7 +102,7 @@ class DayLevelActivityReader(object):
         
         # Need to add metadata to get to run only once
         valid_participant_dates = df.groupby("participant_id").apply(self.get_valid_dates)
-        self.daily_data = df.set_index(["participant_id","date"])
+        self.daily_data = df.set_index(["participant_id","date"]).dropna()
 
         self.participant_dates = list(valid_participant_dates.dropna().apply(pd.Series).stack().droplevel(-1).items())
         
@@ -141,7 +141,7 @@ class DayLevelActivityReader(object):
         return all_possible_end_dates[mask].rename("dates")
 
     def get_all_participant_dates_for_participants_ids(self,participant_ids):
-        good_keys = self.daily_data.index.get_level_values(0).intersection(participant_ids)
+        good_keys = self.daily_data.dropna().index.get_level_values(0).intersection(participant_ids)
         return self.daily_data.loc[good_keys].index.values
 
     def split_participant_dates(self,date=None,eval_frac=None, by_participant=False,
