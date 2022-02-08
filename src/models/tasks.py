@@ -318,7 +318,7 @@ class ActivityTask(Task):
                                 cache=cache,
                                 **dataset_args)
             
-            if test_participant_dates:
+            if not test_participant_dates is None:
                 self.test_dataset = base_dataset(activity_reader, lab_results_reader,
                                     participant_dates = test_participant_dates,
                                     cache=cache,
