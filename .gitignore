@@ -100,11 +100,13 @@ models/*
 results/*
 new_dataset/*
 flu/*
+kdd2022/*
 logs/*
 dask-worker-space/global.lock
 .gitignore
 dask-worker-space/purge.lock
 flustudy/
+klone-jobs/*
 
 
 #Slurm scripts
