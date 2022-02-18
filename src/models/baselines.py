@@ -61,6 +61,7 @@ def train_xgboost(task_config,
                 notes=None,
                 activity_level="day",
                 look_for_cached_datareader = False,
+                model_path=None,
                 add_features_path=None,
                 data_location=None,
                 limit_train_frac=None,
@@ -74,6 +75,7 @@ def train_xgboost(task_config,
                 train_participant_dates=None,
                 eval_participant_dates=None,
                 test_participant_dates=None,
+                predict_only=False,
                 **_):
 
     """ Baseline for classification tasks that uses daily aggregated features"""
@@ -102,29 +104,33 @@ def train_xgboost(task_config,
                                             train_participant_dates=train_participant_dates,
                                             eval_participant_dates=eval_participant_dates,
                                             test_participant_dates=test_participant_dates,
-                                            **task_config["task_args"]
+                                            **task_config.get("task_args",{})
                                             )
+    if not no_wandb:
+            wandb.init(project=CONFIG["WANDB_PROJECT"],
+                    entity=CONFIG["WANDB_USERNAME"],
+                    notes=notes)
+            wandb.log({"task":task.get_name()}) 
 
     if not task.is_classification:
         raise ValueError(f"{task_name} is not a classification task")
 
-    train = task.get_train_dataset().to_dmatrix()
-    eval = task.get_eval_dataset().to_dmatrix()
     if test_participant_dates:
         test = task.get_test_dataset().to_dmatrix()
     else:
         test = None
-    
-    param = {'max_depth': max_depth, 'eta': eta, 'objective': objective}
-    param['nthread'] = 4
-    param['eval_metric'] = 'auc'
-    evallist = [(eval, 'eval'), (train, 'train')]
-    callbacks = []
-    if not no_wandb:
-        wandb.init(project=CONFIG["WANDB_PROJECT"],
-                   entity=CONFIG["WANDB_USERNAME"],
-                   notes=notes)
-        wandb.log({"task":task.get_name()}) 
+        
+    if not model_path:
+        train = task.get_train_dataset().to_dmatrix()
+        eval = task.get_eval_dataset().to_dmatrix()
+       
+        
+        param = {'max_depth': max_depth, 'eta': eta, 'objective': objective}
+        param['nthread'] = 4
+        param['eval_metric'] = 'auc'
+        evallist = [(eval, 'eval'), (train, 'train')]
+        callbacks = []
+        
 
         if add_features_path:
             model_name = "XGBoost-ExpertFeatures"
@@ -132,8 +138,12 @@ def train_xgboost(task_config,
             model_name = "XGBoost"
         wandb.log({"model":model_name}) 
         callbacks.append(xgb_wandb_callback())
-    bst = xgb.train(param, train, 10, evallist, callbacks=callbacks)
-
+        bst = xgb.train(param, train, 10, evallist, callbacks=callbacks)
+    
+    else:
+        bst = xgb.Booster()
+        bst.load_model(model_path)
+    
     if not no_wandb:   
         xgb.plot_importance(bst)
         plt.tight_layout()

@@ -40,7 +40,8 @@ def main(ctx, ckpt_path, task_config, predict_path, wandb_mode="offline",
                                                          **task_config.get("task_args",{}))
     
     extra_args = {ctx.args[i][2:]: ctx.args[i+1] for i in range(0, len(ctx.args), 2)}
-    model = CNNToTransformerEncoder.load_from_checkpoint(ckpt_path,model_head="classification",
+    model = CNNToTransformerEncoder.load_from_checkpoint(ckpt_path,model_head="classification", strict=False,
+                                                        multitask_daily_features=False,
                                                         **extra_args)
     # local_rank = os.environ.get("LOCAL_RANK",0)
     # if local_rank == 0:

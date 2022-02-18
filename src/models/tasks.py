@@ -302,12 +302,12 @@ class ActivityTask(Task):
                     train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
             
             #TODO: Should rename this variable after KDD
-            if isinstance(train_participant_dates[0],str):
+            if train_participant_dates and isinstance(train_participant_dates[0],str):
                 # Provided a list of participant ids
                 train_participant_dates = activity_reader.get_all_participant_dates_for_participants_ids(train_participant_dates)
                 eval_participant_dates = activity_reader.get_all_participant_dates_for_participants_ids(eval_participant_dates)
-                if test_participant_dates:
-                    test_participant_dates = activity_reader.get_all_participant_dates_for_participants_ids(test_participant_dates)
+            if test_participant_dates and isinstance(test_participant_dates[0],str):
+                test_participant_dates = activity_reader.get_all_participant_dates_for_participants_ids(test_participant_dates)
                     
             self.train_dataset = base_dataset(activity_reader, lab_results_reader,
                             participant_dates = train_participant_dates,
@@ -461,6 +461,10 @@ class ActivityTask(Task):
                         
                     else:
                         label = inputs_embeds.astype(np.float32)
+
+                    if self.daily_features_labler:
+                        day_features = self.daily_features_labler(participant_id,start,end)
+                        label = np.concatenate([[label],day_features])
                         
 
                     return {"inputs_embeds": inputs_embeds,

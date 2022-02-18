@@ -349,7 +349,7 @@ class CNNToTransformerEncoder(pl.LightningModule):
     def forward(self, inputs_embeds,labels):
 
         if self.multitask_daily_features:
-            daily_features = labels[:,1:]
+            daily_features = labels[:,1:].type(torch.float32)
             labels = labels[:,0].type(torch.int64)
 
         encoding = self.encode(inputs_embeds)

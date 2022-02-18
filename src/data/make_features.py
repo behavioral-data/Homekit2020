@@ -46,7 +46,7 @@ def main(config_path,out_path, in_path=None):
             raw = get_dask_df("processed_fitbit_minute_level_activity").compute()
     else:
         raw = read_parquet_to_pandas(in_path)
-
+    raw["date"] = raw["timestamp"].dt.date
     features = raw.groupby(["participant_id","date"]).progress_apply(generator)
     features.dropna().to_csv(out_path)
 

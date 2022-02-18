@@ -27,6 +27,10 @@ def read_yaml(path):
     with open(path, 'r') as stream:
         return yaml.safe_load(stream)
 
+def write_yaml(data,path):
+    with open(path, 'w') as stream:
+        yaml.dump(data, stream) 
+
 def clean_datum_for_serialization(datum):
     for k, v in datum.items():
         if isinstance(v, (np.ndarray, np.generic)):
@@ -167,11 +171,11 @@ def binary_logits_to_pos_probs(arr,pos_index=-1):
     probs = softmax(arr,axis=1)
     return probs[:,pos_index]
 
-def download_table(run_id, table_name):
+def download_table(run_id, table_name,v="latest"):
     api = wandb.Api()
     entity = config["WANDB_USERNAME"]
     project = config["WANDB_PROJECT"]
-    artifact = api.artifact(f"{entity}/{project}/run-{run_id}-{table_name}:latest")
+    artifact = api.artifact(f"{entity}/{project}/run-{run_id}-{table_name}:{v}")
     table = artifact.get(table_name)
     print(table)
     return pd.DataFrame(table.data, columns=table.columns)

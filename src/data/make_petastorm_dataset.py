@@ -9,7 +9,9 @@ Transformations include scaling and grouping of data to time windows of specifie
 
 
 """
+from gc import callbacks
 from os import name
+from xml.etree.ElementInclude import include
 import numpy as np
 import click
 
@@ -30,6 +32,8 @@ from petastorm.etl.dataset_metadata import materialize_dataset
 from petastorm.unischema import dict_to_spark_row, Unischema, UnischemaField, _numpy_to_spark_mapping
 
 import pandas as pd
+
+from src.models.commands import validate_yaml_or_json
 
 MINS_IN_DAY = 60*24
 
@@ -79,7 +83,11 @@ def get_active_spark_context() -> SparkSession:
 
     return SparkSession.builder.getOrCreate()
 
-
+def filter_spark_dataframe_by_list(df, column_name, filter_list):
+    """ Returns subset of df where df[column_name] is in filter_list """
+    spark = SparkSession.builder.getOrCreate()
+    filter_df = spark.createDataFrame(filter_list, df.schema[column_name].dataType)
+    return df.join(filter_df, df[column_name] == filter_df["value"])
 
 @click.command()
 @click.argument("input_path", type=click.Path(file_okay=True,exists=True))
@@ -93,10 +101,12 @@ def get_active_spark_context() -> SparkSession:
 @click.option("--partition_by", type=str, multiple=False)
 @click.option("--no_scale", is_flag=True)
 @click.option("--rename", type=str, multiple=True)
+@click.option("--users", type=click.Path(exists=True), callback=validate_yaml_or_json)
+@click.option("--include_users", type=bool,is_flag=True)
 def main(input_path, output_path, max_missing_days_in_window, 
                     min_windows, day_window_size, parse_timestamp,
                     min_date=None, max_date=None, partition_by = None, rename=None,
-                    no_scale=False):
+                    no_scale=False, users=None, include_users=False):
 
                 
     if not "file://" in output_path:
@@ -139,7 +149,7 @@ def main(input_path, output_path, max_missing_days_in_window,
     rowgroup_size_mb = 256
 
     configuation_properties = [
-    ("spark.master","local[16]"),
+    ("spark.master","local[64]"),
     ("spark.ui.port","4050"),
     ("spark.executor.memory","32g"),
     ('spark.driver.memory',  '2000g'),
@@ -169,7 +179,13 @@ def main(input_path, output_path, max_missing_days_in_window,
                 # Need to do this because otherwise Spark will use the system's timezone info
                 df = df.withColumn('timestamp', f.from_unixtime(df.timestamp/pow(10,9)))
                 df = df.withColumn('timestamp', f.to_timestamp(df.timestamp))
-        
+        if users:
+            if include_users:
+                df = filter_spark_dataframe_by_list(df,"participant_id",users)
+            else:
+                user_mask = ~df.participant_id.isin(users)
+                df = df[user_mask]
+             
         # Scale the data
         if not no_scale:
             assemblers = [VectorAssembler(inputCols=[col], outputCol=col + "_vec") for col in dbl_cols]

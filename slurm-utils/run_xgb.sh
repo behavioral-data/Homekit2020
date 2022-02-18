@@ -5,9 +5,7 @@ BASE_COMMAND="python src/__main__.py train-xgboost  --train_participant_dates $T
 TASKS=(
     "PredictFluPos"
     "PredictFluSymptoms"
-    "PredictMobilityDifficulty"
-    "PredictWeekend"
-    "PredictSevereSymptoms"
+    "PredictSevereFever"
     "PredictCough"
     "PredictFatigue"
 )
