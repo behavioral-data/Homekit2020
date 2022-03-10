@@ -1,28 +1,62 @@
 SeattleFluStudy
 ==============================
 
-Code pertaining to the UW Behavioral Data Science Lab's contributions to the Seattle Flu Study. 
-
-
-How to contibute:
+## Getting Started
 ------------
+
+### Installation
 1. Clone this repo: `git clone https://github.com/behavioral-data/SeattleFluStudy.git`
 2. cd into it:  `cd SeattleFluStudy`
-3. Build the conda environment: `make create_environment`
-4. Follow the project structure outlined below.
+3. Build the conda environment: `make create_environment` (requires conda)
 
 
-Weights and Biases Integration:
-------------
+### Getting Our Data 
+Data for this study is closed. TODO writeup about how to get it and run a job
+
+### Running your first job 
+This project was designed to be run primarily from the command line (although it _could_ be run from a notebook, e.g. by importing `src` ). You can run a simple job with:
+``` python
+python src train-cnn-transformer --task_config src/data/task_configs/PredictFluPos.yaml --model_config model_configs/small_embedding.yaml --n_epochs 1 --val_epochs 1 --train_path $PWD/data/debug/petastorm_datasets/debug --eval_path $PWD/data/debug/petastorm_datasets/debug
+```
+###  [Optional] Weights and Biases Integration:
+
 By default this project integrates with Weights and Biases. If you would like to ignore this integration and use some other logging infrasturcture, run commands with the `--no_wandb` flag.
 
-In order to set up this integration, add the following to `.env`:
+In order to set up this integration, add the following to `.env` (and, of course, install wandb):
 ```
 WANDB_USERNAME=<your username>
 WANDB_PROJECT=<the name of the WandB project you want to save results to>
 ```
 
-Why is this project set up like this?
+## Basic Commands
+----
+### Training a model from sratch:
+Let's go back to that "first job":
+```bash
+python src train-cnn-transformer --task_config src/data/task_configs/PredictFluPos.yaml --model_config model_configs/small_embedding.yaml --n_epochs 1 --val_epochs 1 --train_path $PWD/data/debug/petastorm_datasets/debug --eval_path $PWD/data/debug/petastorm_datasets/debug
+```
+
+
+This command demonstrates the three core components of a training command:
+1. A task config (e.g. `src/data/task_configs/PredictFluPos.yaml`)
+2. A model config (e.g. `model_configs/small_embedding.yaml`)
+3. A dataset (e.g. `$PWD/data/debug/petastorm_datasets/debug`), used here for both training and validation
+
+### Loading a model:
+Let's say that you wanted to train a model on the same task as above, but rather than starting from scratch you wanted to use a pretrained model as your initialization. This is accomplished through the `--model_path` flag:
+
+```bash
+python src train-cnn-transformer --task_config src/data/task_configs/PredictFluPos.yaml --n_epochs 1 --val_epochs 1 --train_path $PWD/data/debug/petastorm_datasets/debug --eval_path $PWD/data/debug/petastorm_datasets/debug --model_path models/debug.ckpt```
+```
+
+### Evaluating a model:
+What if you want to evaluate an existing model on a task? The best way to do this is with the `predict.py` script. This script loads model weights from a checkpoint and runs the model on a given task. 
+```bash
+python src/models/predict.py models/debug.ckpt src/data/task_configs/PredictFluPos.yaml $PWD/data/debug/petastorm_datasets/debug
+```
+
+
+## Why is this project set up like this?
 ------------
 Great question. For a more satisfying answer than can be provided here, look to the [original cookiecutter page](https://drivendata.github.io/cookiecutter-data-science/): 
 
