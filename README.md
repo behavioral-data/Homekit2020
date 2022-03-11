@@ -15,8 +15,13 @@ Data for this study is closed. TODO writeup about how to get it and run a job
 
 ### Running your first job 
 This project was designed to be run primarily from the command line (although it _could_ be run from a notebook, e.g. by importing `src` ). You can run a simple job with:
-``` python
-python src train-cnn-transformer --task_config src/data/task_configs/PredictFluPos.yaml --model_config model_configs/small_embedding.yaml --n_epochs 1 --val_epochs 1 --train_path $PWD/data/debug/petastorm_datasets/debug --eval_path $PWD/data/debug/petastorm_datasets/debug
+``` bash
+python src train-cnn-transformer\
+        --task_config src/data/task_configs/PredictFluPos.yaml\
+        --model_config model_configs/small_embedding.yaml\
+        --n_epochs 1 --val_epochs 1\
+        --train_path $PWD/data/debug/petastorm_datasets/debug\
+        --eval_path $PWD/data/debug/petastorm_datasets/debug
 ```
 ###  [Optional] Weights and Biases Integration:
 
@@ -33,7 +38,12 @@ WANDB_PROJECT=<the name of the WandB project you want to save results to>
 ### Training a model from sratch:
 Let's go back to that "first job":
 ```bash
-python src train-cnn-transformer --task_config src/data/task_configs/PredictFluPos.yaml --model_config model_configs/small_embedding.yaml --n_epochs 1 --val_epochs 1 --train_path $PWD/data/debug/petastorm_datasets/debug --eval_path $PWD/data/debug/petastorm_datasets/debug
+python src train-cnn-transformer\
+        --task_config src/data/task_configs/PredictFluPos.yaml\
+        --model_config model_configs/small_embedding.yaml\
+        --n_epochs 1 --val_epochs 1\
+        --train_path $PWD/data/debug/petastorm_datasets/debug\
+        --eval_path $PWD/data/debug/petastorm_datasets/debug
 ```
 
 
@@ -46,7 +56,13 @@ This command demonstrates the three core components of a training command:
 Let's say that you wanted to train a model on the same task as above, but rather than starting from scratch you wanted to use a pretrained model as your initialization. This is accomplished through the `--model_path` flag:
 
 ```bash
-python src train-cnn-transformer --task_config src/data/task_configs/PredictFluPos.yaml --n_epochs 1 --val_epochs 1 --train_path $PWD/data/debug/petastorm_datasets/debug --eval_path $PWD/data/debug/petastorm_datasets/debug --model_path models/debug.ckpt```
+python src train-cnn-transformer\
+        --task_config src/data/task_configs/PredictFluPos.yaml\
+        --model_config model_configs/small_embedding.yaml\
+        --n_epochs 1 --val_epochs 1\
+        --train_path $PWD/data/debug/petastorm_datasets/debug\
+        --eval_path $PWD/data/debug/petastorm_datasets/debug\
+        --model_path models/debug.ckpt
 ```
 
 ### Evaluating a model:
