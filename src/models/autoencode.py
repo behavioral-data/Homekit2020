@@ -1,5 +1,5 @@
 from src.utils import get_logger
-from src.models.models import CNNEncoder
+from src.models.modules import CNNEncoder
 
 logger = get_logger(__name__)
 

@@ -56,7 +56,7 @@ from dotenv import dotenv_values
 from src.models.autoencode import get_autoencoder_by_name, run_autoencoder
 from src.models.tasks import get_task_with_name, Autoencode
 from src.models.neural_baselines import create_neural_model
-from src.models.models import CNNToTransformerEncoder, CNNToTransformerDoubleEncoder
+from src.models.models import CNNToTransformerClassifier
 from src.models.trainer import FluTrainer
 from src.SAnD.core.model import SAnD
 from src.utils import (get_logger, load_dotenv, render_network_plot, set_gpus_automatically, 
@@ -385,20 +385,17 @@ def train_cnn_transformer(
         if use_huggingface:
             model = load_model_from_huggingface_checkpoint(model_path)
         else:
-            model = CNNToTransformerEncoder.load_from_checkpoint(model_path, 
+            model = CNNToTransformerClassifier.load_from_checkpoint(model_path, 
                                                                 strict=False,
                                                                 **model_kwargs)
             # If using this arg we typically don't want to override a wandb run
             model.hparams.wandb_id = None
 
     elif resume_model_from_ckpt:
-            model = CNNToTransformerEncoder.load_from_checkpoint(resume_model_from_ckpt, 
+            model = CNNToTransformerClassifier.load_from_checkpoint(resume_model_from_ckpt, 
                                                                 strict=False, **model_specific_kwargs)                                                          
-    
-    elif task.is_double_encoding:
-        model = CNNToTransformerDoubleEncoder(**model_kwargs)
     else:
-        model = CNNToTransformerEncoder(**model_kwargs)
+        model = CNNToTransformerClassifier(**model_kwargs)
 
     if reset_cls_params and hasattr(model,"clf"):
         model.head.reset_parameters()
@@ -427,42 +424,16 @@ def train_cnn_transformer(
     else:
         report_to = ["wandb"]
 
-    if not use_huggingface:
-        pl_training_args = dict(
-            max_epochs=n_epochs,
-            check_val_every_n_epoch=val_epochs,
-            resume_from_checkpoint=resume_model_from_ckpt,
-            log_every_n_steps=log_steps
-        )
-        
-        run_pytorch_lightning(model,task,training_args=pl_training_args,backend=backend, 
-                                reload_dataloaders = reload_dataloaders,
-                                notes=notes, early_stopping=early_stopping)
-    else:
-        training_args = TrainingArguments(
-            output_dir=results_dir,          # output directorz
-            num_train_epochs=n_epochs,              # total # of training epochs
-            per_device_train_batch_size=train_batch_size,  # batch size per device during training
-            per_device_eval_batch_size=eval_batch_size,   # batch size for evaluation
-            warmup_steps=warmup_steps,                # number of warmup steps for learning rate scheduler
-            weight_decay=weight_decay,
-            learning_rate=learning_rate,               # strength of weight decay
-            logging_dir=logging_dir,
-            logging_steps=10,
-            do_eval=not no_eval_during_training,
-            dataloader_num_workers=0,
-            dataloader_pin_memory=True,
-            prediction_loss_only=False,
-            evaluation_strategy="no" if no_eval_during_training else "epoch",
-            report_to=report_to            # directory for storing logs
-        )
 
-        run_huggingface(model=model, base_trainer=FluTrainer,
-                    training_args=training_args,
-                    metrics = metrics, task=task,
-                    no_wandb=no_wandb, notes=notes,
-                    tune=tune)
-
+    pl_training_args = dict(
+        max_epochs=n_epochs,
+        check_val_every_n_epoch=val_epochs,
+        resume_from_checkpoint=resume_model_from_ckpt,
+        log_every_n_steps=log_steps
+    )
+    
+    run_pytorch_lightning(model,task,training_args=pl_training_args,backend=backend, 
+                            reload_dataloaders = reload_dataloaders)
 
 def train_sand( task_config=None,
                 task_name=None,
@@ -816,6 +787,9 @@ def run_huggingface(model,base_trainer,training_args,
     trainer.save_model(final_dir)
 
 
+def train():
+    ...
+
 def run_pytorch_lightning(model, task, 
                         training_args={},
                         no_wandb=False,
@@ -845,11 +819,11 @@ def run_pytorch_lightning(model, task,
                               resume = 'allow',
                               allow_val_change=True,
                               settings=wandb.Settings(start_method="fork"),
-                              id = model.hparams.wandb_id)   #id of run to resume from, None if model is not from checkpoint. Alternative: directly use id = model.logger.experiment.id, or try setting WANDB_RUN_ID env variable                
+                              id = model.wandb_id)   #id of run to resume from, None if model is not from checkpoint. Alternative: directly use id = model.logger.experiment.id, or try setting WANDB_RUN_ID env variable                
             logger.experiment.summary["task"] = task.get_name()
-            logger.experiment.summary["model"] = model.base_model_prefix
+            logger.experiment.summary["model"] = model.name
             logger.experiment.config.update(model.hparams, allow_val_change=True)
-            model.hparams.wandb_id = logger.experiment.id  
+            model.wandb_id = logger.experiment.id  
             #model_img_path = visualize_model(model, dir=wandb.run.dir)
             # wandb.log({"model_img": [wandb.Image(Image.open(model_img_path), caption="Model Graph")]})
             
