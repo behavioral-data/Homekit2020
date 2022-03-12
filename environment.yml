@@ -1,4 +1,4 @@
-name: seattleflustudy
+name: MobileSensingSuite
 channels:
   - conda-forge
   - defaults

@@ -7,7 +7,7 @@
 PROJECT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 BUCKET = [OPTIONAL] your-bucket-for-syncing-data (do not include 's3://')
 PROFILE = default
-PROJECT_NAME = seattleflustudy
+PROJECT_NAME = MobileSensingSuite
 PYTHON_INTERPRETER = python
 
 ifeq (,$(shell which conda))
