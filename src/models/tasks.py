@@ -42,10 +42,13 @@ import ray
 
 import numpy as np
 
+import pytorch_lightning as pl
+
 from petastorm import make_reader
 from petastorm.transform import TransformSpec
 from petastorm.etl.dataset_metadata import infer_or_load_unischema
 import petastorm.predicates  as peta_pred
+from petastorm.pytorch import DataLoader as PetastormDataLoader
 
 import src.data.task_datasets as td
 from src.models.eval import classification_eval, regression_eval
@@ -106,8 +109,9 @@ def stack_keys(keys,row, normalize_numerical=True):
         
     return np.vstack(results).T
 
-class Task(object):
+class Task(pl.LightningDataModule):
     def __init__(self):
+        super().__init__(self)
         for task_type in SUPPORTED_TASK_TYPES:
             setattr(self,f"is_{task_type}",False)
             
@@ -122,7 +126,7 @@ class Task(object):
     def get_train_dataset(self):
         return self.train_dataset
 
-    def get_eval_dataset(self):
+    def get_val_dataset(self):
         return self.eval_dataset
     
     def get_labler(self):
@@ -135,9 +139,9 @@ class Task(object):
                         collate_fn=default_data_collator
                     )
 
-    def get_eval_dataloader(self,batch_size=64):
+    def get_val_dataloader(self,batch_size=64):
         return DataLoader(
-                        self.get_eval_dataset(),
+                        self.get_val_dataset(),
                         batch_size=batch_size,
                         collate_fn=default_data_collator
                     )
@@ -209,19 +213,9 @@ class ActivityTask(Task):
         TODO: A ton of these arguments only work with the legacy dask backend.
         Likely we want to remove them.
         """
-    def __init__(self,base_dataset,dataset_args={},
-                     activity_level = "minute",
-                     look_for_cached_datareader=False,
-                     datareader_ray_obj_ref=None,
-                     cache=True,
-                     only_with_lab_results=False,
-                     limit_train_frac=None,
-                     train_path=None,
+    def __init__(self,train_path=None,
                      val_path=None,
                      test_path=None,
-                     train_participant_dates=None,
-                     eval_participant_dates=None,
-                     test_participant_dates=None,
                      downsample_negative_frac=None,
                      shape=None,
                      keys=None,
@@ -229,27 +223,17 @@ class ActivityTask(Task):
                      append_daily_features=False,
                      daily_features_path=None,
                      double_encode=False,
-                     backend="petastorm"):
-        
+                     backend="petastorm",
+                     batch_size: int = 600,
+                     activity_level="minute"):
+
+        #TODO does not currently support day level data   
         super(ActivityTask,self).__init__()
         
+        self.batch_size=batch_size
         self.backend = backend
         if keys:
             self.keys = keys
-            
-        # split_date = dataset_args.pop("split_date",None)
-        # eval_frac = dataset_args.pop("eval_frac",None)
-
-        # if not split_date and not eval_frac:
-        #     raise KeyError("Must provide some strategy for splitting train\
-        #                    and test. Either 'split_date' or 'eval_frac'")
-        
-        # min_date = dataset_args.get("min_date",None)
-        # max_date = dataset_args.get("max_date",None)
-
-        # day_window_size = dataset_args.get("day_window_size",None)
-        # max_missing_days_in_window = dataset_args.get("max_missing_days_in_window",None)
-        # data_location = dataset_args.get("data_location",None)
         lab_results_reader = td.LabResultsReader()
         
         self.daily_features_appended = append_daily_features
@@ -380,21 +364,19 @@ class ActivityTask(Task):
         
         elif backend == "dynamic":
             self.data_shape = shape 
-
+        
+        self.save_hyperparameters()
+        
     def get_description(self):
         return self.__doc__
 
-    def get_train_dataset(self):
-        """
-        In case the Petastorm framework is chosen, Returns a `Reader` instance
-        """
-        if self.backend in ["dask","dynamic"]:
-            return self.train_dataset
-        elif self.backend == "petastorm":
-            logger.info("Making train dataset reader")
-            return make_reader(self.train_url,transform_spec=self.transform,num_epochs=None)
-        else:
-            raise ValueError("Invalid backend")
+    def train_dataloader(self):
+        if self.train_url:
+            return PetastormDataLoader(make_reader(self.train_url,transform_spec=self.transform,
+                                                    predicate=self.predicate),
+                                    batch_size=self.batch_size)        
+
+
 
     def get_test_dataset(self):
         if self.backend in ["dask","dynamic"]:
@@ -405,14 +387,11 @@ class ActivityTask(Task):
         else:
             raise ValueError("Invalid backend")
 
-    def get_eval_dataset(self):
-        if self.backend in ["dask","dynamic"]:
-            return self.eval_dataset
-        elif self.backend == "petastorm":
-            logger.info("Making eval dataset reader")
-            return make_reader(self.val_url,transform_spec=self.transform)
-        else:
-            raise ValueError("Invalid backend")
+    def val_dataloader(self):
+        if self.val_url:
+            return PetastormDataLoader(make_reader(self.val_url,transform_spec=self.transform,
+                                                    predicate=self.predicate),
+                                        batch_size=self.batch_size)   
     
     def add_task_specific_args(parent_parser):
         parser = parent_parser.add_argument_group("Task")
@@ -480,12 +459,10 @@ class PredictDailyFeatures(ActivityTask, RegressionMixin):
        We validate on data after split_date, but before
        max_date, if provided"""
 
-    def __init__(self,dataset_args={}, activity_level = "minute",
+    def __init__(self, activity_level = "minute",
                 window_size=7,
                 **kwargs):
         self.labler = DailyFeaturesLabler(window_size=window_size)
-
-        dataset_args["labeler"] = self.labler
         self.keys = ['heart_rate',
                      'missing_heart_rate',
                      'missing_steps',
@@ -495,8 +472,7 @@ class PredictDailyFeatures(ActivityTask, RegressionMixin):
                      'sleep_classic_3', 
                      'steps']
 
-        ActivityTask.__init__(self,td.CustomLabler,dataset_args=dataset_args,
-                                 activity_level=activity_level,**kwargs)
+        ActivityTask.__init__(self, activity_level=activity_level,**kwargs)
         RegressionMixin.__init__(self)
         
 
@@ -512,13 +488,11 @@ class PredictFluPos(ActivityTask, ClassificationMixin):
        We validate on data after split_date, but before
        max_date, if provided"""
 
-    def __init__(self,dataset_args={}, activity_level = "minute",
+    def __init__(self, activity_level = "minute",
                 window_onset_max = 0, window_onset_min = 0,
                 **kwargs):
         self.labler = FluPosLabler(window_onset_max=window_onset_max,
                                    window_onset_min=window_onset_min)
-
-        dataset_args["labeler"] = self.labler
         self.keys = ['heart_rate',
                      'missing_heart_rate',
                      'missing_steps',
@@ -528,8 +502,7 @@ class PredictFluPos(ActivityTask, ClassificationMixin):
                      'sleep_classic_3', 
                      'steps']
 
-        ActivityTask.__init__(self,td.CustomLabler,dataset_args=dataset_args,
-                                 activity_level=activity_level,**kwargs)
+        ActivityTask.__init__(self, activity_level=activity_level, **kwargs)
         ClassificationMixin.__init__(self)
         
 
@@ -544,7 +517,7 @@ class PredictWeekend(ActivityTask, ClassificationMixin):
     """Predict the whether the associated data belongs to a 
        weekend"""
 
-    def __init__(self,dataset_args={}, activity_level = "minute", keys=None,
+    def __init__(self, activity_level = "minute", keys=None,
                 **kwargs):
         self.labler = DayOfWeekLabler([5,6])
         if keys:
@@ -559,10 +532,8 @@ class PredictWeekend(ActivityTask, ClassificationMixin):
                         'sleep_classic_3', 
                         'steps']
 
-        dataset_args["labeler"] = self.labler
 
-        ActivityTask.__init__(self,td.CustomLabler,dataset_args=dataset_args,
-                                 activity_level=activity_level,**kwargs)
+        ActivityTask.__init__(self, activity_level=activity_level,**kwargs)
         ClassificationMixin.__init__(self)
         
     def get_name(self):
@@ -606,10 +577,9 @@ class PredictEvidationILI(ActivityTask, ClassificationMixin):
                                          window_onset_min = self.window_onset_min,
                                          window_onset_max = self.window_onset_max)
 
-        dataset_args["labeler"] = self.labler
 
-        ActivityTask.__init__(self,td.CustomLabler,dataset_args=dataset_args,
-                                 activity_level=activity_level,**kwargs)
+
+        ActivityTask.__init__(self, activity_level=activity_level,**kwargs)
         ClassificationMixin.__init__(self)
         
 
@@ -632,11 +602,7 @@ class PredictCovidSmall(ActivityTask, ClassificationMixin):
     """
 
     def __init__(self, dates_path,
-                       dataset_args={}, 
                        activity_level = "minute",
-                       ili_types=[1,2,3],
-                       window_onset_min = -5,
-                       window_onset_max = 1,
                        **kwargs):
         
         self.keys =  ['heart_rate',
@@ -652,11 +618,7 @@ class PredictCovidSmall(ActivityTask, ClassificationMixin):
         self.filename = os.path.basename(dates_path)
 
         self.labler = CovidLabler(dates_path)
-
-        dataset_args["labeler"] = self.labler
-
-        ActivityTask.__init__(self,td.CustomLabler,dataset_args=dataset_args,
-                                 activity_level=activity_level,**kwargs)
+        ActivityTask.__init__(self, activity_level=activity_level,**kwargs)
         ClassificationMixin.__init__(self)
         
 
@@ -671,9 +633,8 @@ class PredictTrigger(ActivityTask,ClassificationMixin):
     """Predict the whether a participant triggered the 
        test on the last day of a range of data"""
 
-    def __init__(self,dataset_args={}, activity_level="minute", **kwargs):
-        ActivityTask.__init__(self,td.PredictTriggerDataset,dataset_args=dataset_args,
-                               activity_level = activity_level, **kwargs)
+    def __init__(self, activity_level="minute", **kwargs):
+        ActivityTask.__init__(self, activity_level = activity_level, **kwargs)
         ClassificationMixin.__init__(self)
         # self.is_classification = True
 
@@ -689,8 +650,8 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
     
        https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.query.html"""
 
-    def __init__(self,dataset_args={},activity_level="minute", **kwargs):
-        self.clause = dataset_args.pop("clause")
+    def __init__(self,clause, activity_level="minute", **kwargs):
+        self.clause = clause
         self.keys = ['heart_rate',
                 'missing_heart_rate',
                 'missing_steps',
@@ -701,9 +662,7 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
                 'steps']
         self.survey_responses = load_processed_table("daily_surveys_onehot").set_index("participant_id")
         self.labler = ClauseLabler(self.survey_responses,self.clause)
-        dataset_args["labeler"] = self.labler
-        ActivityTask.__init__(self, td.CustomLabler, dataset_args=dataset_args,
-                             activity_level=activity_level, **kwargs)
+        ActivityTask.__init__(self, activity_level=activity_level, **kwargs)
         ClassificationMixin.__init__(self)
     
     def get_labler(self):
@@ -794,9 +753,7 @@ class ClassifyObese(ActivityTask, ClassificationMixin):
                 'sleep_classic_3', 
                 'steps']
         dataset_args["labeler"] = self.labler
-        ActivityTask.__init__(self, td.CustomLabler, 
-                         dataset_args=dataset_args, 
-                         activity_level=activity_level, 
+        ActivityTask.__init__(self, activity_level=activity_level, 
                          **kwargs)
         ClassificationMixin.__init__(self)      
 
@@ -897,7 +854,7 @@ class AutoencodeEarlyDetection(AutoencodeMixin, EarlyDetection):
     """Autoencode minute level data"""
 
     def __init__(self,dataset_args={}):
-        EarlyDetection.__init__(self,td.AutoencodeDataset,dataset_args=dataset_args)
+        EarlyDetection.__init__(self, dataset_args=dataset_args)
         AutoencodeMixin.__init__(self)
         self.is_autoencoder = True
 
@@ -928,7 +885,7 @@ class Autoencode(AutoencodeMixin, ActivityTask):
                 'sleep_classic_3', 
                 'steps']
                      
-        ActivityTask.__init__(self,td.AutoencodeDataset,dataset_args=dataset_args, **kwargs)
+        ActivityTask.__init__(self, **kwargs)
         AutoencodeMixin.__init__(self)
         self.is_autoencoder = True
 
@@ -943,74 +900,3 @@ class Autoencode(AutoencodeMixin, ActivityTask):
     
     def get_name(self):
         return "Autoencode"
-
-class PredictSameParticipant(ActivityTask,ClassificationMixin):
-    """Predict the whether a participant triggered the 
-       test on the last day of a range of data"""
-
-    def __init__(self,dataset_args={}, activity_level="minute", **kwargs):
-        self.keys = ['heart_rate_l',
-                     'missing_heart_rate_l',
-                     'missing_steps_l',
-                     'sleep_classic_0_l',
-                     'sleep_classic_1_l',
-                     'sleep_classic_2_l',
-                     'sleep_classic_3_l', 
-                     'steps_l',
-                     'heart_rate_r',
-                     'missing_heart_rate_r',
-                     'missing_steps_r',
-                     'sleep_classic_0_r',
-                     'sleep_classic_1_r',
-                     'sleep_classic_2_r',
-                     'sleep_classic_3_r', 
-                     'steps_r']
-        self.labler = SameParticipantLabler()
-        ActivityTask.__init__(self,td.PredictTriggerDataset,dataset_args=dataset_args,
-                               activity_level = activity_level, double_encode=True,
-                            **kwargs)
-
-        ClassificationMixin.__init__(self)
-        self.is_double_encoding = True
-
-    def get_name(self):
-        return "PredictSameParticipant"
-    
-    def get_labler(self):
-        return self.labler
-
-
-
-class PredictSequential(ActivityTask,ClassificationMixin):
-    """Predict whether two days of data follow one another"""
-
-    def __init__(self,dataset_args={}, activity_level="minute", **kwargs):
-        self.keys = ['heart_rate_l',
-                     'missing_heart_rate_l',
-                     'missing_steps_l',
-                     'sleep_classic_0_l',
-                     'sleep_classic_1_l',
-                     'sleep_classic_2_l',
-                     'sleep_classic_3_l', 
-                     'steps_l',
-                     'heart_rate_r',
-                     'missing_heart_rate_r',
-                     'missing_steps_r',
-                     'sleep_classic_0_r',
-                     'sleep_classic_1_r',
-                     'sleep_classic_2_r',
-                     'sleep_classic_3_r', 
-                     'steps_r']
-        self.labler = SequentialLabler()
-        ActivityTask.__init__(self,td.PredictTriggerDataset,dataset_args=dataset_args,
-                               activity_level = activity_level, double_encode=True,
-                            **kwargs)
-
-        ClassificationMixin.__init__(self)
-        self.is_double_encoding = True
-
-    def get_name(self):
-        return "PredictSequential"
-    
-    def get_labler(self):
-        return self.labler

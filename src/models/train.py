@@ -97,32 +97,29 @@ def train(model_class,task_class, model_args={}, task_args={}, trainer_args={},
                         **model_args)
 
     callbacks = [LearningRateMonitor(logging_interval='step')]
-
-    if not no_wandb:
-        # Creating two wandb runs here?
+    
+    local_rank = os.environ.get("LOCAL_RANK",0)
+    if not no_wandb and local_rank == 0:
         import wandb
-        local_rank = os.environ.get("LOCAL_RANK",0)
-        if local_rank == 0:
-            logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],
-                              entity=CONFIG["WANDB_USERNAME"],
-                              notes=notes,
-                              log_model=True, #saves checkpoints to wandb as artifacts, might add overhead 
-                              reinit=True,
-                              resume = 'allow',
-                              allow_val_change=True,
-                              settings=wandb.Settings(start_method="fork"),
-                              id = model.wandb_id)   #id of run to resume from, None if model is not from checkpoint. Alternative: directly use id = model.logger.experiment.id, or try setting WANDB_RUN_ID env variable                
-            logger.experiment.summary["task"] = task.get_name()
-            logger.experiment.summary["model"] = model.name
-            logger.experiment.config.update(model.hparams, allow_val_change=True)
-            model.wandb_id = logger.experiment.id  
-            
-            
-        else:
-            logger = True
+        data_logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],
+                            entity=CONFIG["WANDB_USERNAME"],
+                            notes=notes,
+                            log_model=True, #saves checkpoints to wandb as artifacts, might add overhead 
+                            reinit=True,
+                            resume = 'allow',
+                            allow_val_change=True,
+                            settings=wandb.Settings(start_method="fork"),
+                            id = model.wandb_id)   #id of run to resume from, None if model is not from checkpoint. Alternative: directly use id = model.logger.experiment.id, or try setting WANDB_RUN_ID env variable                
+        
+        data_logger.experiment.summary["task"] = task.get_name()
+        data_logger.experiment.summary["model"] = model.name
+        data_logger.experiment.config.update(model.hparams, allow_val_change=True)
+        model.wandb_id = data_logger.experiment.id  
+    else:
+        data_logger = True            
     
     # Set up checkpoint criteria 
-    if val_path:
+    if task.val_path:
         if task.is_classification:
             checkpoint_metric = "eval/roc_auc"
             mode = "max"
@@ -158,25 +155,15 @@ def train(model_class,task_class, model_args={}, task_args={}, trainer_args={},
             terminate_on_nan=True,
             num_sanity_val_steps=0,
             profiler="simple",
-            gpus=-1
+            gpus=-1,
+            logger=data_logger
+
         )
     )
    
     trainer = Trainer(**trainer_args)
+    trainer.fit(model,task)
 
-    if task.val_url:
-        with PetastormDataLoader(make_reader(task.train_url,transform_spec=task.transform,
-                                predicate=task.predicate),
-                            batch_size=model.batch_size) as train_dataset:
-            with PetastormDataLoader(make_reader(task.val_url,transform_spec=task.transform,
-                                    predicate=task.predicate),
-                                batch_size=model.batch_size) as eval_dataset:
-                trainer.fit(model,train_dataset,eval_dataset)
-    else:
-        with PetastormDataLoader(make_reader(task.train_url,transform_spec=task.transform),
-                                batch_size=model.batch_size) as train_dataset:
-                trainer.fit(model, train_dataset, DataLoader([["dummy"]]))
-   
     logger.info(f"Best model score: {checkpoint_callback.best_model_score}")
     logger.info(f"Best model path: {checkpoint_callback.best_model_path}")
    
@@ -188,15 +175,18 @@ if __name__ == "__main__":
     # TODO: Optionally, pass a config. Config arguments could just go right into 
     parser.add_argument("--model_name", type=str, default="CNNToTransformerClassifier", 
                                         help= f"Supported models are: {list(NAME_MAP.keys())}")
-                                        
+    parser.add_argument("--model_config", type=str, default=None, 
+                           help= f"Supported models are: {list(NAME_MAP.keys())}")                                        
     
     # figure out which task to use
-    parser.add_argument("--task_name", type=str, default="PredictFluPos", 
-                                        help= f"Supported models are: {NAME_MAP.keys()}")
+    parser.add_argument("--task_name", type=str, default="PredictFluPos")
+    parser.add_argument("--task_config", type=str, default=None)
 
     # THIS LINE IS KEY TO PULL THE MODEL NAME
     temp_args, _ = parser.parse_known_args()
     model_name = temp_args.model_name
+    model_config = temp_args.model_name
+
     parser = add_model_args(parser,model_name)
 
     model_class = NAME_MAP[model_name]
