@@ -196,7 +196,7 @@ def verify_backend(backend,
             raise NotImplementedError("Petastorm relies on pre-processed data, so limit_train_frac can't be used yet")
         
         if data_location:
-            raise NotImplementedError("With Petastorm please use --train_path and --eval_path")
+            raise NotImplementedError("With Petastorm please use --train_path and --val_path")
         
         if datareader_ray_obj_ref:
             raise NotImplementedError("Petastorm backend does not support ray references")
@@ -217,7 +217,7 @@ class ActivityTask(Task):
                      only_with_lab_results=False,
                      limit_train_frac=None,
                      train_path=None,
-                     eval_path=None,
+                     val_path=None,
                      test_path=None,
                      train_participant_dates=None,
                      eval_participant_dates=None,
@@ -237,19 +237,19 @@ class ActivityTask(Task):
         if keys:
             self.keys = keys
             
-        split_date = dataset_args.pop("split_date",None)
-        eval_frac = dataset_args.pop("eval_frac",None)
+        # split_date = dataset_args.pop("split_date",None)
+        # eval_frac = dataset_args.pop("eval_frac",None)
 
-        if not split_date and not eval_frac:
-            raise KeyError("Must provide some strategy for splitting train\
-                           and test. Either 'split_date' or 'eval_frac'")
+        # if not split_date and not eval_frac:
+        #     raise KeyError("Must provide some strategy for splitting train\
+        #                    and test. Either 'split_date' or 'eval_frac'")
         
-        min_date = dataset_args.get("min_date",None)
-        max_date = dataset_args.get("max_date",None)
+        # min_date = dataset_args.get("min_date",None)
+        # max_date = dataset_args.get("max_date",None)
 
-        day_window_size = dataset_args.get("day_window_size",None)
-        max_missing_days_in_window = dataset_args.get("max_missing_days_in_window",None)
-        data_location = dataset_args.get("data_location",None)
+        # day_window_size = dataset_args.get("day_window_size",None)
+        # max_missing_days_in_window = dataset_args.get("max_missing_days_in_window",None)
+        # data_location = dataset_args.get("data_location",None)
         lab_results_reader = td.LabResultsReader()
         
         self.daily_features_appended = append_daily_features
@@ -258,76 +258,8 @@ class ActivityTask(Task):
         else:
             self.daily_features_labler = None
 
-        verify_backend(backend = backend,
-                       limit_train_frac = limit_train_frac,
-                       data_location = data_location,
-                       datareader_ray_obj_ref = datareader_ray_obj_ref,
-                       activity_level = activity_level)
-
-        #### Original backend loads data on the fly with Dask ####
-        if self.backend == 'dask':
-            if only_with_lab_results:
-                participant_ids = lab_results_reader.participant_ids
-            else: 
-                participant_ids = None
-
-            if activity_level == "minute":
-                base_activity_reader = td.MinuteLevelActivityReader
-            else:
-                base_activity_reader = td.DayLevelActivityReader
-
-            if dataset_args.get("is_cached") and look_for_cached_datareader:
-                activity_reader = load_cached_activity_reader(self.get_name(),
-                                                            dataset_args=dataset_args,
-                                                            fail_if_mismatched=True)
-            elif datareader_ray_obj_ref:
-                activity_reader = ray.get(datareader_ray_obj_ref)
-            else:
-                add_features_path = dataset_args.pop("add_features_path",None)
-                activity_reader = base_activity_reader(min_date = min_date,
-                                                    participant_ids=participant_ids,
-                                                    max_date = max_date,
-                                                    day_window_size=day_window_size,
-                                                    max_missing_days_in_window=max_missing_days_in_window,
-                                                    add_features_path=add_features_path,
-                                                    data_location = data_location)
-
-            if not (train_participant_dates and eval_participant_dates):
-                logger.warning("Participant dates not provided, conducting train test split from task config")
-
-                if limit_train_frac:
-                    train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac,
-                                                                                                            limit_train_frac=limit_train_frac, by_participant=True)
-                else:
-                    train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
-            
-            #TODO: Should rename this variable after KDD
-            if train_participant_dates and isinstance(train_participant_dates[0],str):
-                # Provided a list of participant ids
-                train_participant_dates = activity_reader.get_all_participant_dates_for_participants_ids(train_participant_dates)
-                eval_participant_dates = activity_reader.get_all_participant_dates_for_participants_ids(eval_participant_dates)
-            if test_participant_dates and isinstance(test_participant_dates[0],str):
-                test_participant_dates = activity_reader.get_all_participant_dates_for_participants_ids(test_participant_dates)
-                    
-            self.train_dataset = base_dataset(activity_reader, lab_results_reader,
-                            participant_dates = train_participant_dates,
-                            cache=cache,**dataset_args)
-
-            self.eval_dataset = base_dataset(activity_reader, lab_results_reader,
-                                participant_dates = eval_participant_dates,
-                                cache=cache,
-                                **dataset_args)
-            
-            if not test_participant_dates is None:
-                self.test_dataset = base_dataset(activity_reader, lab_results_reader,
-                                    participant_dates = test_participant_dates,
-                                    cache=cache,
-                                    **dataset_args) 
-            else:
-                self.test_dataset = None
-
         ### Newer backend relies on petastorm and is faster, but requires more pre-processing:
-        elif self.backend == "petastorm":
+        if self.backend == "petastorm":
             """
             Set the necessary attributes and adjust the time window of data  
             """
@@ -335,11 +267,11 @@ class ActivityTask(Task):
             #TODO ensure labler is serialized properly 
             
             self.train_path = train_path
-            self.eval_path = eval_path
+            self.val_path = val_path
             self.test_path = test_path
 
             self.train_url= url_from_path(train_path)
-            self.eval_url = url_from_path(eval_path)
+            self.val_url = url_from_path(val_path)
             self.test_url = url_from_path(test_path)
             
             labler = self.get_labler()
@@ -359,130 +291,74 @@ class ActivityTask(Task):
                                                             
                 
             infer_schema_path = None
-            for path in [self.train_path,self.eval_path,self.test_path]:
+            for path in [self.train_path,self.val_path,self.test_path]:
                 if path: 
                     infer_schema_path = path
                     break
 
             if not infer_schema_path:
-                raise ValueError("Must provide at least one of {}"
-                                "train_path, eval_path, or test_path"
-                                "to use the petatstorm backend")
-            
-            if double_encode:
-                schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
-                fields = [k for k in schema.fields.keys() if not k in ["participant_id_l","id_l", "participant_id_r","id_r"]]
+                raise ValueError("Must provide at least one of "
+                                "train_path, val_path, or test_path")
         
-                def _transform_row(row):
-                    labler = self.get_labler()
-                    start_l = pd.to_datetime(row.pop("start_l"))
-                    start_r = pd.to_datetime(row.pop("start_r"))
-
-                    #Because spark windows have and exclusive right boundary:
-                    end_l = pd.to_datetime(row.pop("end_l")) - pd.to_timedelta("1ms")
-                    end_r = pd.to_datetime(row.pop("end_r")) - pd.to_timedelta("1ms")
-
-                    participant_id_l = row.pop("participant_id_l")
-                    participant_id_r = row.pop("participant_id_r")
-                    
-                    data_id_r = row.pop("id_r")
-                    data_id_l = row.pop("id_l")
-                    
-
-                    if hasattr(self,"keys"):
-                        keys = self.keys
-                    else:
-                        keys = sorted(row.keys())
-                    
-                    l_keys = [k for k in keys if k[-2:] == "_l"]
-                    r_keys = [k for k in keys if k[-2:] == "_r"]
-
-                    inputs_embeds_l = stack_keys(l_keys,row,normalize_numerical=normalize_numerical)
-                    inputs_embeds_r = stack_keys(r_keys,row,normalize_numerical=normalize_numerical)
-
-                    if not self.is_autoencoder:
-                        label = labler(participant_id_l,start_l,end_l,
-                                       participant_id_r,start_r,end_r)                 
-
-                    return {"inputs_embeds_l": inputs_embeds_l,
-                            "inputs_embeds_r": inputs_embeds_r,
-                            "label": label,
-                            "id_l": data_id_l,
-                            "id_r": data_id_r,
-                            "participant_id_l": participant_id_l,
-                            "participant_id_r": participant_id_r,
-                            "end_date_str_l": str(end_l),
-                            "end_date_str_r": str(end_r)}
-                
             
-                label_type = np.float32
-                new_fields = []
-                for side in ["l","r"]:    
-                    new_fields+=   [(f"inputs_embeds_{side}",np.float32,None,False),
-                                    (f"participant_id_{side}",np.str_,None,False),
-                                    (f"id_{side}",np.int32,None,False),
-                                    (f"end_date_str_{side}",np.str_,None,False)]
-                new_fields +=[("label",label_type,None,False)]
-            
-            else: 
-                schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
-                fields = [k for k in schema.fields.keys() if not k in ["participant_id","id"]]
-                # features = [k for k in schema.fields.keys() if not k in ["start","end","participant_id"]]
-            
-                def _transform_row(row):
-                    labler = self.get_labler()
-                    start = pd.to_datetime(row.pop("start"))
-                    #Because spark windows have and exclusive right boundary:
-                    end = pd.to_datetime(row.pop("end")) - pd.to_timedelta("1ms")
+            schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
+            fields = [k for k in schema.fields.keys() if not k in ["participant_id","id"]]
+            # features = [k for k in schema.fields.keys() if not k in ["start","end","participant_id"]]
+        
+            def _transform_row(row):
+                labler = self.get_labler()
+                start = pd.to_datetime(row.pop("start"))
+                #Because spark windows have and exclusive right boundary:
+                end = pd.to_datetime(row.pop("end")) - pd.to_timedelta("1ms")
 
-                    participant_id = row.pop("participant_id")
-                    data_id = row.pop("id")
+                participant_id = row.pop("participant_id")
+                data_id = row.pop("id")
 
-                    if hasattr(self,"keys"):
-                        keys = self.keys
-                    else:
-                        keys = sorted(row.keys())
-
-                    results = []
-                    for k in keys:
-                        feature_vector = row[k]
-                        is_numerical = np.issubdtype(feature_vector.dtype, np.number)
-                        
-                        if normalize_numerical and is_numerical:
-                            mu = feature_vector.mean()
-                            sigma = feature_vector.std()
-                            if sigma != 0:
-                                feature_vector = (feature_vector - mu) / sigma
-                        
-                        results.append(feature_vector.T)
-                    inputs_embeds = np.vstack(results).T
-                    if not self.is_autoencoder:
-                        label = labler(participant_id,start,end)
-                        
-                    else:
-                        label = inputs_embeds.astype(np.float32)
-
-                    if self.daily_features_labler:
-                        day_features = self.daily_features_labler(participant_id,start,end)
-                        label = np.concatenate([[label],day_features])
-                        
-
-                    return {"inputs_embeds": inputs_embeds,
-                            "label": label,
-                            "id": data_id,
-                            "participant_id": participant_id,
-                            "end_date_str": str(end)}
-            
-                if not self.is_autoencoder:
-                    label_type = np.int_
+                if hasattr(self,"keys"):
+                    keys = self.keys
                 else:
-                    label_type = np.float32
+                    keys = sorted(row.keys())
 
-                new_fields = [("inputs_embeds",np.float32,None,False),
-                            ("label",label_type,None,False),
-                            ("participant_id",np.str_,None,False),
-                            ("id",np.int32,None,False),
-                            ("end_date_str",np.str_,None,False)]
+                results = []
+                for k in keys:
+                    feature_vector = row[k]
+                    is_numerical = np.issubdtype(feature_vector.dtype, np.number)
+                    
+                    if normalize_numerical and is_numerical:
+                        mu = feature_vector.mean()
+                        sigma = feature_vector.std()
+                        if sigma != 0:
+                            feature_vector = (feature_vector - mu) / sigma
+                    
+                    results.append(feature_vector.T)
+                inputs_embeds = np.vstack(results).T
+                if not self.is_autoencoder:
+                    label = labler(participant_id,start,end)
+                    
+                else:
+                    label = inputs_embeds.astype(np.float32)
+
+                if self.daily_features_labler:
+                    day_features = self.daily_features_labler(participant_id,start,end)
+                    label = np.concatenate([[label],day_features])
+                    
+
+                return {"inputs_embeds": inputs_embeds,
+                        "label": label,
+                        "id": data_id,
+                        "participant_id": participant_id,
+                        "end_date_str": str(end)}
+        
+            if not self.is_autoencoder:
+                label_type = np.int_
+            else:
+                label_type = np.float32
+
+            new_fields = [("inputs_embeds",np.float32,None,False),
+                        ("label",label_type,None,False),
+                        ("participant_id",np.str_,None,False),
+                        ("id",np.int32,None,False),
+                        ("end_date_str",np.str_,None,False)]
 
             self.transform = TransformSpec(_transform_row,removed_fields=fields,
                                                     edit_fields= new_fields)
@@ -534,10 +410,13 @@ class ActivityTask(Task):
             return self.eval_dataset
         elif self.backend == "petastorm":
             logger.info("Making eval dataset reader")
-            return make_reader(self.eval_url,transform_spec=self.transform)
+            return make_reader(self.val_url,transform_spec=self.transform)
         else:
             raise ValueError("Invalid backend")
     
+    def add_task_specific_args(parent_parser):
+        parser = parent_parser.add_argument_group("Task")
+        return parent_parser
     
 ################################################
 ########### TASKS IMPLEMENTATIONS ##############

@@ -2,8 +2,9 @@ import os
 import json 
 import logging
 import gc
-import wandb
+import argparse
 
+import wandb
 import pandas as pd
 import dotenv
 import yaml
@@ -179,3 +180,17 @@ def download_table(run_id, table_name,v="latest"):
     table = artifact.get(table_name)
     print(table)
     return pd.DataFrame(table.data, columns=table.columns)
+
+def argparse_to_groups(args,parser):
+    """
+    Takes argparse args and a parser and returns results seperated by groups.
+    Taken from:
+    https://stackoverflow.com/questions/38884513/python-argparse-how-can-i-get-namespace-objects-for-argument-groups-separately
+    """
+    arg_groups={}
+
+    for group in parser._action_groups:
+        group_dict={a.dest:getattr(args,a.dest,None) for a in group._group_actions}
+        arg_groups[group.title]=argparse.Namespace(**group_dict)
+    
+    return arg_groups

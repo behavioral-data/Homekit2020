@@ -19,9 +19,10 @@ from doctest import OutputChecker
 from errno import ENXIO
 from tokenize import Number
 
-from typing import Dict,  Union, Any, Optional
+from typing import Dict, Tuple,  Union, Any, Optional
 import os
 from random import sample
+from unicodedata import name
 
 import numpy as np
 import pytorch_lightning as pl
@@ -61,7 +62,6 @@ def get_config_from_locals(locals,model_type=None):
     model_specific_kwargs = locals.pop("model_specific_kwargs",{})
     locals.update(model_specific_kwargs)
     return Config(locals)
-
 
     
 class SensingModel(pl.LightningModule):
@@ -104,6 +104,17 @@ class SensingModel(pl.LightningModule):
         self.name = None
 
         self.save_hyperparameters()
+
+
+    @staticmethod
+    def add_model_specific_args(parser):
+        parser.add_argument("--learning_rate", type=float, default=1e-3,
+                            help="Base learning rate")
+        parser.add_argument("--warmup_steps", type=int, default=0,
+                            help="Steps until the learning rate reaches its maximum values")
+        parser.add_argument("--batch_size", type=int, default=800,
+                            help="Training batch size")                            
+        return parser
 
     def on_train_start(self) -> None:
         self.train_metrics.apply(lambda x: x.to(self.device))
@@ -246,10 +257,8 @@ class SensingModel(pl.LightningModule):
         loss,preds = self.forward(x,y)
         
         self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
-        
-        if self.multitask_daily_features:
-            y = y[:,0].type(torch.int64)
-            
+
+
         if self.is_classifier:
             self.val_preds.append(preds.detach())
             self.val_labels.append(y.detach())
@@ -261,7 +270,7 @@ class SensingModel(pl.LightningModule):
         #TODO: Add support for other optimizers and lr schedules?
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         def scheduler(step):  
-            return min(1., float(step + 1) / self.warmup_steps)
+            return min(1., float(step + 1) / max(self.warmup_steps,1))
 
         lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer,scheduler)
         
@@ -331,22 +340,24 @@ class RegressionModel(SensingModel,ModelTypeMixin):
         self.is_regressor = True
         
 class CNNToTransformerClassifier(ClassificationModel):
-    
-    def __init__(self, input_features : int, num_attention_heads : int, num_hidden_layers: int, n_timesteps : int, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
-                stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, learning_rate=1e-3, warmup_steps=100,
-                skip_cnn=False, positional_encoding = False, model_head="classification", **kwargs) -> None:
+    name = "CNNToTransformerClassifier"
 
-        super().__init__(warmup_steps=warmup_steps, learning_rate=learning_rate)
-        
-        self.name = "CNNTransformerClassifier"
+    def __init__(self, input_shape = Tuple[int],
+                num_attention_heads : int = 4, num_hidden_layers: int = 4,  
+                kernel_sizes=[5,3,1], out_channels = [256,128,64], 
+                stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, 
+                positional_encoding = False, **kwargs) -> None:
+
+        super().__init__(**kwargs)
+
+        n_timesteps, input_features = input_shape
         self.criterion = nn.CrossEntropyLoss()
         self.encoder = modules.CNNToTransformerEncoder(input_features, num_attention_heads, num_hidden_layers,
                                                       n_timesteps, kernel_sizes=kernel_sizes, out_channels=out_channels,
                                                       stride_sizes=stride_sizes, dropout_rate=dropout_rate, num_labels=num_labels,
-                                                      learning_rate=learning_rate, warmup_steps=warmup_steps, skip_cnn=skip_cnn,
                                                       positional_encoding=positional_encoding)
         
-        self.head = modules.RegressionModule(self.encoder.d_model, self.encoder.final_length, num_labels)
+        self.head = modules.ClassificationModule(self.encoder.d_model, self.encoder.final_length, num_labels)
         self.save_hyperparameters()
         
     def forward(self, inputs_embeds,labels):
@@ -355,4 +366,14 @@ class CNNToTransformerClassifier(ClassificationModel):
         loss =  self.criterion(preds,labels)
         return loss, preds
     
+    @staticmethod
+    def add_model_specific_args(parent_parser):
+        parser = parent_parser.add_argument_group(CNNToTransformerClassifier.name)
+        parser = SensingModel.add_model_specific_args(parser)
+        parser.add_argument("--dropout_rate", type=float, default=0.0,
+                            help="Model dropout rate")
+        parser.add_argument("--num_attention_heads", type=int, default=4)
+        parser.add_argument("--num_hidden_layers", type=int, default=4)
+
+        return parent_parser
         

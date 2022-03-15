@@ -98,14 +98,11 @@ class CNNEncoder(nn.Module):
 
 class CNNToTransformerEncoder(nn.Module):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
-                stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, learning_rate=1e-3, warmup_steps=100, skip_cnn=False, 
-                positional_encoding = False, **model_specific_kwargs) -> None:
+                stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, positional_encoding = False) -> None:
         
         
         super(CNNToTransformerEncoder, self).__init__()
 
-        self.learning_rate = learning_rate
-        self.warmup_steps = warmup_steps
         self.input_dim = (n_timesteps,input_features)
         self.num_labels = num_labels
           
@@ -113,12 +110,8 @@ class CNNToTransformerEncoder(nn.Module):
         self.input_embedding = CNNEncoder(input_features, n_timesteps=n_timesteps, kernel_sizes=kernel_sizes,
                                 out_channels=out_channels, stride_sizes=stride_sizes)
         
-        if not skip_cnn:
-            self.d_model = out_channels[-1]
-            final_length = self.input_embedding.final_output_length
-        else:
-            self.d_model = input_features
-            final_length = n_timesteps
+        self.d_model = out_channels[-1]
+        final_length = self.input_embedding.final_output_length
         
         self.final_length = final_length
         
@@ -141,20 +134,17 @@ class CNNToTransformerEncoder(nn.Module):
             self.name = "CNN"
             
         self.base_model_prefix = self.name
-        self.skip_cnn = skip_cnn
 
 
     def forward(self,inputs):
         return self.encode(inputs)
 
     def encode(self, inputs_embeds):
-        if not self.skip_cnn:
-            x = inputs_embeds.transpose(1, 2)
-            x = self.input_embedding(x)
-            x = x.transpose(1, 2)
-        else:
-            x = inputs_embeds
-        
+    
+        x = inputs_embeds.transpose(1, 2)
+        x = self.input_embedding(x)
+        x = x.transpose(1, 2)
+
         if self.positional_encoding:
             x = self.positional_encoding(x)
 
