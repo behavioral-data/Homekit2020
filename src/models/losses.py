@@ -1,12 +1,8 @@
 import sys
 
 import torch
-from torch._C import Value
 import torch.nn as nn 
 import torch.nn.functional as F
-from torch.nn import CrossEntropyLoss
-
-from transformers.utils.dummy_pt_objects import RobertaForQuestionAnswering
 
 def get_loss_with_name(name):
     try:

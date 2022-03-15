@@ -28,17 +28,11 @@ the datasets being used and evaluation metrics.
 __docformat__ = 'reStructuredText'
 
 import sys
-import datetime
-from unicodedata import normalize
-from warnings import WarningMessage
 import os
 
 from pyarrow.parquet import ParquetDataset
 from sklearn.utils import resample
 
-from torch.utils.data import DataLoader
-from transformers.data.data_collator import default_data_collator
-import ray
 
 import numpy as np
 
@@ -51,7 +45,7 @@ import petastorm.predicates  as peta_pred
 from petastorm.pytorch import DataLoader as PetastormDataLoader
 
 from src.models.eval import classification_eval, regression_eval
-from src.data.utils import load_processed_table, load_cached_activity_reader, url_from_path
+from src.data.utils import load_processed_table, url_from_path
 from src.utils import get_logger, read_yaml
 from src.models.lablers import (FluPosLabler, ClauseLabler, EvidationILILabler, 
                                  DayOfWeekLabler, AudereObeseLabler, DailyFeaturesLabler,
@@ -130,21 +124,7 @@ class Task(pl.LightningDataModule):
     
     def get_labler(self):
         return NotImplementedError
-    
-    def get_train_dataloader(self,batch_size=64):
-        return DataLoader(
-                        self.get_train_dataset(),
-                        batch_size=batch_size,
-                        collate_fn=default_data_collator
-                    )
-
-    def get_val_dataloader(self,batch_size=64):
-        return DataLoader(
-                        self.get_val_dataset(),
-                        batch_size=batch_size,
-                        collate_fn=default_data_collator
-                    )
-
+                    
 class TaskTypeMixin():
     def __init__(self):
         self.is_regression=False                            
