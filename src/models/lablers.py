@@ -6,7 +6,6 @@ from pandas.core.computation.eval import eval as _eval
 from pandas.core.indexes.datetimes import date_range
 from pyspark.sql.functions import window
 
-import src.data.task_datasets as td
 from src.data.utils import load_processed_table
 
 
@@ -14,11 +13,28 @@ def get_dates_around(date,days_minus,days_plus):
     return pd.date_range(date + pd.to_timedelta(days_minus,unit="D"),
                          date + pd.to_timedelta(days_plus,unit="D"))
 
+#TODO eventually deprecate this
+class LabResultsReader(object):
+    def __init__(self,min_date=None,
+                      max_date=None,
+                      pos_only=False):
+        results = load_processed_table("lab_results_with_triggerdate").set_index("participant_id")
+
+        if min_date:
+            results = results[results["timestamp"].dt.date >= pd.to_datetime(min_date)]
+        if max_date:
+            results = results[results["timestamp"].dt.date < pd.to_datetime(max_date)]
+
+        if pos_only:
+            results = results[results["result"] == 'Detected']
+        
+        self.results = results
+        self.participant_ids = self.results.index.unique().values
 class FluPosLabler(object):
     def __init__(self, window_onset_min = 0,
                        window_onset_max = 0):
 
-        self.lab_results_reader = td.LabResultsReader()
+        self.lab_results_reader = LabResultsReader()
         self.results = self.lab_results_reader.results
         self.results["_date"] = pd.to_datetime(self.results["trigger_datetime"].dt.date)
         self.results["is_pos"] = self.results["result"] == "Detected"

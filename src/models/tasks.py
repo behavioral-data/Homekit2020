@@ -50,7 +50,6 @@ from petastorm.etl.dataset_metadata import infer_or_load_unischema
 import petastorm.predicates  as peta_pred
 from petastorm.pytorch import DataLoader as PetastormDataLoader
 
-import src.data.task_datasets as td
 from src.models.eval import classification_eval, regression_eval
 from src.data.utils import load_processed_table, load_cached_activity_reader, url_from_path
 from src.utils import get_logger, read_yaml
@@ -229,7 +228,6 @@ class ActivityTask(Task):
         self.backend = backend
         if keys:
             self.keys = keys
-        lab_results_reader = td.LabResultsReader()
         
         self.daily_features_appended = append_daily_features
         if self.daily_features_appended:
