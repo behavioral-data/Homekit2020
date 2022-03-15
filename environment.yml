@@ -8,7 +8,6 @@ dependencies:
   - pip
   - click=7.1
   - Sphinx
-  - coverage=5.5
   - python-dotenv>=0.5.1
   - pyarrow=3.0.0
   - numpy=1.20
@@ -16,21 +15,15 @@ dependencies:
   - scikit-learn=0.24
   - scipy=1.6.0
   - pylint=2.7.2
-  - tensorflow-gpu
   - fastparquet
   - ipython
   - graphviz
-  - pathlib2
   - pytorch
-  - torchvision
-  - torchaudio
   - cudatoolkit=10.2
   - jupyter
-  - plotly
   - matplotlib
   - pytorch-lightning=1.4.9
   - torchmetrics>=0.5
-  - tensorboardx
   - pyspark=3.1.2
   - pip:
     - torchviz==0.0.2
@@ -38,9 +31,7 @@ dependencies:
     - wandb
     - xgboost==1.4.2
     - tensorboard==2.6.0
-    - ray[default]
     - tabulate==0.8.9
     - petastorm==0.11.3
-    - methodtools==0.4.5
 variables:
   USE_TORCH: 1

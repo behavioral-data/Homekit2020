@@ -3,10 +3,7 @@ import numpy as np
 from json import loads
 import xgboost as xgb
 from matplotlib import pyplot as plt
-from xgboost import callback
 import wandb
-import ray
-import pickle
 import os
 import pandas as pd
 
@@ -69,36 +66,22 @@ def train_xgboost(task_config,
                 day_window_size=7,
                 eta=1,
                 objective="binary:logistic",
-                task_ray_obj_ref=None,
-                only_with_lab_results=False,
-                cached_task_path=None,
                 train_participant_dates=None,
                 eval_participant_dates=None,
                 test_participant_dates=None,
-                predict_only=False,
                 **_):
 
     """ Baseline for classification tasks that uses daily aggregated features"""
     task_name = task_config["task_name"]
-    dataset_args = task_config["dataset_args"]
 
     logger.info(f"Training XGBoost on {task_name}")
-    if limit_train_frac:
-        dataset_args["limit_train_frac"] = limit_train_frac
-
-    if task_ray_obj_ref:
-        task = ray.get(task_ray_obj_ref)
-    elif cached_task_path:
-        logger.info(f"Loading pickle from {cached_task_path}...")
-        task = pickle.load(open(cached_task_path,"rb"))
-    else:
-        task = get_task_with_name(task_name)(activity_level="day",
-                                            limit_train_frac=limit_train_frac,
-                                            train_participant_dates=train_participant_dates,
-                                            eval_participant_dates=eval_participant_dates,
-                                            test_participant_dates=test_participant_dates,
-                                            **task_config.get("task_args",{})
-                                            )
+    task = get_task_with_name(task_name)(activity_level="day",
+                                        limit_train_frac=limit_train_frac,
+                                        train_participant_dates=train_participant_dates,
+                                        eval_participant_dates=eval_participant_dates,
+                                        test_participant_dates=test_participant_dates,
+                                        **task_config.get("task_args",{})
+                                        )
     if not no_wandb:
             wandb.init(project=CONFIG["WANDB_PROJECT"],
                     entity=CONFIG["WANDB_USERNAME"],

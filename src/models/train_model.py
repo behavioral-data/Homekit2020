@@ -40,14 +40,10 @@ from pytorch_lightning.profiler import AdvancedProfiler
 from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
 
 from torch.utils.data import DataLoader
-from argparse import ArgumentParser
 
 from petastorm import make_reader
 from petastorm.pytorch import DataLoader as PetastormDataLoader
 
-import ray
-from ray.tune.session import report
-from tensorflow.keras import callbacks
 import pickle
 
 from torch import tensor
@@ -249,21 +245,20 @@ def train_cnn_transformer(
         logger.info(f"Loading pickle from {cached_task_path}...")
         task = pickle.load(open(cached_task_path,"rb"))
 
-    elif task_ray_obj_ref:
-        task = ray.get(task_ray_obj_ref)
-    else:
-        task = get_task_with_name(task_name)( **task_args,
-                                              downsample_negative_frac=downsample_negative_frac,
-                                              dataset_args=dataset_args,
-                                              activity_level=activity_level,
-                                              look_for_cached_datareader=look_for_cached_datareader,
-                                              only_with_lab_results = only_with_lab_results,
-                                              datareader_ray_obj_ref=datareader_ray_obj_ref,
-                                              backend=backend,
-                                              append_daily_features=multitask_daily_features,
-                                              train_path=train_path,
-                                              eval_path=eval_path,
-                                              test_path=test_path)
+
+
+    task = get_task_with_name(task_name)( **task_args,
+                                            downsample_negative_frac=downsample_negative_frac,
+                                            dataset_args=dataset_args,
+                                            activity_level=activity_level,
+                                            look_for_cached_datareader=look_for_cached_datareader,
+                                            only_with_lab_results = only_with_lab_results,
+                                            datareader_ray_obj_ref=datareader_ray_obj_ref,
+                                            backend=backend,
+                                            append_daily_features=multitask_daily_features,
+                                            train_path=train_path,
+                                            eval_path=eval_path,
+                                            test_path=test_path)
     
 
     n_timesteps, n_features = task.data_shape  
@@ -323,9 +318,7 @@ def train_cnn_transformer(
             param.requires_grad = False
         for param in model.input_embedding.parameters():
             param.requires_grad = False
-            
-    if tune:
-        output_dir = ray.tune.get_trial_dir()
+
 
     if output_dir:
         results_dir = os.path.join(output_dir,"results")
