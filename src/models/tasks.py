@@ -207,12 +207,7 @@ def verify_backend(backend,
 
 
 class ActivityTask(Task):
-    """ Is inhereited by anything that operatres over the minute
-        level data
-        
-        TODO: A ton of these arguments only work with the legacy dask backend.
-        Likely we want to remove them.
-        """
+    """Base class for tasks in this project"""
     def __init__(self,train_path=None,
                      val_path=None,
                      test_path=None,
@@ -366,7 +361,7 @@ class ActivityTask(Task):
             self.data_shape = shape 
         
         self.save_hyperparameters()
-        
+
     def get_description(self):
         return self.__doc__
 
@@ -376,23 +371,17 @@ class ActivityTask(Task):
                                                     predicate=self.predicate),
                                     batch_size=self.batch_size)        
 
-
-
-    def get_test_dataset(self):
-        if self.backend in ["dask","dynamic"]:
-            return self.test_dataset
-        elif self.backend == "petastorm":
-            logger.info("Making test dataset reader")
-            return make_reader(self.test_url,transform_spec=self.transform)
-        else:
-            raise ValueError("Invalid backend")
-
     def val_dataloader(self):
         if self.val_url:
             return PetastormDataLoader(make_reader(self.val_url,transform_spec=self.transform,
                                                     predicate=self.predicate),
                                         batch_size=self.batch_size)   
-    
+    def test_dataloader(self):
+        if self.val_url:
+            return PetastormDataLoader(make_reader(self.test_url,transform_spec=self.transform,
+                                                    predicate=self.predicate),
+                                        batch_size=self.batch_size)   
+
     def add_task_specific_args(parent_parser):
         parser = parent_parser.add_argument_group("Task")
         return parent_parser
@@ -400,58 +389,6 @@ class ActivityTask(Task):
 ################################################
 ########### TASKS IMPLEMENTATIONS ##############
 ################################################
-
-
-class DummySquareOrSine(ActivityTask, ClassificationMixin):
-    """A dummy task to predict whether or not the total number of steps
-       on the first day of a window is >= the mean across the whole dataset"""
-    
-    def __init__(self,dataset_args={}, n = 10000, p = 0.1, **kwargs):
-        self.train_dataset = td.DummySquareOrSineHRDataset(n=n,p=p)
-        self.eval_dataset = td.DummySquareOrSineHRDataset(n=n,p=p)
-        self.data_shape = (4*24*60,1)
-        ActivityTask.__init__(self, td.ActivtyDataset, 
-                              shape = self.data_shape,
-                              dataset_args=dataset_args,
-                               **kwargs)
-        ClassificationMixin.__init__(self)
-        self.is_classification = True
-    
-    def evaluate_results(self,logits,labels,threshold=0.5):
-        return classification_eval(logits,labels,threshold=threshold)
-    
-    def get_name(self):
-        return "GeqMedianSteps"
-    
-    def get_huggingface_metrics(self,threshold=0.5):
-        def evaluator(pred):
-            labels = pred.label_ids
-            logits = pred.predictions
-            return self.evaluate_results(logits,labels,threshold=threshold)
-        return evaluator
-
-class GeqMeanSteps(ActivityTask, ClassificationMixin):
-    """A dummy task to predict whether or not the total number of steps
-       on the first day of a window is >= the mean across the whole dataset"""
-    
-    def __init__(self,dataset_args={}, **kwargs):
-        ActivityTask.__init__(self,td.ActivtyDataset,dataset_args=dataset_args, **kwargs)
-        ClassificationMixin.__init__(self)
-        self.is_classification = True
-    
-    def evaluate_results(self,logits,labels,threshold=0.5):
-        return classification_eval(logits,labels,threshold=threshold)
-    
-    def get_name(self):
-        return "GeqMedianSteps"
-    
-    def get_huggingface_metrics(self,threshold=0.5):
-        def evaluator(pred):
-            labels = pred.label_ids
-            logits = pred.predictions
-            return self.evaluate_results(logits,labels,threshold=threshold)
-        return evaluator
-
 
 class PredictDailyFeatures(ActivityTask, RegressionMixin):
     """Predict whether a participant was positive
@@ -674,73 +611,6 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
     def get_description(self):
         return self.__doc__
 
-
-class SingleWindowActivityTask(Task):
-    """Base class for tasks that make predictions about single windows of data
-       (e.g.) predicting a user's BMI."""
-    
-    def __init__(self,base_dataset,dataset_args={}, activity_level="minute",
-                window_selection="first",look_for_cached_datareader=False,
-                datareader_ray_obj_ref=None, **kwargs):
-        Task.__init__(self)
-        eval_frac = dataset_args.pop("eval_frac",None)
-        split_date = dataset_args.pop("split_date",None)
-
-        min_date = dataset_args.get("min_date",None)
-        max_date = dataset_args.get("max_date",None)
-        day_window_size = dataset_args.get("day_window_size",None)
-        max_missing_days_in_window = dataset_args.get("max_missing_days_in_window",None)
-
-        lab_results_reader = td.LabResultsReader()
-        participant_ids = lab_results_reader.participant_ids
-        data_location = dataset_args.pop("data_location",None)
-
-        if activity_level == "minute":
-            base_activity_reader = td.MinuteLevelActivityReader
-        else:
-            base_activity_reader = td.DayLevelActivityReader
-
-        if dataset_args.get("is_cached") and look_for_cached_datareader:
-            activity_reader = load_cached_activity_reader(self.get_name(),
-                                                          dataset_args=dataset_args,
-                                                          fail_if_mismatched=True)
-        elif datareader_ray_obj_ref:
-            raise NotImplementedError
-        else:
-            add_features_path = dataset_args.pop("add_features_path",None)
-            activity_reader = base_activity_reader(participant_ids=participant_ids,
-                                                           min_date = min_date,
-                                                           max_date = max_date,
-                                                           day_window_size=day_window_size,
-                                                           max_missing_days_in_window=max_missing_days_in_window,
-                                                           add_features_path=add_features_path,
-                                                           data_location=data_location)
-
-        train_participant_dates, eval_participant_dates = activity_reader.split_participant_dates(date=split_date,eval_frac=eval_frac)
-        
-        if window_selection == "first":
-            train_participant_dates = self.filter_participant_dates(train_participant_dates)
-            eval_participant_dates = self.filter_participant_dates(eval_participant_dates)
-    
-        else:
-            raise NotImplementedError
-
-        limit_train_frac = dataset_args.get("limit_train_frac",None)
-        if limit_train_frac:
-            train_participant_dates = train_participant_dates[:int(len(train_participant_dates)*limit_train_frac)]
-
-        self.train_dataset = base_dataset(activity_reader, lab_results_reader,
-                        participant_dates = train_participant_dates,**dataset_args)
-        self.eval_dataset = base_dataset(activity_reader, lab_results_reader,
-                        participant_dates = eval_participant_dates,**dataset_args)
-
-    def filter_participant_dates(self,participant_dates):
-        candidates = {}
-        for id, date in participant_dates:
-            if candidates.get(id,datetime.datetime.max) > date:
-                candidates[id] = date
-        return list(candidates.items())
-
 class ClassifyObese(ActivityTask, ClassificationMixin):
     def __init__(self, dataset_args, activity_level,**kwargs):
         self.labler = AudereObeseLabler()
@@ -762,114 +632,6 @@ class ClassifyObese(ActivityTask, ClassificationMixin):
     
     def get_name(self):
         return "ClassifyObese"
-
-class EarlyDetection(ActivityTask):
-    """Mimics the task used by Evidation Health"""
-
-    def __init__(self,base_dataset=td.EarlyDetectionDataset,dataset_args={},
-                      activity_level = "minute", look_for_cached_datareader=False):
-        eval_frac = dataset_args.pop("eval_frac",None)
-
-        if not eval_frac:
-            raise KeyError("Must provide an eval fraction for splitting train and test")
-        
-        min_date = dataset_args.pop("min_date",None)
-        max_date = dataset_args.pop("max_date",None)
-        day_window_size = dataset_args.pop("day_window_size",4)
-        window_pad = dataset_args.pop("window_pad",20)
-        data_location = dataset_args.pop("data_location",None)
-        max_missing_days_in_window = dataset_args.pop("max_missing_days_in_window",None)
-
-        lab_results_reader = td.LabResultsReader(pos_only=True)
-        participant_ids = lab_results_reader.participant_ids
-        
-
-        if activity_level == "minute":
-            base_activity_reader = td.MinuteLevelActivityReader
-        else:
-            base_activity_reader = td.DayLevelActivityReader
-            
-        if dataset_args.get("is_cached") and look_for_cached_datareader:
-            logger.info("Loading cached data reader...")
-            activity_reader = load_cached_activity_reader(self.get_name())
-        else:
-            add_features_path = dataset_args.pop("add_features_path",None)
-            activity_reader = base_activity_reader(participant_ids=participant_ids,
-                                                           min_date = min_date,
-                                                           max_date = max_date,
-                                                           day_window_size=day_window_size,
-                                                           max_missing_days_in_window=max_missing_days_in_window,
-                                                           add_features_path=add_features_path,
-                                                           data_location=data_location)
-
-
-        pos_dates = lab_results_reader.results
-        pos_dates["timestamp"] = pos_dates["trigger_datetime"].dt.floor("D")
-        delta = pd.to_timedelta(window_pad + day_window_size, unit = "days")
-        
-        label_date = list(pos_dates["timestamp"].items())
-        after  = list((pos_dates["timestamp"] + delta).items())
-        before  = list((pos_dates["timestamp"] -  delta).items())
-
-
-        orig_valid_dates = set(activity_reader.participant_dates)
-        new_valid_dates = list(set(label_date+after+before).intersection(orig_valid_dates))
-        
-        valid_participants = list(set([x[0] for x in new_valid_dates]))
-        n_valid_participants = len(valid_participants)
-        split_index = int((1-eval_frac) * n_valid_participants)
-
-        train_participants = valid_participants[:split_index]
-        eval_participants = valid_participants[split_index:]
-
-
-        train_participant_dates = [x for x in new_valid_dates if x[0] in train_participants]
-        eval_participant_dates = [x for x in new_valid_dates if x[0] in eval_participants]
-
-        limit_train_frac = dataset_args.get("limit_train_frac",None)
-        if limit_train_frac:
-            train_participant_dates = train_participant_dates[:int(len(train_participant_dates)*limit_train_frac)]
-
-        self.train_dataset = base_dataset(activity_reader, lab_results_reader,
-                        participant_dates = train_participant_dates,**dataset_args)
-        self.eval_dataset = base_dataset(activity_reader, lab_results_reader,
-                        participant_dates = eval_participant_dates,**dataset_args)
-        
-        self.is_classification = True
-    
-    def get_name(self):
-        return "EarlyDetection"
-    
-    def evaluate_results(self,logits,labels,threshold=0.5):
-        return classification_eval(logits,labels,threshold=threshold)
-
-    def get_huggingface_metrics(self,threshold=0.5):
-        def evaluator(pred):
-            labels = pred.label_ids
-            logits = pred.predictions
-            return self.evaluate_results(logits,labels,threshold=threshold)
-        return evaluator
-
-class AutoencodeEarlyDetection(AutoencodeMixin, EarlyDetection):
-    """Autoencode minute level data"""
-
-    def __init__(self,dataset_args={}):
-        EarlyDetection.__init__(self, dataset_args=dataset_args)
-        AutoencodeMixin.__init__(self)
-        self.is_autoencoder = True
-
-    def get_description(self):
-        return self.__doc__
-    
-    def get_train_dataset(self):
-        return self.train_dataset
-
-    def get_eval_dataset(self):
-        return self.eval_dataset
-    
-    def get_name(self):
-        return "Autoencode"
-    
 
 class Autoencode(AutoencodeMixin, ActivityTask):
     """Autoencode minute level data"""

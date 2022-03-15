@@ -16,8 +16,6 @@ dependencies:
   - pandas=1.2
   - scikit-learn=0.24
   - scipy=1.6.0
-  - dask=2021.02.0
-  - distributed=2021.02.0
   - pylint=2.7.2
   - tensorflow-gpu
   - fastparquet
@@ -30,7 +28,6 @@ dependencies:
   - cudatoolkit=10.2
   - jupyter
   - plotly
-  - dask-ml
   - matplotlib
   - pytorch-lightning=1.4.9
   - torchmetrics>=0.5

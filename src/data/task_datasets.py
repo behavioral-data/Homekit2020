@@ -7,15 +7,10 @@ import random
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
-from distributed import Client
-import dask
-from dask.diagnostics import ProgressBar
-import dask.dataframe as dd
+
 from scipy import signal
 
-from dask_ml.preprocessing import StandardScaler
 import xgboost as xgb
-dask.config.set({"distributed.comm.timeouts.connect": "60"})
 from sklearn.preprocessing import MinMaxScaler
 
 from sklearn.model_selection import train_test_split
@@ -24,7 +19,7 @@ from methodtools import lru_cache
 from src.utils import get_logger, read_yaml
 logger = get_logger(__name__)
 
-from src.data.utils import get_dask_df, load_processed_table
+from src.data.utils import load_processed_table
 from src.models.features import get_feature_with_name
 from tqdm import tqdm
 
@@ -47,15 +42,6 @@ def feature_generator_from_config_path(feature_config_path,return_meta=True):
         return gen_features, meta
     else:
         return gen_features
-
-def calculate_daily_features_with_dask(feature_config_path):
-    # Could almost certainly be improved with: https://docs.dask.org/en/latest/dataframe-groupby.html#aggregate
-    
-    feature_gen, meta  = feature_generator_from_config_path(feature_config_path)
-    dask_df = get_dask_df("processed_fitbit_minute_level_activity")
-    return dask_df.groupby(["participant_id","date"]).apply(feature_gen, result_type='expand', 
-                                                            meta=meta).compute()
-
 class DayLevelActivityReader(object):
     def __init__(self, min_date=None,
                        split_date=None,
@@ -171,133 +157,6 @@ class DayLevelActivityReader(object):
             else:
                 raise ValueError("If splitting, must either provide a date or fraction")
             return train, eval
-
-class MinuteLevelActivityReader(object):
-    def __init__(self, min_date=None,
-                       split_date=None,
-                       max_date=None,
-                       participant_ids=None,
-                       day_window_size=15,
-                       scaler=StandardScaler,
-                       max_missing_days_in_window=5,
-                       min_windows=1,
-                       data_location=None,
-                       **_):
-        
-        self.min_date = min_date
-        self.max_date = max_date
-        self.min_windows = min_windows
-        self.scaler = scaler
-        self.day_window_size = day_window_size
-        self.max_missing_days_in_window = max_missing_days_in_window
-        self.min_windows = min_windows
-        self.obs_per_day = 24*60
-
-        n_cores = multiprocessing.cpu_count()
-        pbar = ProgressBar()
-        pbar.register()
-        
-        #pylint:disable=unused-variable 
-        with Client(n_workers=min(n_cores,16)) as client:
-            dask_df = get_dask_df("processed_fitbit_minute_level_activity",
-                                    path = data_location)
-    
-            if not participant_ids is None:
-                dask_df = dask_df[dask_df["participant_id"].isin(participant_ids)] 
-
-            date_filters = []
-            filters = []
-
-            if min_date: 
-                min_datetime = pd.to_datetime(min_date)
-                date_filters.append(dask_df["timestamp"] >= min_datetime)
-            
-            if max_date:
-                max_datetime = pd.to_datetime(max_date)
-                date_filters.append(dask_df["timestamp"] < max_datetime)
-            
-            if date_filters:
-                filters = reduce(bit_and,date_filters)
-
-            if not len(filters) == 0:
-                dask_df = dask_df[filters]
-            
-            self.day_window_size = day_window_size
-            self.max_missing_days_in_window = max_missing_days_in_window
-            self.min_windows = min_windows
-            
-
-            valid_participant_dates = dask_df.groupby("participant_id").apply(self.get_valid_dates, meta=("dates",object))
-            
-            self.activity_data = dask_df
-        
-            logger.info("Using Dask to pre-process data:")
-            if self.scaler:
-                logger.info("Scaling Data...")
-                scale_model = self.scaler()
-                numeric = self.activity_data.select_dtypes(include=['float64'])
-                self.activity_data[list(numeric.columns.values)] = scale_model.fit_transform(numeric)
-
-            valid_participant_dates, self.activity_data = dask.compute(valid_participant_dates,self.activity_data)
-            logger.info("Setting index...")
-            self.activity_data = self.activity_data.set_index(["participant_id","timestamp"]).drop(columns=["date"])
-            self.participant_dates = list(valid_participant_dates.dropna().apply(pd.Series).stack().droplevel(-1).items())
-        
-       
-            
-        self.activity_data = self.activity_data.astype(np.float32)
-        if not self.activity_data.index.is_monotonic:
-            logger.info("Sorting Index...")
-            self.activity_data = self.activity_data.sort_index()
-            
-    def get_valid_dates(self, partition):
-        dates_with_data = pd.DatetimeIndex(partition[~partition["missing_heartrate"]]["timestamp"].dt.date.unique())
-        min_days_with_data = self.day_window_size - self.max_missing_days_in_window
-    
-        if len(dates_with_data) < min_days_with_data:
-            return 
-        min_date = dates_with_data.min()
-        max_date = dates_with_data.max()
-
-        all_possible_start_dates = pd.date_range(min_date,max_date-pd.Timedelta(days=self.day_window_size-1))
-        all_possible_end_dates = all_possible_start_dates + pd.Timedelta(days=self.day_window_size-1)
-
-        min_days_with_data = self.day_window_size - self.max_missing_days_in_window
-
-        mask = []
-        for a,b in zip(all_possible_start_dates, all_possible_end_dates):
-            has_enough_data = len(dates_with_data[(dates_with_data >= a) & (dates_with_data <= b) ] )>= min_days_with_data
-            mask.append(has_enough_data)
-
-        return all_possible_end_dates[mask].rename("dates")
-
-    def split_participant_dates(self,date=None,eval_frac=None, by_participant=False,
-                            limit_train_frac=False):
-        """If random, split a fraction equal to random for eval,
-            else, split participant dates to be before and after a given date"""
-
-        if eval_frac:
-            if by_participant:
-                ids = [x[0] for x in self.participant_dates]
-                all_ids = list(set(ids))
-                left_ids = set(all_ids[:int(len(all_ids)*eval_frac)])
-                if limit_train_frac:
-                    left_ids = left_ids[:int(limit_train_frac*len(left_ids))]
-
-                train = [x for x in self.participant_dates if x[0] in left_ids]
-                eval = [x for x in self.participant_dates if not x[0] in left_ids]
-            else:
-                train,eval = train_test_split(self.participant_dates,test_size=eval_frac)
-                train = train[:int(limit_train_frac*len(train))]
-        elif date:
-            if limit_train_frac:
-                raise NotImplementedError
-            train = [x for x in self.participant_dates if x[1] <= pd.to_datetime(date) ]
-            eval = [x for x in self.participant_dates if x[1] > pd.to_datetime(date) ]
-        else:
-            raise ValueError("If splitting, must either provide a date or fraction")
-        return train, eval
-
 class LabResultsReader(object):
     def __init__(self,min_date=None,
                       max_date=None,
@@ -645,12 +504,4 @@ def sinu_position_encoding(n_position, d_pos_vec):
     
     return position_enc
 
-if __name__ == "__main__":
-    
-    lab_results_reader = LabResultsReader()
-    participant_ids = lab_results_reader.participant_ids
-    minute_level_reader = MinuteLevelActivityReader(participant_ids=participant_ids)
-
-    dataset = ActivtyDataset(minute_level_reader, lab_results_reader,
-                                        participant_dates = minute_level_reader.participant_dates)
 

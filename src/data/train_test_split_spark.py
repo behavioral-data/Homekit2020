@@ -2,7 +2,6 @@ import glob
 import os
 
 import click
-import dask
 
 import pandas as pd
 import numpy as np
@@ -18,9 +17,6 @@ from pyspark.sql.window import Window
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import StandardScaler, VectorAssembler
 from pyspark import SparkContext
-
-# from src.models.commands import validate_yaml_or_json
-# from src.data.utils import get_dask_df, write_pandas_to_parquet, load_processed_table, read_parquet_to_pandas
 
 # TODO Maybe want to support loading this from a file
 # although this hardcoded config works pretty well for

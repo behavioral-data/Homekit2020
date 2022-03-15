@@ -8,18 +8,11 @@ import os
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from distributed import client
-from distributed.utils import cli_keywords
-
-from src.data.utils import get_dask_df, process_minute_level, process_minute_level_pandas
+from src.data.utils import  process_minute_level_pandas
 from src.utils import get_logger
 logger = get_logger(__name__)
 
 import click
-
-import dask.dataframe as dd
-import dask
-from dask.distributed import Client, LocalCluster
 from tqdm import tqdm
 
 import os
@@ -28,44 +21,6 @@ import numpy as np
 import pandas as pd
 
 import time
-
-
-def explode_str_column_dask(df: dd, target_col: str,
-                   freq: str = "min", dur: str = "1D",
-                   sep_char: str = " ", date_col: str = "dt",
-                   dtype: str  = "Int32", participant_col: str = "id_participant_external",
-                   rename_participant_id_column: str = "participant_id",
-                   rename_target_column: Optional[str] = None,
-                   start_col: Optional[str] = None,
-                   dur_col: Optional[str] = None) -> dict:
-    
-    df["timestamp"] = df.apply(get_new_index,target_column = target_col,
-                                    start_col=start_col,
-                                    dur_col=dur_col,
-                                    freq=freq,
-                                    dur=dur,
-                                    axis=1,
-                                    date_col=date_col,
-                                    meta="datetime64")
-
-
-    # mapper = lambda x: str_col_to_list(x, sep_char=sep_char, default_len=default_len)                                        
-    df["val"] = df[target_col].str.split(sep_char)
-    df = df[["timestamp","val"]].explode(["timestamp","val"])
-    # timestamps = df["timestamp"].compute()
-    # pd_df = df.compute()
-    # # print(timestamps.value_counts().sort_values(ascending=False))
-    # # assert  timestamps.is_unique
-    # assert len(pd_df.drop_duplicates(subset=["timestamp",participant_col])) == len(pd_df)
-    # Need to convert to float first to handle NaN: 
-    # https://stackoverflow.com/questions/39173813/pandas-convert-dtype-object-to-int
-    df["val"] = dd.to_numeric(df["val"]).astype(dtype)
-    
-    val_col_name = rename_target_column if rename_target_column else target_col
-
-    df = df.rename(columns={"val":val_col_name})
-    df.index = df.index.rename(rename_participant_id_column)
-    return df
 
 def explode_str_column(df: pd.DataFrame, target_col: str,
                    freq: str = "min", dur: str = "1D",
@@ -110,7 +65,6 @@ def explode_str_column(df: pd.DataFrame, target_col: str,
     df = df.set_index("timestamp").sort_index()
     return df
     
-
 def get_new_index(item: dict, target_column: str,
                    freq: str = "min", dur: str = "1D",
                    sep_char: str = " ", date_col: str = "dt",
@@ -130,9 +84,6 @@ def get_new_index(item: dict, target_column: str,
 
 CHUNKSIZE="1GB"
 PARTITION_SIZE="1GB"
-def read_raw_dask(path):
-        df = dd.from_pandas(read_raw_pandas(path),npartitions=128)#.set_index("id_participant_external")
-        return df.persist()
 
 def read_raw_pandas(path,set_dtypes=None):
     logger.info("Reading...")

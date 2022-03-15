@@ -83,10 +83,6 @@ def train_xgboost(task_config,
     dataset_args = task_config["dataset_args"]
 
     logger.info(f"Training XGBoost on {task_name}")
-    dataset_args["day_window_size"] = day_window_size
-    dataset_args["add_features_path"] = add_features_path
-    dataset_args["data_location"] = data_location
-    dataset_args["data_location"] = data_location
     if limit_train_frac:
         dataset_args["limit_train_frac"] = limit_train_frac
 
@@ -96,10 +92,7 @@ def train_xgboost(task_config,
         logger.info(f"Loading pickle from {cached_task_path}...")
         task = pickle.load(open(cached_task_path,"rb"))
     else:
-        task = get_task_with_name(task_name)(dataset_args=dataset_args,
-                                            only_with_lab_results=only_with_lab_results,
-                                            activity_level="day",
-                                            backend="dask",
+        task = get_task_with_name(task_name)(activity_level="day",
                                             limit_train_frac=limit_train_frac,
                                             train_participant_dates=train_participant_dates,
                                             eval_participant_dates=eval_participant_dates,
