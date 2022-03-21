@@ -30,10 +30,10 @@ import torch
 import torch.nn as nn
 import pandas as pd
 
-from petastorm.pytorch import BatchedDataLoader
-from petastorm.reader import Reader
 
 from pytorch_lightning.loggers.wandb import WandbLogger
+from pytorch_lightning.utilities.cli import MODEL_REGISTRY
+
 import torchmetrics
 
 from src.models.losses import build_loss_fn
@@ -338,18 +338,19 @@ class RegressionModel(SensingModel,ModelTypeMixin):
     def __init__(self,**kwargs) -> None:
         SensingModel.__init__(self,TorchMetricRegression,**kwargs)
         self.is_regressor = True
-        
-class CNNToTransformerClassifier(ClassificationModel):
-    name = "CNNToTransformerClassifier"
 
-    def __init__(self, input_shape = Tuple[int],
+@MODEL_REGISTRY       
+class CNNToTransformerClassifier(ClassificationModel):
+   
+
+    def __init__(self, input_shape : Tuple[int, ...],
                 num_attention_heads : int = 4, num_hidden_layers: int = 4,  
                 kernel_sizes=[5,3,1], out_channels = [256,128,64], 
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, 
                 positional_encoding = False, **kwargs) -> None:
 
         super().__init__(**kwargs)
-
+        self.name = "CNNToTransformerClassifier"
         n_timesteps, input_features = input_shape
         self.criterion = nn.CrossEntropyLoss()
         self.encoder = modules.CNNToTransformerEncoder(input_features, num_attention_heads, num_hidden_layers,
@@ -366,14 +367,14 @@ class CNNToTransformerClassifier(ClassificationModel):
         loss =  self.criterion(preds,labels)
         return loss, preds
     
-    @staticmethod
-    def add_model_specific_args(parent_parser):
-        parser = parent_parser.add_argument_group(CNNToTransformerClassifier.name)
-        parser = SensingModel.add_model_specific_args(parser)
-        parser.add_argument("--dropout_rate", type=float, default=0.0,
-                            help="Model dropout rate")
-        parser.add_argument("--num_attention_heads", type=int, default=4)
-        parser.add_argument("--num_hidden_layers", type=int, default=4)
+    # @staticmethod
+    # def add_model_specific_args(parent_parser):
+    #     parser = parent_parser.add_argument_group(CNNToTransformerClassifier.name)
+    #     parser = SensingModel.add_model_specific_args(parser)
+    #     parser.add_argument("--dropout_rate", type=float, default=0.0,
+    #                         help="Model dropout rate")
+    #     parser.add_argument("--num_attention_heads", type=int, default=4)
+    #     parser.add_argument("--num_hidden_layers", type=int, default=4)
 
-        return parent_parser
+    #     return parent_parser
         

@@ -22,9 +22,10 @@ dependencies:
   - cudatoolkit=10.2
   - jupyter
   - matplotlib
-  - pytorch-lightning=1.4.9
+  - pytorch-lightning[extra]
   - torchmetrics>=0.5
   - pyspark=3.1.2
+  - jsonargparse[signatures]
   - pip:
     - torchviz==0.0.2
     - pyyaml==5.4.1

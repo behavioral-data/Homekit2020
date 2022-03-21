@@ -9,9 +9,7 @@ import pandas as pd
 import dotenv
 import yaml
 import numpy as np
-from PIL import Image
 import torch
-import pynvml
 from torchviz import make_dot
 import subprocess
 from scipy.special import softmax
@@ -72,11 +70,6 @@ def render_network_plot(var,dir,filename="model",params=None):
     graph.format = "png"
     return graph.render(filename=filename,directory=dir)
 
-def get_gpu_memory(gpu_index):
-    pynvml.nvmlInit()
-    handle = pynvml.nvmlDeviceGetHandleByIndex(int(gpu_index))
-    mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-    return mem_info.used
 
 def get_unused_gpus():
     result=subprocess.getoutput("nvidia-smi -q -d PIDS |grep -A4 GPU | grep Processes").split("\n")

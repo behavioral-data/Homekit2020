@@ -29,6 +29,7 @@ __docformat__ = 'reStructuredText'
 
 import sys
 import os
+from typing import Any, List, Optional, Tuple
 
 from pyarrow.parquet import ParquetDataset
 from sklearn.utils import resample
@@ -44,6 +45,9 @@ from petastorm.etl.dataset_metadata import infer_or_load_unischema
 import petastorm.predicates  as peta_pred
 from petastorm.pytorch import DataLoader as PetastormDataLoader
 
+
+from pytorch_lightning.utilities.cli import DATAMODULE_REGISTRY
+
 from src.models.eval import classification_eval, regression_eval
 from src.data.utils import load_processed_table, url_from_path
 from src.utils import get_logger, read_yaml
@@ -54,6 +58,15 @@ from src.models.lablers import (FluPosLabler, ClauseLabler, EvidationILILabler,
 logger = get_logger(__name__)
 
 import pandas as pd
+
+DEFAULT_FIELDS = ['heart_rate',
+                     'missing_heart_rate',
+                     'missing_steps',
+                     'sleep_classic_0',
+                     'sleep_classic_1',
+                     'sleep_classic_2',
+                     'sleep_classic_3', 
+                     'steps']
 
 
 ###################################################
@@ -104,7 +117,7 @@ def stack_keys(keys,row, normalize_numerical=True):
 
 class Task(pl.LightningDataModule):
     def __init__(self):
-        super().__init__(self)
+        super().__init__()
         for task_type in SUPPORTED_TASK_TYPES:
             setattr(self,f"is_{task_type}",False)
             
@@ -186,28 +199,28 @@ def verify_backend(backend,
 
 
 class ActivityTask(Task):
-    """Base class for tasks in this project"""
-    def __init__(self,train_path=None,
-                     val_path=None,
-                     test_path=None,
-                     downsample_negative_frac=None,
-                     shape=None,
-                     keys=None,
-                     normalize_numerical=True,
-                     append_daily_features=False,
-                     daily_features_path=None,
-                     double_encode=False,
-                     backend="petastorm",
-                     batch_size: int = 600,
-                     activity_level="minute"):
+    # """Base class for tasks in this project"""
+    # def __init__(self,train_path: Optional[str] = None):
+    #     self.train_path = train_path
+    
+    def __init__(self,fields: Optional[List[str]] = None,
+                     train_path: Optional[str] = None,
+                     val_path: Optional[str] = None,
+                     test_path: Optional[str] = None,
+                     downsample_negative_frac: Optional[float] = None,
+                     shape: Optional[Tuple[int, ...]] = None,
+                     normalize_numerical: bool = True,
+                     append_daily_features: bool = False,
+                     daily_features_path: Optional[str] = None,
+                     backend: str = "petastorm",
+                     batch_size: int = 800,
+                     activity_level: str = "minute"):
 
         #TODO does not currently support day level data   
         super(ActivityTask,self).__init__()
-        
+        self.fields = fields
         self.batch_size=batch_size
         self.backend = backend
-        if keys:
-            self.keys = keys
         
         self.daily_features_appended = append_daily_features
         if self.daily_features_appended:
@@ -272,7 +285,7 @@ class ActivityTask(Task):
                 data_id = row.pop("id")
 
                 if hasattr(self,"keys"):
-                    keys = self.keys
+                    keys = self.fields
                 else:
                     keys = sorted(row.keys())
 
@@ -322,7 +335,7 @@ class ActivityTask(Task):
                 
             # Infer the shape of the data
             lengths = set()
-            for k in self.keys:
+            for k in self.fields:
                 lengths.add(getattr(schema,k).shape[-1])
             lengths = set(lengths)
             if len(lengths) != 1:
@@ -330,10 +343,7 @@ class ActivityTask(Task):
             else: 
                 data_length = list(lengths)[0]
             
-            if double_encode:
-                self.data_shape = (data_length,len(self.keys)//2)
-            else:
-                self.data_shape = (data_length,len(self.keys))
+            self.data_shape = (data_length,len(self.fields))
         
         elif backend == "dynamic":
             self.data_shape = shape 
@@ -368,6 +378,7 @@ class ActivityTask(Task):
 ########### TASKS IMPLEMENTATIONS ##############
 ################################################
 
+@DATAMODULE_REGISTRY
 class PredictDailyFeatures(ActivityTask, RegressionMixin):
     """Predict whether a participant was positive
        given a rolling window of minute level activity data.
@@ -378,7 +389,7 @@ class PredictDailyFeatures(ActivityTask, RegressionMixin):
                 window_size=7,
                 **kwargs):
         self.labler = DailyFeaturesLabler(window_size=window_size)
-        self.keys = ['heart_rate',
+        self.fields = ['heart_rate',
                      'missing_heart_rate',
                      'missing_steps',
                      'sleep_classic_0',
@@ -396,29 +407,30 @@ class PredictDailyFeatures(ActivityTask, RegressionMixin):
     
     def get_labler(self):
         return self.labler
-
-class PredictFluPos(ActivityTask, ClassificationMixin):
+ 
+@DATAMODULE_REGISTRY
+class DummyTask(ActivityTask):
+    def __init__(self, train_path: str = "path/to/data", **kwargs):
+        super().__init__(**kwargs)
+        self.train_path = train_path
+        self.data_shape = (20,20)
+@DATAMODULE_REGISTRY
+class PredictFluPos(ActivityTask):
     """Predict whether a participant was positive
        given a rolling window of minute level activity data.
        We validate on data after split_date, but before
        max_date, if provided"""
-
-    def __init__(self, activity_level = "minute",
-                window_onset_max = 0, window_onset_min = 0,
+    
+    def __init__(self, fields: List[str] = DEFAULT_FIELDS, activity_level: str = "minute",
+                window_onset_max: int = 0, window_onset_min:int = 0,
                 **kwargs):
+        
+        self.is_classification = True
         self.labler = FluPosLabler(window_onset_max=window_onset_max,
                                    window_onset_min=window_onset_min)
-        self.keys = ['heart_rate',
-                     'missing_heart_rate',
-                     'missing_steps',
-                     'sleep_classic_0',
-                     'sleep_classic_1',
-                     'sleep_classic_2',
-                     'sleep_classic_3', 
-                     'steps']
 
-        ActivityTask.__init__(self, activity_level=activity_level, **kwargs)
-        ClassificationMixin.__init__(self)
+        ActivityTask.__init__(self, fields=fields, activity_level=activity_level,**kwargs)
+        # ClassificationMixin.__init__(self)
         
 
     def get_name(self):
@@ -436,9 +448,9 @@ class PredictWeekend(ActivityTask, ClassificationMixin):
                 **kwargs):
         self.labler = DayOfWeekLabler([5,6])
         if keys:
-            self.keys=keys
+            self.fields=keys
         else:
-            self.keys = ['heart_rate',
+            self.fields = ['heart_rate',
                         'missing_heart_rate',
                         'missing_steps',
                         'sleep_classic_0',
@@ -473,7 +485,7 @@ class PredictEvidationILI(ActivityTask, ClassificationMixin):
         
         #TODO would be nice to have a task_args field in the task spec yaml
         self.ili_types = ili_types
-        self.keys =  ['heart_rate',
+        self.fields =  ['heart_rate',
                      'missing_heart_rate',
                      'missing_steps',
                      'sleep_classic_0',
@@ -520,7 +532,7 @@ class PredictCovidSmall(ActivityTask, ClassificationMixin):
                        activity_level = "minute",
                        **kwargs):
         
-        self.keys =  ['heart_rate',
+        self.fields =  ['heart_rate',
                      'missing_heart_rate',
                      'missing_steps',
                      'sleep_classic_0',
@@ -567,7 +579,7 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
 
     def __init__(self,clause, activity_level="minute", **kwargs):
         self.clause = clause
-        self.keys = ['heart_rate',
+        self.fields = ['heart_rate',
                 'missing_heart_rate',
                 'missing_steps',
                 'sleep_classic_0',
@@ -592,7 +604,7 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
 class ClassifyObese(ActivityTask, ClassificationMixin):
     def __init__(self, dataset_args, activity_level,**kwargs):
         self.labler = AudereObeseLabler()
-        self.keys = ['heart_rate',
+        self.fields = ['heart_rate',
                 'missing_heart_rate',
                 'missing_steps',
                 'sleep_classic_0',
@@ -616,7 +628,7 @@ class Autoencode(AutoencodeMixin, ActivityTask):
 
     def __init__(self,dataset_args={},**kwargs):
 
-        self.keys = ['heart_rate',
+        self.fields = ['heart_rate',
                 'missing_heart_rate',
                 'missing_steps',
                 'sleep_classic_0',

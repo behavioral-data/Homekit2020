@@ -3,7 +3,7 @@ from gc import callbacks
 import logging
 from operator import mul
 from statistics import mode
-from typing import Optional
+from typing import Optional, Any
 
 import warnings
 import os
@@ -28,29 +28,13 @@ from src.models.models import CNNToTransformerClassifier
 from src.utils import get_logger
 
 from pytorch_lightning import Trainer
+from pytorch_lightning.utilities.cli import LightningCLI
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 
 logger = get_logger(__name__)
 CONFIG = dotenv_values(".env")
 
-SUPPORTED_MODELS=[
-    CNNToTransformerClassifier
-]
-NAME_MAP = {x.name:x for x in SUPPORTED_MODELS}
-
-def get_model_from_name(name):
-    if not name in NAME_MAP:
-        msg = f"{name} not recognized as a model name. \
-                Supported models are: {NAME_MAP.keys()}"
-               
-        raise ValueError(msg)        
-    return NAME_MAP[name]
-
-def add_model_args(parser,name):
-    model = get_model_from_name(name)
-    parser = model.add_model_specific_args(parser)
-    return parser
 
 def add_task_args(parser,name):
     task = get_task_with_name(name)
@@ -61,157 +45,108 @@ def add_task_args(parser,name):
 def add_general_args(parent_parser):
     """ Adds arguments that aren't part of pl.Trainer, but are useful
         (e.g.) --no_wandb """
-    parser = parent_parser.add_argument_group("General")
-    parser.add_argument("--no_wandb", default=False, action="store_true",
-                        help="Run without wandb logging")                        
-    parser.add_argument("--train_path", type=str, default=None,
-                        help="path to training dataset")
-    parser.add_argument("--val_path", type=str, default=None,
-                        help="path to validation dataset")  
-    parser.add_argument("--notes", type=str, default=None,
-                        help="Notes to be sent to WandB")    
-    parser.add_argument("--early_stopping_patience", type=int, default=None,
-                        help="path to validation dataset")  
-    parser.add_argument(
-                '-h','--help',
-                action='help', default='==SUPPRESS==',
-                help='show this help message and exit')                              
+    parent_parser.add_argument("--no_wandb", default=False, action="store_true",
+                    help="Run without wandb logging")                        
+    parent_parser.add_argument("--notes", type=str, default=None,
+                    help="Notes to be sent to WandB")    
+    parent_parser.add_argument("--early_stopping_patience", type=int, default=None,
+                    help="path to validation dataset")                            
     
     return parent_parser               
 
 
-def train(model_class,task_class, model_args={}, task_args={}, trainer_args={},
-          no_wandb : bool = False,
-          train_path : str = None,
-          val_path : str = None,
-          notes : str = None,
-          early_stopping_patience : Optional[str] = None,
-          **kwargs):
-    
-    
-    task = task_class(**task_args,
-                        train_path=train_path,
-                        val_path=val_path)
-    
-    model = model_class(input_shape = task.data_shape,
-                        **model_args)
+class CLI(LightningCLI):
+    # It's probably possible to use this CLI to train other types of models
+    # using custom training loops
 
-    callbacks = [LearningRateMonitor(logging_interval='step')]
+    def add_arguments_to_parser(self, parser):
+        parser.link_arguments("data.batch_size", "model.init_args.batch_size",apply_on='parse')
+        parser.link_arguments("data.data_shape", "model.init_args.input_shape", apply_on="instantiate")
+
+        add_general_args(parser)
     
-    local_rank = os.environ.get("LOCAL_RANK",0)
-    if not no_wandb and local_rank == 0:
-        import wandb
-        data_logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],
-                            entity=CONFIG["WANDB_USERNAME"],
-                            notes=notes,
-                            log_model=True, #saves checkpoints to wandb as artifacts, might add overhead 
-                            reinit=True,
-                            resume = 'allow',
-                            allow_val_change=True,
-                            settings=wandb.Settings(start_method="fork"),
-                            id = model.wandb_id)   #id of run to resume from, None if model is not from checkpoint. Alternative: directly use id = model.logger.experiment.id, or try setting WANDB_RUN_ID env variable                
-        
-        data_logger.experiment.summary["task"] = task.get_name()
-        data_logger.experiment.summary["model"] = model.name
-        data_logger.experiment.config.update(model.hparams, allow_val_change=True)
-        model.wandb_id = data_logger.experiment.id  
-    else:
-        data_logger = True            
-    
-    # Set up checkpoint criteria 
-    if task.val_path:
-        if task.is_classification:
-            checkpoint_metric = "eval/roc_auc"
-            mode = "max"
+    def instantiate_trainer(self, **kwargs: Any) -> Trainer:
+        # It's probably possible to do all of this from a config.
+        # We could set a default config that contains all of this, 
+        # which vould be overridden by CLI args. For now,
+        # prefer to have the API work like it did in the last project,
+        # where we make an educated guess about what we're intended to
+        # do based on the model and task that are passed.
+
+        extra_callbacks = []
+
+        if self.datamodule.val_path:
+            if self.datamodule.is_classification:
+                checkpoint_metric = "eval/roc_auc"
+                mode = "max"
+            else:
+                checkpoint_metric = "eval/loss"
+                mode = "min"
+
+            if self.config["fit"]["early_stopping_patience"]:
+                early_stopping_callback = EarlyStopping(monitor=checkpoint_metric,
+                                                        patience=self.config["fit"]["early_stopping_patience"],
+                                                        mode=mode)
+                extra_callbacks.append(early_stopping_callback)
         else:
-            checkpoint_metric = "eval/loss"
+            checkpoint_metric = "train/loss"
             mode = "min"
 
-        if early_stopping_patience:
-            early_stopping_callback = EarlyStopping(monitor=checkpoint_metric,
-                                                    patience=early_stopping_patience,
-                                                    mode=mode)
-            callbacks.append(early_stopping_callback)
-    else:
-        checkpoint_metric = "train/loss"
-        mode = "min"
+        self.checkpoint_callback = ModelCheckpoint(
+                            filename='{epoch}',
+                            save_last=True,
+                            save_top_k=3,
+                            save_on_train_epoch_end = True,
+                            monitor=checkpoint_metric,
+                            every_n_epochs=1,
+                            mode=mode)
+        
+        extra_callbacks.append(self.checkpoint_callback)
 
-    checkpoint_callback = ModelCheckpoint(
-                        filename='{epoch}',
-                        save_last=True,
-                        save_top_k=3,
-                        save_on_train_epoch_end = True,
-                        monitor=checkpoint_metric,
-                        every_n_epochs=1,
-                        mode=mode)
+        local_rank = os.environ.get("LOCAL_RANK",0)
+        if not self.config["fit"]["no_wandb"] and local_rank == 0:
+            import wandb
+            data_logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],
+                                entity=CONFIG["WANDB_USERNAME"],
+                                notes=self.config["fit"]["notes"],
+                                log_model=True, #saves checkpoints to wandb as artifacts, might add overhead 
+                                reinit=True,
+                                resume = 'allow',
+                                allow_val_change=True,
+                                settings=wandb.Settings(start_method="fork"),
+                                id = self.model.wandb_id)   #id of run to resume from, None if model is not from checkpoint. Alternative: directly use id = model.logger.experiment.id, or try setting WANDB_RUN_ID env variable                
+            
+            data_logger.experiment.summary["task"] = self.datamodule.get_name()
+            data_logger.experiment.summary["model"] = self.model.name
+            data_logger.experiment.config.update(self.model.hparams, allow_val_change=True)
+            self.model.wandb_id = data_logger.experiment.id  
+        
+        else:
+            data_logger = True   
+
+        extra_callbacks = extra_callbacks + [self._get(self.config_init, c) for c in self._parser(self.subcommand).callback_keys]
+        trainer_config = {**self._get(self.config_init, "trainer"), **kwargs}
+        return self._instantiate_trainer(trainer_config, extra_callbacks)
+
+    def before_fit(self):
+        pass
     
-    callbacks.append(checkpoint_callback)
+    def after_fit(self):
+        logger.info(f"Best model score: {self.checkpoint_callback.best_model_score}")
+        logger.info(f"Best model path: {self.checkpoint_callback.best_model_path}")
+   
     
-    trainer_args.update(
-        dict(
-            checkpoint_callback=True,
-            callbacks=callbacks,
-            accelerator="ddp",
-            terminate_on_nan=True,
-            num_sanity_val_steps=0,
-            profiler="simple",
-            gpus=-1,
-            logger=data_logger
-
-        )
-    )
-   
-    trainer = Trainer(**trainer_args)
-    trainer.fit(model,task)
-
-    logger.info(f"Best model score: {checkpoint_callback.best_model_score}")
-    logger.info(f"Best model path: {checkpoint_callback.best_model_path}")
-   
+    def set_defaults(self):
+        ...
 
 if __name__ == "__main__":
-    parser = ArgumentParser(add_help=False)
-
-    # figure out which model to use
-    # TODO: Optionally, pass a config. Config arguments could just go right into 
-    parser.add_argument("--model_name", type=str, default="CNNToTransformerClassifier", 
-                                        help= f"Supported models are: {list(NAME_MAP.keys())}")
-    parser.add_argument("--model_config", type=str, default=None, 
-                           help= f"Supported models are: {list(NAME_MAP.keys())}")                                        
+    trainer_defaults = dict(
+                        checkpoint_callback=True,
+                        accelerator="ddp",
+                        terminate_on_nan=True,
+                        num_sanity_val_steps=0,
+                        profiler="simple",
+                        gpus=-1,
+              )
     
-    # figure out which task to use
-    parser.add_argument("--task_name", type=str, default="PredictFluPos")
-    parser.add_argument("--task_config", type=str, default=None)
-
-    # THIS LINE IS KEY TO PULL THE MODEL NAME
-    temp_args, _ = parser.parse_known_args()
-    model_name = temp_args.model_name
-    model_config = temp_args.model_name
-
-    parser = add_model_args(parser,model_name)
-
-    model_class = NAME_MAP[model_name]
-
-    # THIS PULLS THE TASK NAME
-    task_name = temp_args.task_name
-    parser = add_task_args(parser,task_name)
-    task_class = get_task_with_name(task_name)
-
-    # Adds generic trainer args
-    parser = Trainer.add_argparse_args(parser)
-
-    # Have to add this down here:
-    parser = add_general_args(parser)
-
-    args = parser.parse_args()
-    arg_groups = argparse_to_groups(args,parser)
-
-    model_args = vars(arg_groups.get(model_name,argparse.Namespace()))
-    task_args = vars(arg_groups.get("Task",argparse.Namespace()))
-    trainer_args = vars(arg_groups.get("pl.Trainer",argparse.Namespace()))
-    general_args = vars(arg_groups.get("General",argparse.Namespace()))
-
-    train(model_class, task_class,
-          model_args=model_args,
-          task_args=task_args,
-          trainer_args=trainer_args,
-          **general_args)
+    cli = CLI(trainer_defaults=trainer_defaults)
