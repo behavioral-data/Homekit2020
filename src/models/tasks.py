@@ -420,7 +420,7 @@ class PredictFluPos(ActivityTask):
        given a rolling window of minute level activity data.
        We validate on data after split_date, but before
        max_date, if provided"""
-    
+    is_classification = True
     def __init__(self, fields: List[str] = DEFAULT_FIELDS, activity_level: str = "minute",
                 window_onset_max: int = 0, window_onset_min:int = 0,
                 **kwargs):

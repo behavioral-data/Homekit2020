@@ -80,6 +80,9 @@ class SensingModel(pl.LightningModule):
         self.val_preds = []
         self.train_labels = []
         
+        self.train_preds = []
+        self.train_labels = []
+        
         self.val_preds = []
         self.val_labels =[]
 
@@ -93,7 +96,7 @@ class SensingModel(pl.LightningModule):
         self.eval_dataset=None
 
         self.train_metrics = metric_class(bootstrap_cis=False, prefix="train/")
-        self.val_metrics = metric_class(bootstrap_cis=bootstrap_val_metrics, prefix="eval/")
+        self.val_metrics = metric_class(bootstrap_cis=bootstrap_val_metrics, prefix="val/")
         self.test_metrics = metric_class(bootstrap_cis=bootstrap_val_metrics, prefix="test/")
 
         self.learning_rate = learning_rate
@@ -136,7 +139,7 @@ class SensingModel(pl.LightningModule):
         self.train_metrics.update(preds,y)
 
         if self.is_classifier:
-            self.val_preds.append(preds.detach().cpu())
+            self.train_preds.append(preds.detach().cpu())
             self.train_labels.append(y.detach().cpu())
 
         return {"loss":loss, "preds": preds, "labels":y}
@@ -145,7 +148,7 @@ class SensingModel(pl.LightningModule):
         
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
         if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classifier and isinstance(self.logger, WandbLogger):
-            train_preds = torch.cat(self.val_preds, dim=0)
+            train_preds = torch.cat(self.train_preds, dim=0)
             train_labels = torch.cat(self.train_labels, dim=0)
             self.logger.experiment.log({"train/roc": wandb_roc_curve(train_preds,train_labels, limit = 9999)}, commit=False)
             self.logger.experiment.log({"train/pr": wandb_pr_curve(train_preds,train_labels)}, commit=False)
@@ -156,16 +159,17 @@ class SensingModel(pl.LightningModule):
         
         # Clean up for next epoch:
         self.train_metrics.reset()
-        self.val_preds = []
+        self.train_preds = []
         self.train_labels = []
         super().on_train_epoch_end()
     
     def on_train_epoch_start(self):
         self.train_metrics.to(self.device)
     
-    def on_validation_epoch_start(self):
-        torch.cuda.empty_cache()
-        self.test_preds = []
+    # def on_validation_epoch_start(self):
+    #     torch.cuda.empty_cache()
+    #     self.val_preds = []
+    #     self.val_labels = []
     
     def on_test_epoch_end(self):
         # We get a DummyExperiment outside the main process (i.e. global_rank > 0)
@@ -236,9 +240,9 @@ class SensingModel(pl.LightningModule):
         if os.environ.get("LOCAL_RANK","0") == "0" and self.is_classifier and isinstance(self.logger, WandbLogger):
             val_preds = torch.cat(self.val_preds, dim=0)
             val_labels = torch.cat(self.val_labels, dim=0)
-            self.logger.experiment.log({"eval/roc": wandb_roc_curve(val_preds,val_labels, limit = 9999)}, commit=False)
-            self.logger.experiment.log({"eval/pr":  wandb_pr_curve(val_preds,val_labels)}, commit=False)
-            self.logger.experiment.log({"eval/det": wandb_detection_error_tradeoff_curve(val_preds,val_labels, limit=9999)}, commit=False)
+            self.logger.experiment.log({"val/roc": wandb_roc_curve(val_preds,val_labels, limit = 9999)}, commit=False)
+            self.logger.experiment.log({"val/pr":  wandb_pr_curve(val_preds,val_labels)}, commit=False)
+            self.logger.experiment.log({"val/det": wandb_detection_error_tradeoff_curve(val_preds,val_labels, limit=9999)}, commit=False)
         
         metrics = self.val_metrics.compute()
         self.log_dict(metrics, on_step=False, on_epoch=True, sync_dist=True)
@@ -256,7 +260,7 @@ class SensingModel(pl.LightningModule):
         
         loss,preds = self.forward(x,y)
         
-        self.log("eval/loss", loss.item(),on_step=True,sync_dist=True)
+        self.log("val/loss", loss.item(),on_step=True,sync_dist=True)
 
 
         if self.is_classifier:

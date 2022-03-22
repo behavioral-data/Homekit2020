@@ -27,10 +27,11 @@ from src.models.tasks import get_task_with_name
 from src.models.models import CNNToTransformerClassifier
 from src.utils import get_logger
 
-from pytorch_lightning import Trainer
-from pytorch_lightning.utilities.cli import LightningCLI
+from pytorch_lightning import Trainer, LightningModule
+from pytorch_lightning.utilities.cli import LightningCLI, SaveConfigCallback
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.utilities.cloud_io import get_filesystem
 
 logger = get_logger(__name__)
 CONFIG = dotenv_values(".env")
@@ -54,6 +55,22 @@ def add_general_args(parent_parser):
     
     return parent_parser               
 
+class WandBSaveConfigCallback(SaveConfigCallback):
+    def setup(self, trainer: Trainer, pl_module: LightningModule, stage: Optional[str] = None) -> None:
+
+        if isinstance(trainer.logger, WandbLogger):
+            # If we're at rank zero and using WandBLogger then we probably want to
+            # log the config
+            log_dir = trainer.logger.experiment.dir
+            fs = get_filesystem(log_dir)
+
+            config_path = os.path.join(log_dir, self.config_filename)
+            fs.makedirs(log_dir, exist_ok=True)
+            self.parser.save(
+                self.config, config_path, skip_none=False, overwrite=self.overwrite, multifile=self.multifile
+            )
+        else:
+            super().setup(trainer,pl_module,stage=stage)
 
 class CLI(LightningCLI):
     # It's probably possible to use this CLI to train other types of models
@@ -77,10 +94,10 @@ class CLI(LightningCLI):
 
         if self.datamodule.val_path:
             if self.datamodule.is_classification:
-                checkpoint_metric = "eval/roc_auc"
+                checkpoint_metric = "val/roc_auc"
                 mode = "max"
             else:
-                checkpoint_metric = "eval/loss"
+                checkpoint_metric = "val/loss"
                 mode = "min"
 
             if self.config["fit"]["early_stopping_patience"]:
@@ -106,24 +123,30 @@ class CLI(LightningCLI):
         local_rank = os.environ.get("LOCAL_RANK",0)
         if not self.config["fit"]["no_wandb"] and local_rank == 0:
             import wandb
+            # kwargs["save_config_callback"] = WandBSaveConfigCallback
             data_logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],
                                 entity=CONFIG["WANDB_USERNAME"],
                                 notes=self.config["fit"]["notes"],
                                 log_model=True, #saves checkpoints to wandb as artifacts, might add overhead 
                                 reinit=True,
                                 resume = 'allow',
+                                # save_dir = ".",
                                 allow_val_change=True,
-                                settings=wandb.Settings(start_method="fork"),
+                                # settings=wandb.Settings(start_method="fork"),
                                 id = self.model.wandb_id)   #id of run to resume from, None if model is not from checkpoint. Alternative: directly use id = model.logger.experiment.id, or try setting WANDB_RUN_ID env variable                
             
             data_logger.experiment.summary["task"] = self.datamodule.get_name()
             data_logger.experiment.summary["model"] = self.model.name
             data_logger.experiment.config.update(self.model.hparams, allow_val_change=True)
             self.model.wandb_id = data_logger.experiment.id  
+            
+            # Necessary to save config in the right location
+            data_logger._save_dir = data_logger.experiment.dir
         
         else:
-            data_logger = True   
-
+            data_logger = None  
+        kwargs["logger"] = data_logger
+        
         extra_callbacks = extra_callbacks + [self._get(self.config_init, c) for c in self._parser(self.subcommand).callback_keys]
         trainer_config = {**self._get(self.config_init, "trainer"), **kwargs}
         return self._instantiate_trainer(trainer_config, extra_callbacks)
@@ -132,8 +155,9 @@ class CLI(LightningCLI):
         pass
     
     def after_fit(self):
-        logger.info(f"Best model score: {self.checkpoint_callback.best_model_score}")
-        logger.info(f"Best model path: {self.checkpoint_callback.best_model_path}")
+        if self.trainer.is_global_zero:
+            logger.info(f"Best model score: {self.checkpoint_callback.best_model_score}")
+            logger.info(f"Best model path: {self.checkpoint_callback.best_model_path}")
    
     
     def set_defaults(self):
@@ -149,4 +173,6 @@ if __name__ == "__main__":
                         gpus=-1,
               )
     
-    cli = CLI(trainer_defaults=trainer_defaults)
+    cli = CLI(trainer_defaults=trainer_defaults,
+            #  save_config_callback=WandBSaveConfigCallback,
+             save_config_filename="lightning_config.yaml")
