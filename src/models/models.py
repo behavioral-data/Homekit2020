@@ -337,7 +337,6 @@ class ClassificationModel(SensingModel,ModelTypeMixin):
         SensingModel.__init__(self,TorchMetricClassification,**kwargs)
         self.is_classifier = True
 
-
 class RegressionModel(SensingModel,ModelTypeMixin):
     def __init__(self,**kwargs) -> None:
         SensingModel.__init__(self,TorchMetricRegression,**kwargs)
@@ -370,15 +369,3 @@ class CNNToTransformerClassifier(ClassificationModel):
         preds = self.head(encoding)
         loss =  self.criterion(preds,labels)
         return loss, preds
-    
-    # @staticmethod
-    # def add_model_specific_args(parent_parser):
-    #     parser = parent_parser.add_argument_group(CNNToTransformerClassifier.name)
-    #     parser = SensingModel.add_model_specific_args(parser)
-    #     parser.add_argument("--dropout_rate", type=float, default=0.0,
-    #                         help="Model dropout rate")
-    #     parser.add_argument("--num_attention_heads", type=int, default=4)
-    #     parser.add_argument("--num_hidden_layers", type=int, default=4)
-
-    #     return parent_parser
-        
