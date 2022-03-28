@@ -16,13 +16,48 @@ Data for this study is closed. TODO writeup about how to get it and run a job
 ### Running your first job 
 This project was designed to be run primarily from the command line (although it _could_ be run from a notebook, e.g. by importing `src` ). You can run a simple job with:
 ``` bash
-python src train-cnn-transformer\
-        --task_config src/data/task_configs/PredictFluPos.yaml\
-        --model_config model_configs/small_embedding.yaml\
-        --n_epochs 1 --val_epochs 1\
-        --train_path $PWD/data/debug/petastorm_datasets/debug\
-        --eval_path $PWD/data/debug/petastorm_datasets/debug
+python src/models/train.py `# Main entry point` \
+        --config src/data/task_configs/PredictFluPos.yaml `# Configures the task`\
+        --config src/configs/models/CNNToTransformerClassifier.yaml `# Configures the model`\
+        --data.train_path $PWD/data/debug/petastorm_datasets/debug `# Train data location`\
+        --data.val_path $PWD/data/debug/petastorm_datasets/debug `# Validation data location`\
 ```
+
+### Adding a new model
+All models in this project should be based on [Pytorch Lightning](https://github.com/PyTorchLightning/pytorch-lightning).  This is done by subclassing `src.models.models.SensingModel` (or one of its derivatives, like `src.models.models.ClassificationModel`). All that's necessary is overriding the `forward` method, and optionally `__init__`:
+
+```python
+
+from pytorch_lightning.utilities.cli import MODEL_REGISTRY
+
+@MODEL_REGISTRY #This exposes the model to the command line through Lightning CLI 
+class ResNet(ClassificationModel):
+    def __init__(self,
+                 n_layers: int = 3,
+                 **kwargs) -> None:
+
+        super().__init__(**kwargs)
+        
+        self.base_model = ResNet(n_layers)
+        self.criterion = nn.CrossEntropyLoss() 
+        self.save_hyperparameters()
+    
+    def forward(self, x,labels):
+        preds = self.base_model(x)
+        loss =  self.criterion(preds,labels)
+        return loss, preds
+```
+The model can now be called from the command line (or a config):
+
+``` bash
+python src/models/train.py `# Main entry point` \
+        --config src/data/task_configs/PredictFluPos.yaml `# Configures the task`\
+        --model ResNet\
+        --model.n_layers 10\
+        --data.train_path $PWD/data/debug/petastorm_datasets/debug `# Train data location`\
+        --data.val_path $PWD/data/debug/petastorm_datasets/debug `# Validation data location`\
+```
+
 ###  [Optional] Weights and Biases Integration:
 
 By default this project integrates with Weights and Biases. If you would like to ignore this integration and use some other logging infrasturcture, run commands with the `--no_wandb` flag.
