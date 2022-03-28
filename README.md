@@ -1,4 +1,4 @@
-SeattleFluStudy
+MobileSensingSuite (We need a name!)
 ==============================
 
 ## Getting Started
