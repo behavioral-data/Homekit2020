@@ -5,8 +5,8 @@ MobileSensingSuite (We need a name!)
 ------------
 
 ### Installation
-1. Clone this repo: `git clone https://github.com/behavioral-data/SeattleFluStudy.git`
-2. cd into it:  `cd SeattleFluStudy`
+1. Clone this repo: `git clone https://github.com/behavioral-data/MobileSensingSuite.git`
+2. cd into it:  `cd MobileSensingSuite`
 3. Build the conda environment: `make create_environment` (requires conda)
 
 
