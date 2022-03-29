@@ -27,6 +27,7 @@ the datasets being used and evaluation metrics.
 """
 __docformat__ = 'reStructuredText'
 
+from importlib.resources import path
 import sys
 import os
 from typing import Any, List, Optional, Tuple
@@ -385,8 +386,9 @@ class PredictDailyFeatures(ActivityTask, RegressionMixin):
        We validate on data after split_date, but before
        max_date, if provided"""
 
-    def __init__(self, activity_level = "minute",
-                window_size=7,
+    def __init__(self, fields: List[str] = DEFAULT_FIELDS, 
+                       activity_level: str = "minute",
+                       window_size: int =7,
                 **kwargs):
         self.labler = DailyFeaturesLabler(window_size=window_size)
         self.fields = ['heart_rate',
@@ -398,7 +400,7 @@ class PredictDailyFeatures(ActivityTask, RegressionMixin):
                      'sleep_classic_3', 
                      'steps']
 
-        ActivityTask.__init__(self, activity_level=activity_level,**kwargs)
+        ActivityTask.__init__(self, fields=fields, activity_level=activity_level,**kwargs)
         RegressionMixin.__init__(self)
         
 
@@ -408,12 +410,7 @@ class PredictDailyFeatures(ActivityTask, RegressionMixin):
     def get_labler(self):
         return self.labler
  
-@DATAMODULE_REGISTRY
-class DummyTask(ActivityTask):
-    def __init__(self, train_path: str = "path/to/data", **kwargs):
-        super().__init__(**kwargs)
-        self.train_path = train_path
-        self.data_shape = (20,20)
+        
 @DATAMODULE_REGISTRY
 class PredictFluPos(ActivityTask):
     """Predict whether a participant was positive
@@ -439,28 +436,17 @@ class PredictFluPos(ActivityTask):
     def get_labler(self):
         return self.labler
 
-
+@DATAMODULE_REGISTRY
 class PredictWeekend(ActivityTask, ClassificationMixin):
     """Predict the whether the associated data belongs to a 
        weekend"""
 
-    def __init__(self, activity_level = "minute", keys=None,
-                **kwargs):
+    def __init__(self, fields: List[str] = DEFAULT_FIELDS, 
+                       activity_level: str = "minute",
+                       **kwargs):
+
         self.labler = DayOfWeekLabler([5,6])
-        if keys:
-            self.fields=keys
-        else:
-            self.fields = ['heart_rate',
-                        'missing_heart_rate',
-                        'missing_steps',
-                        'sleep_classic_0',
-                        'sleep_classic_1',
-                        'sleep_classic_2',
-                        'sleep_classic_3', 
-                        'steps']
-
-
-        ActivityTask.__init__(self, activity_level=activity_level,**kwargs)
+        ActivityTask.__init__(self, fields=fields, activity_level=activity_level,**kwargs)
         ClassificationMixin.__init__(self)
         
     def get_name(self):
@@ -469,56 +455,8 @@ class PredictWeekend(ActivityTask, ClassificationMixin):
     def get_labler(self):
         return self.labler
 
-class PredictEvidationILI(ActivityTask, ClassificationMixin):
-    """Predict the whether a participant was positive
-       given a rolling window of minute level activity data.
-       We validate on data after split_date, but before
-       max_date, if provided"""
 
-    def __init__(self, feather_path,
-                       dataset_args={}, 
-                       activity_level = "minute",
-                       ili_types=[1,2,3],
-                       window_onset_min = -5,
-                       window_onset_max = 1,
-                       **kwargs):
-        
-        #TODO would be nice to have a task_args field in the task spec yaml
-        self.ili_types = ili_types
-        self.fields =  ['heart_rate',
-                     'missing_heart_rate',
-                     'missing_steps',
-                     'sleep_classic_0',
-                     'sleep_classic_1',
-                     'sleep_classic_2',
-                     'sleep_classic_3', 
-                     'steps']
-        
-        self.feather_path = feather_path,
-        self.filename = os.path.basename(feather_path)
-        self.window_onset_min = window_onset_min
-        self.window_onset_max = window_onset_max
-
-        self.labler = EvidationILILabler(feather_path,
-                                         ili_types = self.ili_types,
-                                         window_onset_min = self.window_onset_min,
-                                         window_onset_max = self.window_onset_max)
-
-
-
-        ActivityTask.__init__(self, activity_level=activity_level,**kwargs)
-        ClassificationMixin.__init__(self)
-        
-
-    def get_name(self):
-        return f"PredictEvidationILI-types:{self.ili_types}-window_onset_min:{self.window_onset_min}"\
-               f"-window_onset_max:{self.window_onset_max}-file:{self.filename}"
-    
-    def get_labler(self):
-        return self.labler
-
-
-
+@DATAMODULE_REGISTRY
 class PredictCovidSmall(ActivityTask, ClassificationMixin):
     """Predict the whether a participant was diagnosed with
     covid on the final day of the window
@@ -528,24 +466,16 @@ class PredictCovidSmall(ActivityTask, ClassificationMixin):
     /projects/bdata/datasets/covid-fitbit/processed/covid_dates.csv
     """
 
-    def __init__(self, dates_path,
-                       activity_level = "minute",
+    def __init__(self, dates_path: str,
+                       fields: List[str] = DEFAULT_FIELDS, 
+                       activity_level: str = "minute",
                        **kwargs):
         
-        self.fields =  ['heart_rate',
-                     'missing_heart_rate',
-                     'missing_steps',
-                     'sleep_classic_0',
-                     'sleep_classic_1',
-                     'sleep_classic_2',
-                     'sleep_classic_3', 
-                     'steps']
-        
-        self.dates_path = dates_path,
+        self.dates_path = dates_path
         self.filename = os.path.basename(dates_path)
 
         self.labler = CovidLabler(dates_path)
-        ActivityTask.__init__(self, activity_level=activity_level,**kwargs)
+        ActivityTask.__init__(self, fields=fields, activity_level=activity_level,**kwargs)
         ClassificationMixin.__init__(self)
         
 
@@ -555,19 +485,7 @@ class PredictCovidSmall(ActivityTask, ClassificationMixin):
     def get_labler(self):
         return self.labler
 
-
-class PredictTrigger(ActivityTask,ClassificationMixin):
-    """Predict the whether a participant triggered the 
-       test on the last day of a range of data"""
-
-    def __init__(self, activity_level="minute", **kwargs):
-        ActivityTask.__init__(self, activity_level = activity_level, **kwargs)
-        ClassificationMixin.__init__(self)
-        # self.is_classification = True
-
-    def get_name(self):
-        return "PredictTrigger"
-
+@DATAMODULE_REGISTRY
 class PredictSurveyClause(ActivityTask,ClassificationMixin):
     """Predict the whether a clause in the onehot
        encoded surveys is true for a given day. 
@@ -577,19 +495,15 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
     
        https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.query.html"""
 
-    def __init__(self,clause, activity_level="minute", **kwargs):
+    def __init__(self, clause: str, 
+                       activity_level: str = "minute", 
+                       fields: List[str] = DEFAULT_FIELDS, 
+                       survey_path: Optional[str] = None,
+                       **kwargs):
         self.clause = clause
-        self.fields = ['heart_rate',
-                'missing_heart_rate',
-                'missing_steps',
-                'sleep_classic_0',
-                'sleep_classic_1',
-                'sleep_classic_2',
-                'sleep_classic_3', 
-                'steps']
-        self.survey_responses = load_processed_table("daily_surveys_onehot").set_index("participant_id")
+        self.survey_responses = load_processed_table("daily_surveys_onehot",path=survey_path).set_index("participant_id")
         self.labler = ClauseLabler(self.survey_responses,self.clause)
-        ActivityTask.__init__(self, activity_level=activity_level, **kwargs)
+        ActivityTask.__init__(self, fields=fields, activity_level=activity_level,**kwargs)
         ClassificationMixin.__init__(self)
     
     def get_labler(self):
@@ -601,20 +515,14 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
     def get_description(self):
         return self.__doc__
 
+@DATAMODULE_REGISTRY
 class ClassifyObese(ActivityTask, ClassificationMixin):
-    def __init__(self, dataset_args, activity_level,**kwargs):
-        self.labler = AudereObeseLabler()
-        self.fields = ['heart_rate',
-                'missing_heart_rate',
-                'missing_steps',
-                'sleep_classic_0',
-                'sleep_classic_1',
-                'sleep_classic_2',
-                'sleep_classic_3', 
-                'steps']
-        dataset_args["labeler"] = self.labler
-        ActivityTask.__init__(self, activity_level=activity_level, 
-                         **kwargs)
+    def __init__(self, activity_level: str = "minute", 
+                       fields: List[str] = DEFAULT_FIELDS,
+                       **kwargs):
+
+        self.labler = AudereObeseLabler()    
+        ActivityTask.__init__(self, fields=fields, activity_level=activity_level,**kwargs)
         ClassificationMixin.__init__(self)      
 
     def get_labler(self):
@@ -622,33 +530,3 @@ class ClassifyObese(ActivityTask, ClassificationMixin):
     
     def get_name(self):
         return "ClassifyObese"
-
-class Autoencode(AutoencodeMixin, ActivityTask):
-    """Autoencode minute level data"""
-
-    def __init__(self,dataset_args={},**kwargs):
-
-        self.fields = ['heart_rate',
-                'missing_heart_rate',
-                'missing_steps',
-                'sleep_classic_0',
-                'sleep_classic_1',
-                'sleep_classic_2',
-                'sleep_classic_3', 
-                'steps']
-                     
-        ActivityTask.__init__(self, **kwargs)
-        AutoencodeMixin.__init__(self)
-        self.is_autoencoder = True
-
-    def get_description(self):
-        return self.__doc__
-    
-    def get_train_dataset(self):
-        return self.train_dataset
-
-    def get_eval_dataset(self):
-        return self.eval_dataset
-    
-    def get_name(self):
-        return "Autoencode"
