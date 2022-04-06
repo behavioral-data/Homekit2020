@@ -77,7 +77,7 @@ class CLI(LightningCLI):
     # using custom training loops
 
     def add_arguments_to_parser(self, parser):
-        parser.link_arguments("data.batch_size", "model.init_args.batch_size",apply_on='parse')
+        parser.link_arguments("model.init_args.batch_size","data.init_args.batch_size",apply_on="parse")
         parser.link_arguments("data.data_shape", "model.init_args.input_shape", apply_on="instantiate")
 
         add_general_args(parser)
