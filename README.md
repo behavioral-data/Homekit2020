@@ -11,8 +11,8 @@ MobileSensingSuite (We need a name!)
 
 
 ### Getting Our Data 
-TODO: writeup about how to get it and run a job
 For now, we can use the debug dataset in `data/debug/petastorm_datasets/debug`.
+To get these data, use the provided Google Drive link and place the contents in the `data` directory.
 
 ### Running your first job 
 This project was designed to be run primarily from the command line (although it _could_ be run from a notebook, e.g. by importing `src` ). You can run a simple job with:
