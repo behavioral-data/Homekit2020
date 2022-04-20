@@ -26,7 +26,6 @@ dependencies:
   - pytorch-lightning[extra]
   - torchmetrics>=0.5
   - pyspark=3.1.2
-  - jsonargparse[all]
   - pip:
     - torchviz==0.0.2
     - pyyaml==5.4.1
@@ -35,5 +34,6 @@ dependencies:
     - tensorboard==2.6.0
     - tabulate==0.8.9
     - petastorm==0.11.3
+    - jsonargparse[all]
 variables:
   USE_TORCH: 1
