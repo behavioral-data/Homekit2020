@@ -29,8 +29,6 @@ import warnings
 import os
 import petastorm
 
-
-from ray.util.sgd import data
 logging.getLogger("petastorm").setLevel(logging.ERROR)
 
 from pytorch_lightning.accelerators import accelerator
