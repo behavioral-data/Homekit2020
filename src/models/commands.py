@@ -27,6 +27,7 @@ from src.models.train_model import (train_cnn_transformer, train_neural_baseline
                                     train_autoencoder, train_sand,
                                     train_bert, train_longformer)
 from src.models.baselines import train_xgboost
+from src.utils import validate_yaml_or_json
 
 def validate_yaml_or_json(ctx, param, value):
     if value is None:

@@ -33,7 +33,7 @@ from petastorm.unischema import dict_to_spark_row, Unischema, UnischemaField, _n
 
 import pandas as pd
 
-from src.models.commands import validate_yaml_or_json
+from src.utils import validate_yaml_or_json
 
 MINS_IN_DAY = 60*24
 
@@ -101,8 +101,7 @@ def filter_spark_dataframe_by_list(df, column_name, filter_list):
 @click.option("--partition_by", type=str, multiple=False)
 @click.option("--no_scale", is_flag=True)
 @click.option("--rename", type=str, multiple=True)
-@click.option("--users", type=click.Path(exists=True), callback=validate_yaml_or_json)
-@click.option("--include_users", type=bool,is_flag=True)
+@click.option("--include_users", type=click.Path(exists=True), callback=validate_yaml_or_json)
 def main(input_path, output_path, max_missing_days_in_window, 
                     min_windows, day_window_size, parse_timestamp,
                     min_date=None, max_date=None, partition_by = None, rename=None,

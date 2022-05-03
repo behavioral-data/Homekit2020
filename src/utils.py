@@ -3,6 +3,7 @@ import json
 import logging
 import gc
 import argparse
+import click
 
 import wandb
 import pandas as pd
@@ -16,6 +17,17 @@ from scipy.special import softmax
 
 from dotenv import dotenv_values
 config = dotenv_values(".env")
+
+def validate_yaml_or_json(ctx, param, value):
+    if value is None:
+        return
+    try:
+        return read_yaml(value)
+    except FileNotFoundError:
+        try:
+            return json.loads(value)
+        except json.decoder.JSONDecodeError:
+            raise click.BadParameter('dataset_args needs to be either a json string or a path to a config .yaml')
 
 def load_dotenv():
     project_dir = os.path.join(os.path.dirname(__file__), os.pardir)
