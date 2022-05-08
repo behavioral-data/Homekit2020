@@ -15,16 +15,9 @@ architecture.
 """
 
 from copy import copy
-from doctest import OutputChecker
-from errno import ENXIO
-from tokenize import Number
-from turtle import forward
 
 from typing import Dict, Tuple,  Union, Any, Optional, List, Callable
 import os
-from random import sample
-from unicodedata import name
-
 import numpy as np
 import pytorch_lightning as pl
 import torch
@@ -79,7 +72,7 @@ class SensingModel(pl.LightningModule):
 
     def __init__(self, metric_class : torchmetrics.MetricCollection, 
                        bootstrap_val_metrics : bool = True,
-                       learning_rate : Number = 1e-3,
+                       learning_rate : float = 1e-3,
                        warmup_steps : int = 0,
                        batch_size : int = 800,
                        input_shape : Optional[Tuple[int,...]] = None):
