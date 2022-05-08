@@ -1,0 +1,5 @@
+data: 
+  class_path: src.models.tasks.PredictSurveyClause
+  init_args:
+    clause:  (daily_symptoms__headache == 'moderate') | (daily_symptoms__headache == 'severe')
+    survey_path:  /projects/bdata/datasets/gatesfoundation/processed/COVID_Signals/daily_surveys.csv
