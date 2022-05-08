@@ -54,7 +54,7 @@ from src.data.utils import load_processed_table, url_from_path
 from src.utils import get_logger, read_yaml
 from src.models.lablers import (FluPosLabler, ClauseLabler, EvidationILILabler, 
                                  DayOfWeekLabler, AudereObeseLabler, DailyFeaturesLabler,
-                                 CovidLabler, SameParticipantLabler, SequentialLabler)
+                                 CovidLabler, SameParticipantLabler, SequentialLabler, CovidSignalsLabler)
 
 logger = get_logger(__name__)
 
@@ -273,7 +273,7 @@ class ActivityTask(Task):
         
             
             schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
-            fields = [k for k in schema.fields.keys() if not k in ["participant_id","id"]]
+            all_fields = [k for k in schema.fields.keys() if not k in ["participant_id","id"]]
             # features = [k for k in schema.fields.keys() if not k in ["start","end","participant_id"]]
         
             def _transform_row(row):
@@ -286,7 +286,9 @@ class ActivityTask(Task):
                 data_id = row.pop("id")
 
                 if hasattr(self,"keys"):
-                    keys = self.fields
+                    keys = self.keys
+                elif fields:
+                    keys = fields 
                 else:
                     keys = sorted(row.keys())
 
@@ -331,7 +333,7 @@ class ActivityTask(Task):
                         ("id",np.int32,None,False),
                         ("end_date_str",np.str_,None,False)]
 
-            self.transform = TransformSpec(_transform_row,removed_fields=fields,
+            self.transform = TransformSpec(_transform_row,removed_fields=all_fields,
                                                     edit_fields= new_fields)
                 
             # Infer the shape of the data
@@ -435,6 +437,61 @@ class PredictFluPos(ActivityTask):
     
     def get_labler(self):
         return self.labler
+
+@DATAMODULE_REGISTRY
+class PredictCovidSignalsPositivity(ActivityTask):
+    
+    is_classification = True
+    def __init__(self, fields: List[str] = DEFAULT_FIELDS, activity_level: str = "minute",
+                **kwargs):
+        
+        self.is_classification = True
+        self.labler = CovidSignalsLabler()
+        self.keys = ['heart_rate',
+                     'missing_heart_rate',
+                     'missing_steps',
+                     'sleep_classic_0',
+                     'sleep_classic_1',
+                     'sleep_classic_2',
+                     'sleep_classic_3', 
+                     'steps']
+
+        ActivityTask.__init__(self, fields=fields, activity_level=activity_level,**kwargs)
+        # ClassificationMixin.__init__(self)
+        
+    def get_name(self):
+        return "PredictCovidSignalsPositivity"
+    
+    def get_labler(self):
+        return self.labler
+
+@DATAMODULE_REGISTRY
+class PredictFluPos(ActivityTask):
+    """ Predict whether a participant was positive
+        given a rolling window of minute level activity data.
+       
+        Note that this class should be deprecated in favor of the 
+        PredictPositivity task.
+    """
+    is_classification = True
+    def __init__(self, fields: List[str] = DEFAULT_FIELDS, activity_level: str = "minute",
+                window_onset_max: int = 0, window_onset_min:int = 0,
+                **kwargs):
+        
+        self.is_classification = True
+        self.labler = FluPosLabler(window_onset_max=window_onset_max,
+                                   window_onset_min=window_onset_min)
+
+        ActivityTask.__init__(self, fields=fields, activity_level=activity_level,**kwargs)
+        # ClassificationMixin.__init__(self)
+        
+
+    def get_name(self):
+        return "PredictFluPos"
+    
+    def get_labler(self):
+        return self.labler
+
 
 @DATAMODULE_REGISTRY
 class PredictWeekend(ActivityTask, ClassificationMixin):

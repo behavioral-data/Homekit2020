@@ -1,4 +1,5 @@
 from email.policy import default
+from re import L
 import pandas as pd
 import numpy as np
 
@@ -200,6 +201,40 @@ class CovidLabler(object):
         return set([(x[0], x[1].normalize()) for x in self.result_lookup.keys()])
 
 
+class CovidSignalsLabler(object):
+    def __init__(self):
+        """
+        Designed for operation with the "Covid Signals" dataset
+        """
+        self.lab_results = pd.read_csv("data/processed/COVID_Signals/labs.csv",
+                                      dtype={"id_participant_external":"str"})
+        self.lab_results["date_received"]=pd.to_datetime(self.lab_results["samples_received"],utc=True).astype('<M8[ns]')
+
+        self.weekly_surveys = pd.read_csv("data/processed/COVID_Signals/weekly_surveys.csv",
+                                          dtype={"id_participant_external":"str"})
+        self.weekly_surveys["date_completed"] = pd.to_datetime(self.weekly_surveys["date_of_test_kit_completion"].str.split("|").str[-1],errors="coerce")
+        self.weekly_surveys = self.weekly_surveys.dropna(subset=["date_completed"])
+    
+        self.results_and_surveys = pd.merge_asof(self.lab_results.sort_values("date_received"),
+                                                 self.weekly_surveys.sort_values("date_completed"),
+                                                 by="id_participant_external",
+                                                 left_on="date_received",
+                                                 right_on="date_completed",
+                                                 tolerance=pd.to_timedelta("7D"),
+                                                 direction="backward")
+
+        self.positive_results = self.results_and_surveys[self.results_and_surveys["result"]=="Positive"]
+        self.result_lookup = (self.positive_results\
+                                 .reset_index()\
+                                 .groupby(["id_participant_external","date_completed"])\
+                                 .size() > 0)\
+                                 .to_dict()
+        self.pids = set()
+                           
+    def __call__(self,participant_id,start_date,end_date):
+        is_pos_on_date = self.result_lookup.get((participant_id,end_date.normalize()),False)
+        self.pids.add(participant_id)
+        return int(is_pos_on_date)
 
 class ClauseLabler(object):
     def __init__(self, survey_respones, clause):

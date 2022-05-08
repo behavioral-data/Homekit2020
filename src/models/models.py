@@ -32,6 +32,7 @@ import torch.nn as nn
 from torchvision.models.resnet import ResNet as BaseResNet
 from torchvision.models.resnet import BasicBlock
 
+from sktime.classification.hybrid import HIVECOTEV2 as BaseHIVECOTEV2
 import pandas as pd
 
 
@@ -45,6 +46,8 @@ import src.models.modules as modules
 from src.utils import get_logger, upload_pandas_df_to_wandb, binary_logits_to_pos_probs
 from src.models.eval import (wandb_roc_curve, wandb_pr_curve, wandb_detection_error_tradeoff_curve,
                             classification_eval,  TorchMetricClassification, TorchMetricRegression, TorchMetricAutoencode)
+from src.models.loops import DummyOptimizerLoop, NonNeuralLoop
+
 from torch import Tensor
 from torch.utils.data.dataloader import DataLoader
 from wandb.plot.roc_curve import roc_curve
@@ -321,6 +324,38 @@ class SensingModel(pl.LightningModule):
                                   df=self.predictions_df)
 
 
+class NonNeuralMixin(object):
+    def training_step(self,*args,**kwargs):
+        shim = torch.FloatTensor([0.0])
+        shim.requires_grad = True
+        return {"loss": shim}
+
+    def configure_optimizers(self):
+        #TODO: Add support for other optimizers and lr schedules?
+        optimizer = torch.optim.Adam([torch.FloatTensor([])])
+        def scheduler(step):  
+            return min(1., float(step + 1) / max(self.warmup_steps,1))
+
+        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer,scheduler)
+        
+        return [optimizer], [       
+            {
+                'scheduler': lr_scheduler,
+                'interval': 'epoch',
+                'frequency': 1,
+            }
+        ]
+
+    def backward(self, use_amp, loss, optimizer):
+        return
+
+    # def configure_optimizers(self):
+    #     #TODO: Add support for other optimizers and lr schedules?
+    #     # This takes place of your real loss 
+    #     shim = torch.FloatTensor([0.0])
+    #     shim.requires_grad = True
+    #     return {"loss": shim}
+
 class ModelTypeMixin():
     def __init__(self):
         self.is_regressor = False                            
@@ -406,3 +441,19 @@ class ResNet(ClassificationModel):
 
 
         
+@MODEL_REGISTRY
+class HIVECOTE2(NonNeuralMixin,ClassificationModel):
+    
+    def __init__(
+        self,
+        n_jobs: int = -1,
+        **kwargs,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.base_model = BaseHIVECOTEV2(n_jobs=n_jobs)
+        self.fit_loop = NonNeuralLoop()
+        self.optimizer_loop = DummyOptimizerLoop()
+        self.save_hyperparameters()
+    
+    def forward(self, inputs_embeds,labels):
+        return self.base_model(inputs_embeds)

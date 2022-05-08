@@ -5,7 +5,6 @@ import click
 import pandas as pd
 import numpy as np
 
-from src.models.commands import validate_yaml_or_json
 from src.data.utils import  write_pandas_to_parquet, load_processed_table, read_parquet_to_pandas
 
 @click.command()

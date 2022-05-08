@@ -79,6 +79,7 @@ class CLI(LightningCLI):
     def add_arguments_to_parser(self, parser):
         parser.link_arguments("model.init_args.batch_size","data.init_args.batch_size",apply_on="parse")
         parser.link_arguments("data.data_shape", "model.init_args.input_shape", apply_on="instantiate")
+        # parser.link_arguments("trainer.fit_loop", "model.fit_loop", apply_on="instantiate")
 
         add_general_args(parser)
     
@@ -151,9 +152,6 @@ class CLI(LightningCLI):
         trainer_config = {**self._get(self.config_init, "trainer"), **kwargs}
         return self._instantiate_trainer(trainer_config, extra_callbacks)
 
-    def before_fit(self):
-        pass
-    
     def after_fit(self):
         if self.trainer.is_global_zero:
             logger.info(f"Best model score: {self.checkpoint_callback.best_model_score}")
@@ -167,9 +165,9 @@ if __name__ == "__main__":
     trainer_defaults = dict(
                         checkpoint_callback=True,
                         accelerator="ddp",
-                        terminate_on_nan=True,
+                        # terminate_on_nan=True,
                         num_sanity_val_steps=0,
-                        profiler="simple",
+                        # profiler="simple",
                         gpus=-1,
               )
     

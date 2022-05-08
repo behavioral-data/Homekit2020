@@ -98,7 +98,7 @@ def find_processed_dataset(name,path=None):
     if path is None:
         path = get_processed_dataset_path(name)
     if ".csv" in path:
-        return pd.read_csv(path)
+        return pd.read_csv(path, dtype={"participant_id":"str"})
     elif ".jsonl" in path:
         return pd.read_json(path,lines=True)
 

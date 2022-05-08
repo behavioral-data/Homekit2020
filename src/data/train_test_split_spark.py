@@ -41,7 +41,7 @@ SPARK_CONFIG = [
 def main(in_path, out_path, split_date=None, end_date=None,
         test_frac = 0.5, eval_frac = None, activity_level="minute",
         timestamp_col = "timestamp"):
-    
+
         if not activity_level == "minute":
             raise NotImplementedError("This script only supports minute-level data")
         
