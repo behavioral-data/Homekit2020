@@ -20,6 +20,6 @@ TASK_ARGS=(
 )
 for i in ${!TASKS[*]}; 
   do
-    pythonCommand="python src/models/train.py fit --config tasks/${TASKS[$i]}.yaml $BASE_COMMAND  ${TASK_ARGS[$i]}"
+    pythonCommand="python src/models/train.py fit --config configs/tasks/${TASKS[$i]}.yaml $BASE_COMMAND  ${TASK_ARGS[$i]}"
     eval "python slurm-utils/launch_on_slurm.py  -n 1 -m '64G' --num-gpus 2 --num-cpus 10 --dir . --exp-name ${TASKS[$i]} --command \"$pythonCommand\""
   done
