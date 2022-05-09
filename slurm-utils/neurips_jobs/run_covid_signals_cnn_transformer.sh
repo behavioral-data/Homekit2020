@@ -1,6 +1,6 @@
 #!/bin/bash
-TRAIN_PATH="/mmfs1/gscratch/bdata/mikeam/MobileSensingSuite/data/processed/COVID_SIGNAL/train_7_day_no_scale_public_only"
-EVAL_PATH="/mmfs1/gscratch/bdata/mikeam/MobileSensingSuite/data/processed/COVID_SIGNAL/eval_7_day_no_scale_public_only"
+TRAIN_PATH="/mmfs1/gscratch/bdata/mikeam/MobileSensingSuite/data/processed/COVID_Signals/train_7_day_no_scale_public_only"
+EVAL_PATH="/mmfs1/gscratch/bdata/mikeam/MobileSensingSuite/data/processed/COVID_Signals/eval_7_day_no_scale_public_only"
 BASE_COMMAND="--config configs/models/CNNToTransformerClassifier.yaml --model.learning_rate 5e-5  --data.train_path $TRAIN_PATH --data.val_path $EVAL_PATH --model.batch_size 800 --trainer.check_val_every_n_epoch 2 --trainer.max_epochs 50 --trainer.log_every_n_steps 50 --early_stopping_patience 2"
 
 TASKS=(
