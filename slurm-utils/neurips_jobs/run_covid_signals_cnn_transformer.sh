@@ -13,10 +13,10 @@ TASKS=(
 
 TASK_ARGS=(
     ""
-    "--data.survey_path data/processed/daily_surveys.csv"
-    "--data.survey_path data/processed/daily_surveys.csv"
-    "--data.survey_path data/processed/daily_surveys.csv"
-    "--data.survey_path data/processed/daily_surveys.csv"
+    "--data.survey_path data/processed/Covid_Signals/daily_surveys.csv"
+    "--data.survey_path data/processed/Covid_Signals/daily_surveys.csv"
+    "--data.survey_path data/processed/Covid_Signals/daily_surveys.csv"
+    "--data.survey_path data/processed/Covid_Signals/daily_surveys.csv"
 )
 for i in ${!TASKS[*]}; 
   do
