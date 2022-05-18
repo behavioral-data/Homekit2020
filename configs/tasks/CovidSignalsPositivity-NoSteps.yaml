@@ -1,0 +1,11 @@
+data: 
+  class_path: src.models.tasks.PredictCovidSignalsPositivity
+  init_args:
+    fields: 
+      - 'heart_rate'
+      - 'missing_heart_rate'
+      - 'missing_steps' 
+      - 'sleep_classic_0'
+      - 'sleep_classic_1'
+      - 'sleep_classic_2'
+      - 'sleep_classic_3'

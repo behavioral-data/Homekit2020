@@ -442,19 +442,23 @@ class PredictFluPos(ActivityTask):
 class PredictCovidSignalsPositivity(ActivityTask):
     
     is_classification = True
-    def __init__(self, fields: List[str] = DEFAULT_FIELDS, activity_level: str = "minute",
+    def __init__(self, fields: List[str] = DEFAULT_FIELDS, 
+                activity_level: str = "minute",
                 **kwargs):
         
         self.is_classification = True
         self.labler = CovidSignalsLabler()
-        self.keys = ['heart_rate',
-                     'missing_heart_rate',
-                     'missing_steps',
-                     'sleep_classic_0',
-                     'sleep_classic_1',
-                     'sleep_classic_2',
-                     'sleep_classic_3', 
-                     'steps']
+        if fields:
+            self.keys = fields
+        else:
+            self.keys = ['heart_rate',
+                        'missing_heart_rate',
+                        'missing_steps',
+                        'sleep_classic_0',
+                        'sleep_classic_1',
+                        'sleep_classic_2',
+                        'sleep_classic_3', 
+                        'steps']
 
         ActivityTask.__init__(self, fields=fields, activity_level=activity_level,**kwargs)
         # ClassificationMixin.__init__(self)
