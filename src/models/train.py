@@ -11,10 +11,7 @@ import os
 from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
 
-from torch.utils.data import DataLoader
-from argparse import ArgumentParser
 
-from petastorm import make_reader
 from petastorm.pytorch import DataLoader as PetastormDataLoader
 logging.getLogger("petastorm").setLevel(logging.ERROR)
 
@@ -22,16 +19,14 @@ warnings.filterwarnings("ignore")
 
 from dotenv import dotenv_values
 
-from src.utils import argparse_to_groups
 from src.models.tasks import get_task_with_name
-from src.models.models import CNNToTransformerClassifier
 from src.utils import get_logger
 
-from pytorch_lightning import Trainer, LightningModule
 from pytorch_lightning.utilities.cli import LightningCLI, SaveConfigCallback
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities.cloud_io import get_filesystem
+from pytorch_lightning import Trainer, LightningModule 
 
 logger = get_logger(__name__)
 CONFIG = dotenv_values(".env")
@@ -173,4 +168,5 @@ if __name__ == "__main__":
     
     cli = CLI(trainer_defaults=trainer_defaults,
             #  save_config_callback=WandBSaveConfigCallback,
-             save_config_filename="lightning_config.yaml")
+            seed_everything_default=999,
+            save_config_filename="lightning_config.yaml")

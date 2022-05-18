@@ -5,6 +5,7 @@ BASE_COMMAND="--config configs/models/CNNToTransformerClassifier.yaml --model.le
 
 TASKS=(
     "CovidSignalsPositivity"
+    "CovidSignalsPositivity-NoSteps"
     "CovidSignalsAches"
     "CovidSignalsChills"
     "CovidSignalsHeadache"
@@ -12,6 +13,7 @@ TASKS=(
 )
 
 TASK_ARGS=(
+    ""
     ""
     "--data.survey_path data/processed/COVID_Signals/daily_surveys.csv"
     "--data.survey_path data/processed/COVID_Signals/daily_surveys.csv"

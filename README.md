@@ -8,7 +8,7 @@ MobileSensingSuite (We need a name!)
 1. Clone this repo: `git clone https://github.com/behavioral-data/MobileSensingSuite.git`
 2. cd into it:  `cd MobileSensingSuite`
 3. Build the conda environment: `make create_environment` (requires conda)
-4. (As of 5/8/2022) INSTAL Lightning from source (we need some very recent updates to get the configs to work): `pip install https://github.com/PyTorchLightning/pytorch-lightning/archive/master.zip`
+4. (As of 5/8/2022) Install Lightning from source (we need some very recent updates to get the configs to work): `pip install https://github.com/PyTorchLightning/pytorch-lightning/archive/master.zip`
 
 ### Getting Our Data 
 For now, we can use the debug dataset in `data/debug/petastorm_datasets/debug`.
