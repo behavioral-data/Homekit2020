@@ -381,7 +381,10 @@ class CNNToTransformerClassifier(ClassificationModel):
                 positional_encoding = False, **kwargs) -> None:
 
         super().__init__(**kwargs)
-        self.name = "CNNToTransformerClassifier"
+        if num_hidden_layers == 0:
+            self.name = "CNNClassifier"
+        else:
+            self.name = "CNNToTransformerClassifier"
         n_timesteps, input_features = kwargs.get("input_shape")
         self.criterion = nn.CrossEntropyLoss()
         self.encoder = modules.CNNToTransformerEncoder(input_features, num_attention_heads, num_hidden_layers,
