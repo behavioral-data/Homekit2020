@@ -12,7 +12,7 @@ TASK_ARGS=(
     "--data.window_onset_max 4",
     "--data.window_onset_max 5",
 )
-for i in ${!TASKS_ARGS[*]}; 
+for i in ${!TASK_ARGS[*]}; 
   do
     pythonCommand="python src/models/train.py fit $BASE_COMMAND  ${TASK_ARGS[$i]}"
     eval "python slurm-utils/launch_on_slurm.py  -n 1 -m '64G' --num-gpus 1 --num-cpus 5 --dir . --exp-name CovidSignalsWindowSize --command \"$pythonCommand\""
