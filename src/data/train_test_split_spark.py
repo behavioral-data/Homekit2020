@@ -22,7 +22,7 @@ from pyspark import SparkContext
 # although this hardcoded config works pretty well for
 # bdata's darkwing machine
 SPARK_CONFIG = [ 
-    ("spark.master","local[95]"),
+    ("spark.master","local[16]"),
     ("spark.ui.port","4050"),
     ("spark.executor.memory","750g"),
     ('spark.driver.memory',  '2000g'),

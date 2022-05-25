@@ -444,10 +444,17 @@ class PredictCovidSignalsPositivity(ActivityTask):
     is_classification = True
     def __init__(self, fields: List[str] = DEFAULT_FIELDS, 
                 activity_level: str = "minute",
+                 window_onset_min: int = 0,
+                 window_onset_max: int = 0,
                 **kwargs):
         
         self.is_classification = True
-        self.labler = CovidSignalsLabler()
+
+        self.window_onset_min = window_onset_min
+        self.window_onset_max = window_onset_max
+
+        self.labler = CovidSignalsLabler(window_onset_min=self.window_onset_min,
+                                         window_onset_max=self.window_onset_max)
         if fields:
             self.keys = fields
         else:
@@ -464,7 +471,7 @@ class PredictCovidSignalsPositivity(ActivityTask):
         # ClassificationMixin.__init__(self)
         
     def get_name(self):
-        return "PredictCovidSignalsPositivity"
+        return f"PredictCovidSignalsPositivity-{self.window_onset_min}-{self.window_onset_max}"
     
     def get_labler(self):
         return self.labler
