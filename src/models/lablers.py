@@ -202,7 +202,8 @@ class CovidLabler(object):
 
 
 class CovidSignalsLabler(object):
-    def __init__(self):
+    def __init__(self, window_onset_min: int = 0,
+                       window_onset_max: int = 0):
         """
         Designed for operation with the "Covid Signals" dataset
         """
@@ -222,8 +223,12 @@ class CovidSignalsLabler(object):
                                                  right_on="date_completed",
                                                  tolerance=pd.to_timedelta("7D"),
                                                  direction="backward")
+        #TODO: Where do these NaT values come from?
+        self.positive_results = self.results_and_surveys[self.results_and_surveys["result"]=="Positive"].dropna(subset = "date_completed")
+        mapper = lambda x: get_dates_around(x, days_minus=window_onset_min, days_plus=window_onset_max)
+        self.positive_results["date_completed"] = self.positive_results["date_completed"].map(mapper)
+        self.positive_results = self.positive_results.explode("date_completed")  
 
-        self.positive_results = self.results_and_surveys[self.results_and_surveys["result"]=="Positive"]
         self.result_lookup = (self.positive_results\
                                  .reset_index()\
                                  .groupby(["id_participant_external","date_completed"])\
