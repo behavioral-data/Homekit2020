@@ -1,0 +1,4 @@
+data: 
+  class_path: src.models.tasks.PredictSurveyClause
+  init_args:
+    clause:  "(symptom_severity__q_fatigue_2 > 0) | (symptom_severity__q_fatigue_3 > 0)"

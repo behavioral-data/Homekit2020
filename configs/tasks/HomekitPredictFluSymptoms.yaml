@@ -1,0 +1,4 @@
+data: 
+  class_path: src.models.tasks.PredictSurveyClause
+  init_args:
+    clause:  "have_flu > 0"
