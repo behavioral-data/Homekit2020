@@ -378,9 +378,11 @@ class CNNToTransformerClassifier(ClassificationModel):
     def __init__(self, num_attention_heads : int = 4, num_hidden_layers: int = 4,  
                 kernel_sizes=[5,3,1], out_channels = [256,128,64], 
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, 
-                positional_encoding = False, **kwargs) -> None:
+                positional_encoding = False, pretrained_ckpt_path : Optional[str] = None,
+                 **kwargs) -> None:
 
         super().__init__(**kwargs)
+
         if num_hidden_layers == 0:
             self.name = "CNNClassifier"
         else:
@@ -393,6 +395,22 @@ class CNNToTransformerClassifier(ClassificationModel):
                                                       positional_encoding=positional_encoding)
         
         self.head = modules.ClassificationModule(self.encoder.d_model, self.encoder.final_length, num_labels)
+
+        if pretrained_ckpt_path:
+            ckpt = torch.load(pretrained_ckpt_path)
+            try:
+                self.load_state_dict(ckpt['state_dict'])
+            
+            #TODO: Nasty hack for reverse compatability! 
+            except RuntimeError:
+                new_state_dict = {}
+                for k,v in ckpt["state_dict"].items():
+                    if not "encoder" in k :
+                        new_state_dict["encoder."+k] = v
+                    else:
+                        new_state_dict[k] = v
+                self.load_state_dict(new_state_dict, strict=False)
+
         self.save_hyperparameters()
         
     def forward(self, inputs_embeds,labels):
