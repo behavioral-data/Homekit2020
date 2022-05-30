@@ -368,7 +368,7 @@ class ActivityTask(Task):
                                                     predicate=self.predicate),
                                         batch_size=self.batch_size)   
     def test_dataloader(self):
-        if self.val_url:
+        if self.test_url:
             return PetastormDataLoader(make_reader(self.test_url,transform_spec=self.transform,
                                                     predicate=self.predicate),
                                         batch_size=self.batch_size)   

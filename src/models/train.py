@@ -10,7 +10,7 @@ import os
 
 from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
-
+from pytorch_lightning.trainer.states import TrainerFn
 
 from petastorm.pytorch import DataLoader as PetastormDataLoader
 logging.getLogger("petastorm").setLevel(logging.ERROR)
@@ -151,8 +151,42 @@ class CLI(LightningCLI):
         if self.trainer.is_global_zero:
             logger.info(f"Best model score: {self.checkpoint_callback.best_model_score}")
             logger.info(f"Best model path: {self.checkpoint_callback.best_model_path}")
-   
-    
+        results = {}
+        
+        if self.trainer.state.fn == TrainerFn.FITTING:
+            if (
+                self.trainer.checkpoint_callback
+                and self.trainer.checkpoint_callback.best_model_path
+            ):
+                ckpt_path = self.trainer.checkpoint_callback.best_model_path
+                # Disable useless logging
+                logging.getLogger("pytorch_lightning.utilities.distributed").setLevel(
+                    logging.WARNING
+                )
+                logging.getLogger("pytorch_lightning.accelerators.gpu").setLevel(
+                    logging.WARNING
+                )
+
+                self.trainer.callbacks = []
+                fn_kwargs = {
+                    "model": self.model,
+                    "datamodule": self.datamodule,
+                    "ckpt_path": ckpt_path,
+                    "verbose": False,
+                }
+
+                has_test_loader = (
+                    self.trainer._data_connector._test_dataloader_source.is_defined()
+                )
+
+                results = self.trainer.test(**fn_kwargs)[0] if has_test_loader else {}
+
+        else:
+            results = self.trainer.logged_metrics
+
+        if results:
+            self.trainer.logger.log_metrics(results)
+
     def set_defaults(self):
         ...
 
