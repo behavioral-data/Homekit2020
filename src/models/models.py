@@ -220,8 +220,6 @@ class SensingModel(pl.LightningModule):
 
         self.log("test/loss", loss.item(),on_step=True,sync_dist=True)
 
-        if self.multitask_daily_features:
-            y = y[:,0].type(torch.int64)
 
         self.test_preds.append(preds.detach())
         self.test_labels.append(y.detach())
