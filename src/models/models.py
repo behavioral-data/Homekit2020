@@ -431,6 +431,7 @@ class ResNet(ClassificationModel):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
+        self.name = "ResNet"
         self.base_model = BaseResNet(block=BasicBlock,
                                     layers=layers,
                                     num_classes=num_classes,
