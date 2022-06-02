@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=wandb_sweep_$1_$2
+#SBATCH --job-name=wandb_sweep
 #SBATCH --output=/mmfs1/gscratch/bdata/mikeam/MobileSensingSuite/slurm-utils/jobs/%x-%j.log
 #SBATCH --error=/mmfs1/gscratch/bdata/mikeam/MobileSensingSuite/slurm-utils/jobs/%x-%j.out
 #SBATCH --account=bdata
