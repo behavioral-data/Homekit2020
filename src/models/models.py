@@ -371,7 +371,6 @@ class RegressionModel(SensingModel,ModelTypeMixin):
 
 @MODEL_REGISTRY       
 class CNNToTransformerClassifier(ClassificationModel):
-   
 
     def __init__(self, num_attention_heads : int = 4, num_hidden_layers: int = 4,  
                 kernel_sizes=[5,3,1], out_channels = [256,128,64], 
@@ -451,6 +450,46 @@ class ResNet(ClassificationModel):
         preds = self.base_model(x)
         loss =  self.criterion(preds,labels)
         return loss, preds
+
+
+@MODEL_REGISTRY
+class TransformerClassifier(ClassificationModel):
+    
+    def __init__(
+        self,
+        layers: List[int] = [2,2,2,2],
+        num_classes: int = 2,
+        groups: int = 1,
+        width_per_group: int = 64,
+        replace_stride_with_dilation: Optional[List[bool]] = None,
+        num_attention_heads: int = 4,
+        num_hidden_layers: int = 4,
+        dropout_rate: float = 0.,
+        num_labels: int = 2,
+        **kwargs,
+    ) -> None:
+        super().__init__(**kwargs)
+
+        self.name = "TransformerClassifier"
+        n_timesteps, input_features = kwargs.get("input_shape")
+
+        self.criterion = nn.CrossEntropyLoss()
+        self.blocks = nn.ModuleList([
+            modules.EncoderBlock(input_features, num_attention_heads, dropout_rate) for _ in range(num_hidden_layers)
+        ])
+        
+        self.head = modules.ClassificationModule(input_features, n_timesteps, num_labels)
+
+    
+    def forward(self, inputs_embeds,labels):
+        x = inputs_embeds
+        for l in self.blocks:
+            x = l(x)
+
+        preds = self.head(x)
+        loss =  self.criterion(preds,labels)
+        return loss, preds
+
 
 
         
