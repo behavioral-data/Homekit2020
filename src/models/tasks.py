@@ -346,7 +346,7 @@ class ActivityTask(Task):
             else: 
                 data_length = list(lengths)[0]
             
-            self.data_shape = (data_length,len(self.fields))
+            self.data_shape = (int(data_length),len(self.fields))
         
         elif backend == "dynamic":
             self.data_shape = shape 
