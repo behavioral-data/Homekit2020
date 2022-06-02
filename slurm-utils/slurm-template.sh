@@ -7,7 +7,7 @@
 #SBATCH --output=${LOG_PATH}
 #SBATCH --account=${ACCOUNT}
 #SBATCH --partition=${PARTITION}
-#SBATCH --time=6:00:00
+#SBATCH --time=12:00:00
 ${GIVEN_NODE}
 ### This script works for any number of nodes, Ray will find and manage all resources
 #SBATCH --nodes=${NUM_NODES}
@@ -25,7 +25,7 @@ ${GIVEN_NODE}
 # module load pytorch/v1.4.0-gpu
 
 source ~/.bashrc
-${CONDA_PATH}
+#${CONDA_PATH}
 conda activate ${CONDA_ENV}
 
 # ===== Call your code below =====
