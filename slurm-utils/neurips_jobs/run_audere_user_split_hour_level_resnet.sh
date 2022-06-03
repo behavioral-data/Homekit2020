@@ -1,0 +1,19 @@
+TRAIN_PATH="/mmfs1/gscratch/bdata/mikeam/MobileSensingSuite/data/processed/audere/audere_split_2020_02_10_to_2020_04_01_by_participant/train_7_day_no_scale_hour_level"
+EVAL_PATH="/mmfs1/gscratch/bdata/mikeam/MobileSensingSuite/data/processed/audere/audere_split_2020_02_10_to_2020_04_01_by_participant/eval_7_day_no_scale_hour_level"
+TEST_PATH="/mmfs1/gscratch/bdata/mikeam/MobileSensingSuite/data/processed/audere/audere_split_2020_02_10_to_2020_04_01_by_participant/test_7_day_no_scale_hour_level"
+BASE_COMMAND="--model src.models.models.ResNet   --model.learning_rate 0.003  --data.train_path $TRAIN_PATH --data.val_path $EVAL_PATH  --data.test_path $TEST_PATH --model.batch_size 300 --trainer.check_val_every_n_epoch 1 --trainer.max_epochs 50 --trainer.log_every_n_steps 50 --early_stopping_patience 3 --model.warmup_steps 100"
+
+TASKS=(
+    "HomekitPredictFluPos"
+    "HomekitPredictFluSymptoms"
+    "HomekitPredictSevereFever"
+    "HomekitPredictCough"
+    "HomekitPredictFatigue"
+)
+
+
+for i in ${!TASKS[*]}; 
+  do
+    pythonCommand="python src/models/train.py fit --config configs/tasks/${TASKS[$i]}.yaml $BASE_COMMAND --notes 'User Split'"
+    eval "python slurm-utils/launch_on_slurm.py  -n 1 -m '64G' --num-gpus 1 --num-cpus 5 --dir . --exp-name ResNet-${TASKS[$i]} --command \"$pythonCommand\""
+  done
