@@ -1,4 +1,4 @@
-MobileSensingSuite (We need a name!)
+Homekit2020
 ==============================
 
 ## Getting Started
