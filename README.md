@@ -6,7 +6,7 @@ Homekit2020
 
 ### Installation
 1. Clone this repo: `git clone https://github.com/behavioral-data/Homekit2020.git`
-2. cd into it:  `cd MobileSensingSuite`
+2. cd into it:  `cd Homekit2020`
 3. Build the conda environment: `make create_environment` (requires conda)
 4. Install the src package: `conda activate MobileSensingSuite; pip install -e .`
 5. (As of 5/8/2022) Install Lightning from source (we need some very recent updates to get the configs to work): `pip install https://github.com/PyTorchLightning/pytorch-lightning/archive/master.zip`
