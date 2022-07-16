@@ -12,8 +12,12 @@ Homekit2020
 5. (As of 5/8/2022) Install Lightning from source (we need some very recent updates to get the configs to work): `pip install https://github.com/PyTorchLightning/pytorch-lightning/archive/master.zip`
 
 ### Getting Our Data 
-For now, we can use the debug dataset in `data/debug/petastorm_datasets/debug`.
-To get these data, use the provided Google Drive link and place the contents in the `data` directory.
+Navigate to https://www.synapse.org/#!Synapse:syn22803188/wiki/609492 to begin the approval process for access to the Homekit2020 dataset. Note that once you become a registered Synapse user it may take several business days for the Homekit2020 team to process your request. 
+
+Once you have approval, follow these steps:
+1. Install the Synapse CLI by following [these instructions](https://help.synapse.org/docs/Installing-Synapse-API-Clients.1985249668.html#InstallingSynapseAPIClients-CommandLine).
+2. Download the zipped data with `synapse get syn32804645`
+3. Create the data directory `unzip homekit2020neurips.zip -d data`
 
 ### Running your first job 
 This project was designed to be run primarily from the command line (although it _could_ be run from a notebook, e.g. by importing `src` ). You can run a simple job with:
