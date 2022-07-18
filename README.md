@@ -17,7 +17,7 @@ Navigate to https://www.synapse.org/#!Synapse:syn22803188/wiki/609492 to begin t
 Once you have approval, follow these steps:
 1. Install the Synapse CLI by following [these instructions](https://help.synapse.org/docs/Installing-Synapse-API-Clients.1985249668.html#InstallingSynapseAPIClients-CommandLine).
 2. Download the zipped data with `synapse get syn32804645`
-3. Create the data directory `unzip homekit2020neurips.zip -d data`
+3. Create the data directory `mkdir data; unzip homekit2020neurips.zip -d data/processed`
 
 ### Running your first job 
 This project was designed to be run primarily from the command line (although it _could_ be run from a notebook, e.g. by importing `src` ). You can run a simple job with:
@@ -25,8 +25,8 @@ This project was designed to be run primarily from the command line (although it
 python src/models/train.py fit `# Main entry point` \
         --config src/data/task_configs/PredictFluPos.yaml `# Configures the task`\
         --config src/configs/models/CNNToTransformerClassifier.yaml `# Configures the model`\
-        --data.train_path $PWD/data/debug/petastorm_datasets/debug `# Train data location`\
-        --data.val_path $PWD/data/debug/petastorm_datasets/debug `# Validation data location`\
+        --data.train_path $PWD/data/processed/split/audere_split_2020_02_10/train_7_day `# Train data location`\
+        --data.val_path $PWD/data/processed/split/audere_split_2020_02_10/eval_7_day  `# Validation data location`\
 ```
 
 ### Loading a Pretrained Model
