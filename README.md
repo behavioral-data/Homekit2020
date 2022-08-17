@@ -23,7 +23,7 @@ Once you have approval, follow these steps:
 This project was designed to be run primarily from the command line (although it _could_ be run from a notebook, e.g. by importing `src` ). You can run a simple job with:
 ``` bash
 python src/models/train.py fit `# Main entry point` \
-        --config src/data/task_configs/PredictFluPos.yaml `# Configures the task`\
+        --config src/configs/tasks/HomekitPredictFluPos.yaml `# Configures the task`\
         --config src/configs/models/CNNToTransformerClassifier.yaml `# Configures the model`\
         --data.train_path $PWD/data/processed/split/audere_split_2020_02_10/train_7_day `# Train data location`\
         --data.val_path $PWD/data/processed/split/audere_split_2020_02_10/eval_7_day  `# Validation data location`\
