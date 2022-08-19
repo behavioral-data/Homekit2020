@@ -1,4 +1,4 @@
-name: MobileSensingSuite
+name: Homekit2020
 channels:
   - conda-forge
   - defaults
