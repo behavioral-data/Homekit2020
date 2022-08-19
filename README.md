@@ -23,9 +23,9 @@ Once you have approval, follow these steps:
 This project was designed to be run primarily from the command line (although it _could_ be run from a notebook, e.g. by importing `src` ). You can run a simple job with:
 ``` bash
 python src/models/train.py fit `# Main entry point` \
-        --config src/configs/tasks/HomekitPredictFluPos.yaml `# Configures the task`\
-        --config src/configs/models/CNNToTransformerClassifier.yaml `# Configures the model`\
-        --data.train_path $PWD/data/processed/split/audere_split_2020_02_10/train_7_day `# Train data location`\
+        --config configs/tasks/HomekitPredictFluPos.yaml `# Configures the task`\
+        --config configs/models/CNNToTransformerClassifier.yaml `# Configures the model`\
+        --data.train_path  $PWD/data/processed/split/audere_split_2020_02_10/train_7_day  `# Train data location`\
         --data.val_path $PWD/data/processed/split/audere_split_2020_02_10/eval_7_day  `# Validation data location`\
 ```
 
@@ -35,10 +35,10 @@ Pretrained models are located in the `models` subdirectory. To load a model for 
 ``` bash
 python src/models/train.py fit  \
         --trainer.resume_from_checkpoint PATH_TO_PRETRAINED
-        --config src/data/task_configs/PredictFluPos.yaml \
-        --config src/configs/models/CNNToTransformerClassifier.yaml \
-        --data.train_path $PWD/data/debug/petastorm_datasets/debug \
-        --data.val_path $PWD/data/debug/petastorm_datasets/debug \
+        --config configs/tasks/HomekitPredictFluPos.yaml \
+        --config configs/models/CNNToTransformerClassifier.yaml \
+        --data.train_path  $PWD/data/processed/split/audere_split_2020_02_10/train_7_day \
+        --data.val_path  $PWD/data/processed/split/audere_split_2020_02_10/eval_7_day \
 ```
 
 ### Adding a new model
