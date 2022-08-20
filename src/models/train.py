@@ -192,11 +192,8 @@ class CLI(LightningCLI):
 
 if __name__ == "__main__":
     trainer_defaults = dict(
-                        checkpoint_callback=True,
-                        accelerator="ddp",
-                        # terminate_on_nan=True,
+                        accelerator="cuda",
                         num_sanity_val_steps=0,
-                        # profiler="simple",
                         gpus=-1,
               )
     
