@@ -23,7 +23,7 @@ dependencies:
   - cudatoolkit=10.2
   - jupyter
   - matplotlib
-  - pytorch-lightning[extra]
+  - pytorch-lightning[extra]=1.7.0
   - torchmetrics>=0.5
   - pyspark=3.1.2
   - sktime

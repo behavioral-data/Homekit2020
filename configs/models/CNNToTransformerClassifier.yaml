@@ -18,5 +18,5 @@ model:
     dropout_rate: 0.3
     num_labels: 2
     positional_encoding: false
-    bootstrap_val_metrics: true
+    # bootstrap_val_metrics: true
     warmup_steps: 20
