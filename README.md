@@ -9,7 +9,6 @@ Homekit2020
 2. cd into it:  `cd Homekit2020`
 3. Build the conda environment: `make create_environment` (requires conda)
 4. Install the src package: `conda activate Homekit2020; pip install -e .`
-5. (As of 5/8/2022) Install Lightning from source (we need some very recent updates to get the configs to work): `pip install https://github.com/PyTorchLightning/pytorch-lightning/archive/master.zip`
 
 ### Getting Our Data 
 Navigate to https://www.synapse.org/#!Synapse:syn22803188/wiki/609492 to begin the approval process for access to the Homekit2020 dataset. Note that once you become a registered Synapse user it may take several business days for the Homekit2020 team to process your request. 
