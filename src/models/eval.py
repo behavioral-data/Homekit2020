@@ -175,7 +175,9 @@ class TorchMetricClassification(MetricCollection):
                              "roc_auc":(max,0)}
 
     def compute(self) -> Dict[str, Any]:
-        results = super().compute()
+        results = {k: m.compute() for k, m in self.items(keep_base=True, copy_state=False)}
+        results = {self._set_name(k): v for k, v in results.items()}
+
         if self.bootstrap_cis:
 
             roc_auc = results["roc_auc"]["mean"] 
