@@ -41,6 +41,8 @@ def add_task_args(parser,name):
 def add_general_args(parent_parser):
     """ Adds arguments that aren't part of pl.Trainer, but are useful
         (e.g.) --no_wandb """
+    parent_parser.add_argument("--optimize", type=str, default="roc_auc",
+                    help="Validation metric to optimize for during training")
     parent_parser.add_argument("--no_wandb", default=False, action="store_true",
                     help="Run without wandb logging")                        
     parent_parser.add_argument("--notes", type=str, default=None,
@@ -90,7 +92,7 @@ class CLI(LightningCLI):
 
         if self.datamodule.val_path:
             if self.datamodule.is_classification:
-                checkpoint_metric = "val/roc_auc"
+                checkpoint_metric = "val/{}".format(self.config["fit"]["optimize"])
                 mode = "max"
             else:
                 checkpoint_metric = "val/loss"
@@ -196,6 +198,8 @@ if __name__ == "__main__":
                         num_sanity_val_steps=0,
                         gpus=-1,
               )
+    if os.path.isfile("lightning_config.yaml"):
+        os.remove("lightning_config.yaml")
     
     cli = CLI(trainer_defaults=trainer_defaults,
             #  save_config_callback=WandBSaveConfigCallback,
