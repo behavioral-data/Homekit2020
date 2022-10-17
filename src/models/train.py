@@ -94,6 +94,13 @@ class CLI(LightningCLI):
         
         checkpoint_metric = self.config["fit"]["checkpoint_metric"]
         mode = self.config["fit"]["checkpoint_mode"]
+        
+        if mode is None:
+            # heuristically sets mode if unspecified in CLI
+            if "loss" in checkpoint_metric:
+                mode = "min"
+            else:
+                mode = "max"
             
         if "loss" in checkpoint_metric and mode == "max":
              logger.warning("Maximizing {}".format(checkpoint_metric))
