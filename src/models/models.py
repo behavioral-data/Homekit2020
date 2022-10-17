@@ -340,12 +340,6 @@ class NonNeuralMixin(object):
     def backward(self, use_amp, loss, optimizer):
         return
 
-    # def configure_optimizers(self):
-    #     #TODO: Add support for other optimizers and lr schedules?
-    #     # This takes place of your real loss 
-    #     shim = torch.FloatTensor([0.0])
-    #     shim.requires_grad = True
-    #     return {"loss": shim}
 
 class ModelTypeMixin():
     def __init__(self):
@@ -457,11 +451,6 @@ class TransformerClassifier(ClassificationModel):
     
     def __init__(
         self,
-        layers: List[int] = [2,2,2,2],
-        num_classes: int = 2,
-        groups: int = 1,
-        width_per_group: int = 64,
-        replace_stride_with_dilation: Optional[List[bool]] = None,
         num_attention_heads: int = 4,
         num_hidden_layers: int = 4,
         dropout_rate: float = 0.,
