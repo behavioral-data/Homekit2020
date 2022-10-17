@@ -41,6 +41,10 @@ def add_task_args(parser,name):
 def add_general_args(parent_parser):
     """ Adds arguments that aren't part of pl.Trainer, but are useful
         (e.g.) --no_wandb """
+    parent_parser.add_argument("--checkpoint_metric", type=str, default=None,
+                    help="Metric to optimize for during training")
+    parent_parser.add_argument("--checkpoint_mode", type=str, default="max",
+                    help="Metric direction to optimize for during training")                    
     parent_parser.add_argument("--no_wandb", default=False, action="store_true",
                     help="Run without wandb logging")                        
     parent_parser.add_argument("--notes", type=str, default=None,
@@ -87,24 +91,41 @@ class CLI(LightningCLI):
         # do based on the model and task that are passed.
 
         extra_callbacks = []
-
-        if self.datamodule.val_path:
-            if self.datamodule.is_classification:
-                checkpoint_metric = "val/roc_auc"
-                mode = "max"
-            else:
-                checkpoint_metric = "val/loss"
+        
+        checkpoint_metric = self.config["fit"]["checkpoint_metric"]
+        mode = self.config["fit"]["checkpoint_mode"]
+        
+        if mode is None:
+            # heuristically sets mode if unspecified in CLI
+            if "loss" in checkpoint_metric:
                 mode = "min"
-
+            else:
+                mode = "max"
+            
+        if "loss" in checkpoint_metric and mode == "max":
+             logger.warning("Maximizing {}".format(checkpoint_metric))
+            
+        if self.datamodule.val_path:
+           
+            if self.datamodule.is_classification:
+                if checkpoint_metric is None:            
+                    checkpoint_metric = "val/roc_auc"
+                    mode = "max"
+            else:
+                 if checkpoint_metric is None:            
+                    checkpoint_metric = "val/loss"
+                    mode = "min"
+            
             if self.config["fit"]["early_stopping_patience"]:
                 early_stopping_callback = EarlyStopping(monitor=checkpoint_metric,
                                                         patience=self.config["fit"]["early_stopping_patience"],
                                                         mode=mode)
                 extra_callbacks.append(early_stopping_callback)
         else:
-            checkpoint_metric = "train/loss"
-            mode = "min"
-
+            if checkpoint_metric is None:            
+                checkpoint_metric = "train/loss"
+                mode = "min"
+        
         self.checkpoint_callback = ModelCheckpoint(
                             filename='{epoch}',
                             save_last=True,
@@ -196,6 +217,8 @@ if __name__ == "__main__":
                         num_sanity_val_steps=0,
                         gpus=-1,
               )
+    if os.path.isfile("lightning_config.yaml"):
+        os.remove("lightning_config.yaml")
     
     cli = CLI(trainer_defaults=trainer_defaults,
             #  save_config_callback=WandBSaveConfigCallback,
