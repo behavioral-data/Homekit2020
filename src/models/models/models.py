@@ -39,7 +39,7 @@ import src.models.models.modules as modules
 from src.utils import get_logger, upload_pandas_df_to_wandb, binary_logits_to_pos_probs
 
 from src.models.loops import DummyOptimizerLoop, NonNeuralLoop
-from src.models.models import ClassificationModel, NonNeuralMixin
+from src.models.models.bases import ClassificationModel, NonNeuralMixin
 from src.models.eval import (wandb_roc_curve, wandb_pr_curve, wandb_detection_error_tradeoff_curve,
                             classification_eval,  TorchMetricClassification, TorchMetricRegression, TorchMetricAutoencode)
 from torch.utils.data.dataloader import DataLoader
@@ -54,7 +54,6 @@ logger = get_logger(__name__)
 
 def pair(t):
     return t if isinstance(t, tuple) else (t, t)
-
 
 
 @MODEL_REGISTRY       
@@ -104,7 +103,6 @@ class CNNToTransformerClassifier(ClassificationModel):
         loss =  self.criterion(preds,labels)
         return loss, preds
 
-
 @MODEL_REGISTRY
 class ResNet(ClassificationModel):
     
@@ -148,7 +146,7 @@ class TransformerClassifier(ClassificationModel):
         num_attention_heads: int = 4,
         num_hidden_layers: int = 4,
         dropout_rate: float = 0.,
-        num_labels: int = 2,
+        num_classes: int = 2,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -161,7 +159,7 @@ class TransformerClassifier(ClassificationModel):
             modules.EncoderBlock(input_features, num_attention_heads, dropout_rate) for _ in range(num_hidden_layers)
         ])
         
-        self.head = modules.ClassificationModule(input_features, n_timesteps, num_labels)
+        self.head = modules.ClassificationModule(input_features, n_timesteps, num_classes)
 
     
     def forward(self, inputs_embeds,labels):

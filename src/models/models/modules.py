@@ -369,16 +369,3 @@ class ClassificationModule(nn.Module):
 
     def reset_parameters(self):
         self.fc.reset_parameters()
-
-class RegressionModule(nn.Module):
-    def __init__(self, d_model: int, factor: int, output_size: int) -> None:
-        super(RegressionModule, self).__init__()
-        self.d_model = d_model
-        self.factor = factor
-        self.output_size = output_size
-        self.fc = nn.Linear(int(d_model * factor), output_size)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.contiguous().view(-1, int(self.factor * self.d_model))
-        x = self.fc(x)
-        return x
