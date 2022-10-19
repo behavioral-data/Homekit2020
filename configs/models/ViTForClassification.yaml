@@ -1,0 +1,74 @@
+# pytorch_lightning==1.7.0
+seed_everything: 999
+trainer:
+  logger: true
+  enable_checkpointing: true
+  callbacks: null
+  default_root_dir: null
+  gradient_clip_val: null
+  gradient_clip_algorithm: null
+  num_nodes: 1
+  num_processes: null
+  devices: null
+  gpus: -1
+  auto_select_gpus: false
+  tpu_cores: null
+  ipus: null
+  enable_progress_bar: true
+  overfit_batches: 0.0
+  track_grad_norm: -1
+  check_val_every_n_epoch: 1
+  fast_dev_run: false
+  accumulate_grad_batches: null
+  max_epochs: null
+  min_epochs: null
+  max_steps: -1
+  min_steps: null
+  max_time: null
+  limit_train_batches: null
+  limit_val_batches: null
+  limit_test_batches: null
+  limit_predict_batches: null
+  val_check_interval: null
+  log_every_n_steps: 50
+  accelerator: cuda
+  strategy: null
+  sync_batchnorm: false
+  precision: 32
+  enable_model_summary: true
+  weights_save_path: null
+  num_sanity_val_steps: 0
+  resume_from_checkpoint: null
+  profiler: null
+  benchmark: null
+  deterministic: null
+  reload_dataloaders_every_n_epochs: 0
+  auto_lr_find: false
+  replace_sampler_ddp: true
+  detect_anomaly: false
+  auto_scale_batch_size: false
+  plugins: null
+  amp_backend: native
+  amp_level: null
+  move_metrics_to_cpu: false
+  multiple_trainloader_mode: max_size_cycle
+no_wandb: false
+notes: null
+early_stopping_patience: null
+ckpt_path: null
+model:
+  class_path: src.models.models.ViTForClassification
+  init_args:
+    patch_length: 63
+    dim: 128
+    num_hidden_layers: 12
+    num_attention_heads: 8
+    mlp_dim: 64
+    pool: cls
+    dim_head: 64
+    dropout_rate: 0.0
+    num_classes: 2
+    emb_dropout_rate: 0.0
+    learning_rate: 0.001
+    warmup_steps: 0
+    batch_size: 800

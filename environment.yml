@@ -28,9 +28,10 @@ dependencies:
   - pyspark=3.1.2
   - sktime
   - pip:
+    - einops
     - torchviz==0.0.2
     - pyyaml==5.4.1
-    - wandb
+    - wandb 
     - xgboost==1.4.2
     - tensorboard==2.6.0
     - tabulate==0.8.9
