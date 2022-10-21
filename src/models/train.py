@@ -50,7 +50,9 @@ def add_general_args(parent_parser):
     parent_parser.add_argument("--notes", type=str, default=None,
                     help="Notes to be sent to WandB")    
     parent_parser.add_argument("--early_stopping_patience", type=int, default=None,
-                    help="path to validation dataset")                            
+                    help="path to validation dataset")       
+    parent_parser.add_argument("--gradient_log_interval", default=0, type=int,
+                       help = "Interval with which to log gradients to WandB. 0 -> Never")
     
     return parent_parser               
 
@@ -157,6 +159,12 @@ class CLI(LightningCLI):
         extra_callbacks = extra_callbacks + [self._get(self.config_init, c) for c in self._parser(self.subcommand).callback_keys]
         trainer_config = {**self._get(self.config_init, "trainer"), **kwargs}
         return self._instantiate_trainer(trainer_config, extra_callbacks)
+
+    def before_fit(self):
+        # Enables logging of gradients to WandB
+        gradient_log_interval = self.config["fit"]["gradient_log_interval"]
+        if isinstance(self.trainer.logger, WandbLogger) and gradient_log_interval:
+            self.trainer.logger.watch(self.model, log="all", log_freq=gradient_log_interval)
 
     def after_fit(self):
         if self.trainer.is_global_zero:
