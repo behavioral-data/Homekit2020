@@ -100,11 +100,13 @@ class ViT(nn.Module):
         n_timesteps, n_channels = input_shape
         assert n_timesteps % patch_length == 0, 'Input length must be divisible by the patch size.'
 
+
         num_patches = (n_timesteps // n_channels) 
         patch_dim = n_channels * patch_length
         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
 
         self.to_patch_embedding = nn.Sequential(
+            nn.BatchNorm1d(n_timesteps),
             Rearrange('b (l p) c -> b l (p c)', p = patch_length) ,
             nn.Linear(patch_dim, dim),
         )
@@ -121,6 +123,7 @@ class ViT(nn.Module):
 
     
     def embed(self, x):
+
         x = self.to_patch_embedding(x)
         b, n, _ = x.shape
 
