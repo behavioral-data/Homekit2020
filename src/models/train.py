@@ -8,7 +8,6 @@ from typing import Optional, Any
 import warnings
 import os
 
-from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
 from pytorch_lightning.trainer.states import TrainerFn
 
@@ -21,10 +20,11 @@ from dotenv import dotenv_values
 
 from src.models.tasks import get_task_with_name
 from src.utils import get_logger
+from src.models.loggers import HKWandBLogger as WandbLogger
 
 from pytorch_lightning.utilities.cli import LightningCLI, SaveConfigCallback
 from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.loggers import WandbLogger
+# from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities.cloud_io import get_filesystem
 from pytorch_lightning import Trainer, LightningModule 
 
@@ -219,6 +219,6 @@ if __name__ == "__main__":
         os.remove("lightning_config.yaml")
     
     cli = CLI(trainer_defaults=trainer_defaults,
-            #  save_config_callback=WandBSaveConfigCallback,
             seed_everything_default=999,
+            parser_kwargs={"default_config_files": ["configs/pl_defaults.yaml"]},
             save_config_filename="lightning_config.yaml")
