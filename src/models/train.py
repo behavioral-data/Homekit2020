@@ -23,7 +23,7 @@ from src.utils import get_logger
 from src.models.loggers import HKWandBLogger as WandbLogger
 
 from pytorch_lightning.utilities.cli import LightningCLI, SaveConfigCallback
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 # from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities.cloud_io import get_filesystem
 from pytorch_lightning import Trainer, LightningModule 
@@ -129,6 +129,10 @@ class CLI(LightningCLI):
         
         extra_callbacks.append(self.checkpoint_callback)
 
+
+        lr_monitor = LearningRateMonitor(logging_interval='step')
+        extra_callbacks.append(lr_monitor)
+
         local_rank = os.environ.get("LOCAL_RANK",0)
         if not self.config["fit"]["no_wandb"] and local_rank == 0:
             import wandb
@@ -220,5 +224,4 @@ if __name__ == "__main__":
     
     cli = CLI(trainer_defaults=trainer_defaults,
             seed_everything_default=999,
-            parser_kwargs={"default_config_files": ["configs/pl_defaults.yaml"]},
             save_config_filename="lightning_config.yaml")
