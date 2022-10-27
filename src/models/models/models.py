@@ -23,25 +23,14 @@ from torchvision.models.resnet import ResNet as BaseResNet
 from torchvision.models.resnet import BasicBlock
 
 from sktime.classification.hybrid import HIVECOTEV2 as BaseHIVECOTEV2
-import pandas as pd
 
-from einops import rearrange, repeat
-from einops.layers.torch import Rearrange
-
-
-from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.utilities.cli import MODEL_REGISTRY
 
-import torchmetrics
-
-from src.models.losses import build_loss_fn
 import src.models.models.modules as modules
-from src.utils import get_logger, upload_pandas_df_to_wandb, binary_logits_to_pos_probs
-
+from src.utils import get_logger
 from src.models.loops import DummyOptimizerLoop, NonNeuralLoop
 from src.models.models.bases import ClassificationModel, NonNeuralMixin
-from src.models.eval import (wandb_roc_curve, wandb_pr_curve, wandb_detection_error_tradeoff_curve,
-                            classification_eval,  TorchMetricClassification, TorchMetricRegression, TorchMetricAutoencode)
+
 from torch.utils.data.dataloader import DataLoader
 from wandb.plot.roc_curve import roc_curve
 

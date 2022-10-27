@@ -23,8 +23,8 @@ class SensingModel(pl.LightningModule):
     '''
 
     def __init__(self, metric_class : torchmetrics.MetricCollection, 
-                       bootstrap_val_metrics : bool = True,
                        learning_rate : float = 1e-3,
+                       val_bootstraps : int = 100,
                        warmup_steps : int = 0,
                        batch_size : int = 800,
                        input_shape : Optional[Tuple[int,...]] = None):
@@ -48,9 +48,11 @@ class SensingModel(pl.LightningModule):
         self.train_dataset = None
         self.eval_dataset=None
 
-        self.train_metrics = metric_class(bootstrap_cis=False, prefix="train/")
-        self.val_metrics = metric_class(bootstrap_cis=bootstrap_val_metrics, prefix="val/")
-        self.test_metrics = metric_class(bootstrap_cis=bootstrap_val_metrics, prefix="test/")
+        self.num_val_bootstraps = val_bootstraps
+
+        self.train_metrics = metric_class(bootstrap_samples=0, prefix="train/")
+        self.val_metrics = metric_class(bootstrap_samples=self.num_val_bootstraps, prefix="val/")
+        self.test_metrics = metric_class(bootstrap_samples=self.num_val_bootstraps, prefix="test/")
 
         self.learning_rate = learning_rate
         self.warmup_steps = warmup_steps
@@ -69,7 +71,9 @@ class SensingModel(pl.LightningModule):
         parser.add_argument("--warmup_steps", type=int, default=0,
                             help="Steps until the learning rate reaches its maximum values")
         parser.add_argument("--batch_size", type=int, default=800,
-                            help="Training batch size")                            
+                            help="Training batch size")      
+        parser.add_argument("--num_val_bootstraps", type=int, default=100,
+                            help="Number of bootstraps to use for validation metrics. Set to 0 to disable bootstrapping.")                       
         return parser
 
     def on_train_start(self) -> None:
@@ -307,10 +311,10 @@ class ClassificationModel(SensingModel):
     Represents classification models 
     '''
     def __init__(self,**kwargs) -> None:
-        SensingModel.__init__(self,TorchMetricClassification,**kwargs)
+        SensingModel.__init__(self,metric_class = TorchMetricClassification, **kwargs)
         self.is_classifier = True
 
 class RegressionModel(SensingModel,ModelTypeMixin):
     def __init__(self,**kwargs) -> None:
-        SensingModel.__init__(self,TorchMetricRegression,**kwargs)
+        SensingModel.__init__(self, metric_class = TorchMetricRegression, **kwargs)
         self.is_regressor = True
