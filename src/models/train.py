@@ -207,7 +207,7 @@ class CLI(LightningCLI):
         else:
             results = self.trainer.logged_metrics
 
-        if results:
+        if results and self.trainer.logger is not None:
             self.trainer.logger.log_metrics(results)
 
     def set_defaults(self):
