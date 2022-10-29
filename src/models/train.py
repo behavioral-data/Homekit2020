@@ -4,6 +4,7 @@ import logging
 from operator import mul
 from statistics import mode
 from typing import Optional, Any
+from pprint import pprint
 
 import warnings
 import os
@@ -207,8 +208,11 @@ class CLI(LightningCLI):
         else:
             results = self.trainer.logged_metrics
 
-        if results and self.trainer.logger is not None:
-            self.trainer.logger.log_metrics(results)
+        if results:
+            if self.trainer.logger is not None:
+                self.trainer.logger.log_metrics(results)
+            else:
+                pprint(results)
 
     def set_defaults(self):
         ...
