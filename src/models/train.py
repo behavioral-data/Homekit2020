@@ -130,13 +130,11 @@ class CLI(LightningCLI):
         
         extra_callbacks.append(self.checkpoint_callback)
 
-
-        lr_monitor = LearningRateMonitor(logging_interval='step')
-        extra_callbacks.append(lr_monitor)
-
         local_rank = os.environ.get("LOCAL_RANK",0)
         if not self.config["fit"]["no_wandb"] and local_rank == 0:
             import wandb
+            lr_monitor = LearningRateMonitor(logging_interval='step')
+            extra_callbacks.append(lr_monitor)
             # kwargs["save_config_callback"] = WandBSaveConfigCallback
             data_logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],
                                 entity=CONFIG["WANDB_USERNAME"],
