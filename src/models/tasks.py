@@ -30,7 +30,7 @@ __docformat__ = 'reStructuredText'
 from importlib.resources import path
 import sys
 import os
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Callable
 
 from pyarrow.parquet import ParquetDataset
 from sklearn.utils import resample
@@ -55,6 +55,9 @@ from src.utils import get_logger, read_yaml
 from src.models.lablers import (FluPosLabler, ClauseLabler, EvidationILILabler, 
                                  DayOfWeekLabler, AudereObeseLabler, DailyFeaturesLabler,
                                  CovidLabler, SameParticipantLabler, SequentialLabler, CovidSignalsLabler)
+
+
+from src.models.transforms import DefaultTransformRow
 
 logger = get_logger(__name__)
 
@@ -215,14 +218,16 @@ class ActivityTask(Task):
                      daily_features_path: Optional[str] = None,
                      backend: str = "petastorm",
                      batch_size: int = 800,
-                     activity_level: str = "minute"):
+                     activity_level: str = "minute",
+                     row_transform: Optional[Callable] = None):
 
         #TODO does not currently support day level data   
         super(ActivityTask,self).__init__()
         self.fields = fields
         self.batch_size=batch_size
         self.backend = backend
-        
+        self.normalize_numerical = normalize_numerical
+
         self.daily_features_appended = append_daily_features
         if self.daily_features_appended:
             self.daily_features_labler = DailyFeaturesLabler(data_location=daily_features_path, window_size=1)
@@ -272,74 +277,34 @@ class ActivityTask(Task):
                                 "train_path, val_path, or test_path")
         
             
-            schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
-            all_fields = [k for k in schema.fields.keys() if not k in ["participant_id","id"]]
-            # features = [k for k in schema.fields.keys() if not k in ["start","end","participant_id"]]
-        
-            def _transform_row(row):
-                labler = self.get_labler()
-                start = pd.to_datetime(row.pop("start"))
-                #Because spark windows have and exclusive right boundary:
-                end = pd.to_datetime(row.pop("end")) - pd.to_timedelta("1ms")
+            self.schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
 
-                participant_id = row.pop("participant_id")
-                data_id = row.pop("id")
+            # self.all_fields = [k for k in self.schema.fields.keys() if not k in ["participant_id","id"]]
+            # # features = [k for k in schema.fields.keys() if not k in ["start","end","participant_id"]]
+            
+            # if not self.is_autoencoder:
+            #     label_type = np.int_
+            # else:
+            #     label_type = np.float32
 
-                if hasattr(self,"keys"):
-                    keys = self.keys
-                elif fields:
-                    keys = fields 
-                else:
-                    keys = sorted(row.keys())
+            # self.new_fields = [("inputs_embeds",np.float32,None,False),
+            #             ("label",label_type,None,False),
+            #             ("participant_id",np.str_,None,False),
+            #             ("id",np.int32,None,False),
+            #             ("end_date_str",np.str_,None,False)]
+            
+            # if not row_transform:
+            #     _transform_row = DefaultTransformRow(self,normalize_numerical=normalize_numerical)
+            # else:
+            #     _transform_row = row_transform(self,normalize_numerical=normalize_numerical)
 
-                results = []
-                for k in keys:
-                    feature_vector = row[k]
-                    is_numerical = np.issubdtype(feature_vector.dtype, np.number)
-                    
-                    if normalize_numerical and is_numerical:
-                        mu = feature_vector.mean()
-                        sigma = feature_vector.std()
-                        if sigma != 0:
-                            feature_vector = (feature_vector - mu) / sigma
-                    
-                    results.append(feature_vector.T)
-                inputs_embeds = np.vstack(results).T
-                if not self.is_autoencoder:
-                    label = labler(participant_id,start,end)
-                    
-                else:
-                    label = inputs_embeds.astype(np.float32)
-
-                if self.daily_features_labler:
-                    day_features = self.daily_features_labler(participant_id,start,end)
-                    label = np.concatenate([[label],day_features])
-                    
-
-                return {"inputs_embeds": inputs_embeds,
-                        "label": label,
-                        "id": data_id,
-                        "participant_id": participant_id,
-                        "end_date_str": str(end)}
-        
-            if not self.is_autoencoder:
-                label_type = np.int_
-            else:
-                label_type = np.float32
-
-            new_fields = [("inputs_embeds",np.float32,None,False),
-                        ("label",label_type,None,False),
-                        ("participant_id",np.str_,None,False),
-                        ("id",np.int32,None,False),
-                        ("end_date_str",np.str_,None,False)]
-
-            self.transform = TransformSpec(_transform_row,removed_fields=all_fields,
-                                                    edit_fields= new_fields)
+            # self.transform = TransformSpec(_transform_row,removed_fields=self.all_fields,
+            #                                         edit_fields= new_fields)
                 
             # Infer the shape of the data
             lengths = set()
             for k in self.fields:
-                lengths.add(getattr(schema,k).shape[-1])
+                lengths.add(getattr(self.schema,k).shape[-1])
             lengths = set(lengths)
             if len(lengths) != 1:
                 raise ValueError("Provided fields have mismatched feature sizes")
@@ -356,20 +321,31 @@ class ActivityTask(Task):
     def get_description(self):
         return self.__doc__
 
+    def get_transform_spec(self):
+        try:
+            row_transform = self.trainer.model.row_transform
+        except AttributeError:
+            row_transform = DefaultTransformRow(self,normalize_numerical=self.normalize_numerical)
+
+        removed_fields = row_transform.get_removed_fields()
+        new_fields = row_transform.get_new_fields()
+        return TransformSpec(row_transform,removed_fields=removed_fields,
+                                                    edit_fields= new_fields)
+
     def train_dataloader(self):
         if self.train_url:
-            return PetastormDataLoader(make_reader(self.train_url,transform_spec=self.transform,
+            return PetastormDataLoader(make_reader(self.train_url,transform_spec=self.get_transform_spec(),
                                                     predicate=self.predicate),
                                     batch_size=self.batch_size)        
 
     def val_dataloader(self):
         if self.val_url:
-            return PetastormDataLoader(make_reader(self.val_url,transform_spec=self.transform,
+            return PetastormDataLoader(make_reader(self.val_url,transform_spec=self.get_transform_spec(),
                                                     predicate=self.predicate),
                                         batch_size=self.batch_size)   
     def test_dataloader(self):
         if self.test_url:
-            return PetastormDataLoader(make_reader(self.test_url,transform_spec=self.transform,
+            return PetastormDataLoader(make_reader(self.test_url,transform_spec=self.get_transform_spec(),
                                                     predicate=self.predicate),
                                         batch_size=self.batch_size)   
 

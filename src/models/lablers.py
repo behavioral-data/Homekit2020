@@ -11,7 +11,7 @@ from src.data.utils import load_processed_table
 
 
 def get_dates_around(date,days_minus,days_plus):
-    return pd.date_range(date + pd.to_timedelta(days_minus,unit="D"),
+    return pd.date_range(date - pd.to_timedelta(days_minus,unit="D"),
                          date + pd.to_timedelta(days_plus,unit="D"))
 
 #TODO eventually deprecate this

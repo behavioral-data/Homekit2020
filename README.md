@@ -8,8 +8,7 @@ Homekit2020
 1. Clone this repo: `git clone https://github.com/behavioral-data/Homekit2020.git`
 2. cd into it:  `cd Homekit2020`
 3. Build the conda environment: `make create_environment` (requires conda)
-4. Install the src package: `conda activate MobileSensingSuite; pip install -e .`
-5. (As of 5/8/2022) Install Lightning from source (we need some very recent updates to get the configs to work): `pip install https://github.com/PyTorchLightning/pytorch-lightning/archive/master.zip`
+4. Install the src package: `conda activate Homekit2020; pip install -e .`
 
 ### Getting Our Data 
 Navigate to https://www.synapse.org/#!Synapse:syn22803188/wiki/609492 to begin the approval process for access to the Homekit2020 dataset. Note that once you become a registered Synapse user it may take several business days for the Homekit2020 team to process your request. 
@@ -23,9 +22,9 @@ Once you have approval, follow these steps:
 This project was designed to be run primarily from the command line (although it _could_ be run from a notebook, e.g. by importing `src` ). You can run a simple job with:
 ``` bash
 python src/models/train.py fit `# Main entry point` \
-        --config src/data/task_configs/PredictFluPos.yaml `# Configures the task`\
-        --config src/configs/models/CNNToTransformerClassifier.yaml `# Configures the model`\
-        --data.train_path $PWD/data/processed/split/audere_split_2020_02_10/train_7_day `# Train data location`\
+        --config configs/tasks/HomekitPredictFluPos.yaml `# Configures the task`\
+        --config configs/models/CNNToTransformerClassifier.yaml `# Configures the model`\
+        --data.train_path  $PWD/data/processed/split/audere_split_2020_02_10/train_7_day  `# Train data location`\
         --data.val_path $PWD/data/processed/split/audere_split_2020_02_10/eval_7_day  `# Validation data location`\
 ```
 
@@ -35,10 +34,10 @@ Pretrained models are located in the `models` subdirectory. To load a model for 
 ``` bash
 python src/models/train.py fit  \
         --trainer.resume_from_checkpoint PATH_TO_PRETRAINED
-        --config src/data/task_configs/PredictFluPos.yaml \
-        --config src/configs/models/CNNToTransformerClassifier.yaml \
-        --data.train_path $PWD/data/debug/petastorm_datasets/debug \
-        --data.val_path $PWD/data/debug/petastorm_datasets/debug \
+        --config configs/tasks/HomekitPredictFluPos.yaml \
+        --config configs/models/CNNToTransformerClassifier.yaml \
+        --data.train_path  $PWD/data/processed/split/audere_split_2020_02_10/train_7_day \
+        --data.val_path  $PWD/data/processed/split/audere_split_2020_02_10/eval_7_day \
 ```
 
 ### Adding a new model

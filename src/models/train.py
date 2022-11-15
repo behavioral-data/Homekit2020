@@ -4,11 +4,11 @@ import logging
 from operator import mul
 from statistics import mode
 from typing import Optional, Any
+from pprint import pprint
 
 import warnings
 import os
 
-from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
 from pytorch_lightning.trainer.states import TrainerFn
 
@@ -21,10 +21,11 @@ from dotenv import dotenv_values
 
 from src.models.tasks import get_task_with_name
 from src.utils import get_logger
+from src.models.loggers import HKWandBLogger as WandbLogger
 
 from pytorch_lightning.utilities.cli import LightningCLI, SaveConfigCallback
-from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
+# from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities.cloud_io import get_filesystem
 from pytorch_lightning import Trainer, LightningModule 
 
@@ -41,12 +42,18 @@ def add_task_args(parser,name):
 def add_general_args(parent_parser):
     """ Adds arguments that aren't part of pl.Trainer, but are useful
         (e.g.) --no_wandb """
+    parent_parser.add_argument("--checkpoint_metric", type=str, default=None,
+                    help="Metric to optimize for during training")
+    parent_parser.add_argument("--checkpoint_mode", type=str, default="max",
+                    help="Metric direction to optimize for during training")                    
     parent_parser.add_argument("--no_wandb", default=False, action="store_true",
                     help="Run without wandb logging")                        
     parent_parser.add_argument("--notes", type=str, default=None,
                     help="Notes to be sent to WandB")    
     parent_parser.add_argument("--early_stopping_patience", type=int, default=None,
-                    help="path to validation dataset")                            
+                    help="path to validation dataset")       
+    parent_parser.add_argument("--gradient_log_interval", default=0, type=int,
+                       help = "Interval with which to log gradients to WandB. 0 -> Never")
     
     return parent_parser               
 
@@ -87,24 +94,31 @@ class CLI(LightningCLI):
         # do based on the model and task that are passed.
 
         extra_callbacks = []
-
+        
+        checkpoint_metric = self.config["fit"]["checkpoint_metric"]
+        mode = self.config["fit"]["checkpoint_mode"]
+            
         if self.datamodule.val_path:
+           
             if self.datamodule.is_classification:
-                checkpoint_metric = "val/roc_auc"
-                mode = "max"
+                if checkpoint_metric is None:            
+                    checkpoint_metric = "val/roc_auc"
+                    mode = "max"
             else:
-                checkpoint_metric = "val/loss"
-                mode = "min"
-
+                 if checkpoint_metric is None:            
+                    checkpoint_metric = "val/loss"
+                    mode = "min"
+            
             if self.config["fit"]["early_stopping_patience"]:
                 early_stopping_callback = EarlyStopping(monitor=checkpoint_metric,
                                                         patience=self.config["fit"]["early_stopping_patience"],
                                                         mode=mode)
                 extra_callbacks.append(early_stopping_callback)
         else:
-            checkpoint_metric = "train/loss"
-            mode = "min"
-
+            if checkpoint_metric is None:            
+                checkpoint_metric = "train/loss"
+                mode = "min"
+        
         self.checkpoint_callback = ModelCheckpoint(
                             filename='{epoch}',
                             save_last=True,
@@ -119,6 +133,8 @@ class CLI(LightningCLI):
         local_rank = os.environ.get("LOCAL_RANK",0)
         if not self.config["fit"]["no_wandb"] and local_rank == 0:
             import wandb
+            lr_monitor = LearningRateMonitor(logging_interval='step')
+            extra_callbacks.append(lr_monitor)
             # kwargs["save_config_callback"] = WandBSaveConfigCallback
             data_logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],
                                 entity=CONFIG["WANDB_USERNAME"],
@@ -146,6 +162,12 @@ class CLI(LightningCLI):
         extra_callbacks = extra_callbacks + [self._get(self.config_init, c) for c in self._parser(self.subcommand).callback_keys]
         trainer_config = {**self._get(self.config_init, "trainer"), **kwargs}
         return self._instantiate_trainer(trainer_config, extra_callbacks)
+
+    def before_fit(self):
+        # Enables logging of gradients to WandB
+        gradient_log_interval = self.config["fit"]["gradient_log_interval"]
+        if isinstance(self.trainer.logger, WandbLogger) and gradient_log_interval:
+            self.trainer.logger.watch(self.model, log="all", log_freq=gradient_log_interval)
 
     def after_fit(self):
         if self.trainer.is_global_zero:
@@ -185,22 +207,23 @@ class CLI(LightningCLI):
             results = self.trainer.logged_metrics
 
         if results:
-            self.trainer.logger.log_metrics(results)
+            if self.trainer.logger is not None:
+                self.trainer.logger.log_metrics(results)
+            else:
+                pprint(results)
 
     def set_defaults(self):
         ...
 
 if __name__ == "__main__":
     trainer_defaults = dict(
-                        checkpoint_callback=True,
-                        accelerator="ddp",
-                        # terminate_on_nan=True,
+                        accelerator="cuda",
                         num_sanity_val_steps=0,
-                        # profiler="simple",
                         gpus=-1,
               )
+    if os.path.isfile("lightning_config.yaml"):
+        os.remove("lightning_config.yaml")
     
     cli = CLI(trainer_defaults=trainer_defaults,
-            #  save_config_callback=WandBSaveConfigCallback,
             seed_everything_default=999,
             save_config_filename="lightning_config.yaml")
