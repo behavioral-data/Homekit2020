@@ -139,11 +139,14 @@ def update_run(run, k, v):
         run.summary._root_set(run.summary._path, [(k, {})])
     run.summary[k] = v
 
-def get_wandb_summaries(runids):
+def get_wandb_summaries(runids, project=None, entity=None):
     results = [] 
     api = wandb.Api()
-    project = config["WANDB_PROJECT"]
-    entity = config["WANDB_USERNAME"]
+    if not project:
+        project = config["WANDB_PROJECT"]
+    if not entity:
+        entity = config["WANDB_USERNAME"]
+
     for run_id in runids:
         run_url = f"{entity}/{project}/{run_id}"
         run = api.run(run_url)
