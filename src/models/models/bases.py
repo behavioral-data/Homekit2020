@@ -266,7 +266,7 @@ class SensingModel(pl.LightningModule):
             checkpoint.pop("optimizer_states", None)
 
     def upload_predictions_to_wandb(self):
-        upload_pandas_df_to_wandb(run_id=self.hparams.wandb_id,
+        upload_pandas_df_to_wandb(run_id=self.wandb_id,
                                   table_name="test_predictions",
                                   df=self.predictions_df)
 
