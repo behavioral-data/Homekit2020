@@ -122,6 +122,7 @@ class CLI(LightningCLI):
                 checkpoint_metric = "train/loss"
                 mode = "min"
 
+<<<<<<< HEAD
         self.checkpoint_callback = ModelCheckpoint(
             filename='{epoch}',
             save_last=True,
@@ -133,6 +134,8 @@ class CLI(LightningCLI):
 
         extra_callbacks.append(self.checkpoint_callback)
 
+=======
+>>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
         local_rank = os.environ.get("LOCAL_RANK",0)
         if not self.config["fit"]["no_wandb"] and local_rank == 0:
             import wandb
@@ -140,6 +143,7 @@ class CLI(LightningCLI):
             extra_callbacks.append(lr_monitor)
             # kwargs["save_config_callback"] = WandBSaveConfigCallback
             data_logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],
+<<<<<<< HEAD
                                       entity=CONFIG["WANDB_USERNAME"],
                                       name=run_name,
                                       notes=self.config["fit"]["notes"],
@@ -157,6 +161,24 @@ class CLI(LightningCLI):
             self.model.wandb_id = data_logger.experiment.id
             self.model.save_hyperparameters()
 
+=======
+                                entity=CONFIG["WANDB_USERNAME"],
+                                notes=self.config["fit"]["notes"],
+                                log_model=False, #saves checkpoints to wandb as artifacts, might add overhead 
+                                reinit=True,
+                                resume = 'allow',
+                                # save_dir = ".",
+                                allow_val_change=True,
+                                # settings=wandb.Settings(start_method="fork"),
+                                id = self.model.wandb_id)   #id of run to resume from, None if model is not from checkpoint. Alternative: directly use id = model.logger.experiment.id, or try setting WANDB_RUN_ID env variable                
+            
+            data_logger.experiment.summary["task"] = self.datamodule.get_name()
+            data_logger.experiment.summary["model"] = self.model.name
+            data_logger.experiment.config.update(self.model.hparams, allow_val_change=True)
+            self.model.wandb_id = data_logger.experiment.id 
+            self.model.save_hyperparameters() 
+            
+>>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
             # Necessary to save config in the right location
             data_logger._save_dir = data_logger.experiment.dir
 
@@ -209,7 +231,10 @@ class CLI(LightningCLI):
                 results = self.trainer.test(**fn_kwargs)[0] if has_test_loader else {}
                 if hasattr(self.model, "wandb_id"):
                     self.model.upload_predictions_to_wandb()
+<<<<<<< HEAD
 
+=======
+>>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
         else:
             results = self.trainer.logged_metrics
 

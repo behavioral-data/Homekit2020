@@ -60,6 +60,9 @@ from src.models.lablers import (FluPosLabler, ClauseLabler, EvidationILILabler,
 
 from src.models.transforms import DefaultTransformRow
 
+
+from src.models.transforms import DefaultTransformRow
+
 logger = get_logger(__name__)
 
 import pandas as pd
@@ -215,6 +218,7 @@ class ActivityTask(Task):
     #     self.train_path = train_path
 
     def __init__(self,fields: Optional[List[str]] = None,
+<<<<<<< HEAD
                  train_path: Optional[str] = None,
                  val_path: Optional[str] = None,
                  test_path: Optional[str] = None,
@@ -229,6 +233,22 @@ class ActivityTask(Task):
                  row_transform: Optional[Callable] = None):
 
         #TODO does not currently support day level data
+=======
+                     train_path: Optional[str] = None,
+                     val_path: Optional[str] = None,
+                     test_path: Optional[str] = None,
+                     downsample_negative_frac: Optional[float] = None,
+                     shape: Optional[Tuple[int, ...]] = None,
+                     normalize_numerical: bool = True,
+                     append_daily_features: bool = False,
+                     daily_features_path: Optional[str] = None,
+                     backend: str = "petastorm",
+                     batch_size: int = 800,
+                     activity_level: str = "minute",
+                     row_transform: Optional[Callable] = None):
+
+        #TODO does not currently support day level data   
+>>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
         super(ActivityTask,self).__init__()
         self.fields = fields
         self.batch_size=batch_size
@@ -281,14 +301,24 @@ class ActivityTask(Task):
 
             if not infer_schema_path:
                 raise ValueError("Must provide at least one of "
+<<<<<<< HEAD
                                  "train_path, val_path, or test_path")
 
 
+=======
+                                "train_path, val_path, or test_path")
+        
+            
+>>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
             self.schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
 
             # self.all_fields = [k for k in self.schema.fields.keys() if not k in ["participant_id","id"]]
             # # features = [k for k in schema.fields.keys() if not k in ["start","end","participant_id"]]
+<<<<<<< HEAD
 
+=======
+            
+>>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
             # if not self.is_autoencoder:
             #     label_type = np.int_
             # else:
@@ -299,15 +329,26 @@ class ActivityTask(Task):
             #             ("participant_id",np.str_,None,False),
             #             ("id",np.int32,None,False),
             #             ("end_date_str",np.str_,None,False)]
+<<<<<<< HEAD
 
+=======
+            
+>>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
             # if not row_transform:
             #     _transform_row = DefaultTransformRow(self,normalize_numerical=normalize_numerical)
             # else:
             #     _transform_row = row_transform(self,normalize_numerical=normalize_numerical)
+<<<<<<< HEAD
 
             # self.transform = TransformSpec(_transform_row,removed_fields=self.all_fields,
             #                                         edit_fields= new_fields)
 
+=======
+
+            # self.transform = TransformSpec(_transform_row,removed_fields=self.all_fields,
+            #                                         edit_fields= new_fields)
+                
+>>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
             # Infer the shape of the data
             lengths = set()
             for k in self.fields:
@@ -337,17 +378,27 @@ class ActivityTask(Task):
         removed_fields = row_transform.get_removed_fields()
         new_fields = row_transform.get_new_fields()
         return TransformSpec(row_transform,removed_fields=removed_fields,
+<<<<<<< HEAD
                              edit_fields= new_fields)
+=======
+                                                    edit_fields= new_fields)
+>>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
 
     def train_dataloader(self):
         if self.train_url:
             return PetastormDataLoader(make_reader(self.train_url,transform_spec=self.get_transform_spec(),
+<<<<<<< HEAD
                                                    predicate=self.predicate),
                                        batch_size=self.batch_size)
+=======
+                                                    predicate=self.predicate),
+                                    batch_size=self.batch_size)        
+>>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
 
     def val_dataloader(self):
         if self.val_url:
             return PetastormDataLoader(make_reader(self.val_url,transform_spec=self.get_transform_spec(),
+<<<<<<< HEAD
                                                    predicate=self.predicate),
                                        batch_size=self.batch_size)
     def test_dataloader(self):
@@ -355,6 +406,15 @@ class ActivityTask(Task):
             return PetastormDataLoader(make_reader(self.test_url,transform_spec=self.get_transform_spec(),
                                                    predicate=self.predicate),
                                        batch_size=self.batch_size)
+=======
+                                                    predicate=self.predicate),
+                                        batch_size=self.batch_size)   
+    def test_dataloader(self):
+        if self.test_url:
+            return PetastormDataLoader(make_reader(self.test_url,transform_spec=self.get_transform_spec(),
+                                                    predicate=self.predicate),
+                                        batch_size=self.batch_size)   
+>>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
 
     def add_task_specific_args(parent_parser):
         parser = parent_parser.add_argument_group("Task")
