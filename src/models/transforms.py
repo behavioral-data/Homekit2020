@@ -48,34 +48,27 @@ class DefaultTransformRow(RowTransform):
         return self._transform_row(row)
     
     def get_new_fields(self, *args, **kwargs):
-<<<<<<< HEAD
+
         fields = [("inputs_embeds",np.float32,None,False),
-=======
-        return  [("inputs_embeds",np.float32,None,False),
->>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
                         ("label",np.int_,None,False),
                         ("participant_id",np.str_,None,False),
                         ("id",np.int32,None,False),
                         ("end_date_str",np.str_,None,False)]
-<<<<<<< HEAD
+
 
         for meta_key, meta_type in zip(self.task.get_metadata_lablers().keys(), self.task.get_metadata_types()):
             fields.append((meta_key,meta_type,None,False))
 
         return fields
-=======
->>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
+
     
     def get_removed_fields(self):
         return [k for k in self.task.schema.fields.keys() if not k in ["participant_id","id"]]
 
     def _transform_row(self,row):
         labler = self.task.get_labler()
-<<<<<<< HEAD
         metadata_lablers = self.task.get_metadata_lablers()
 
-=======
->>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
         start = pd.to_datetime(row.pop("start"))
         #Because spark windows have and exclusive right boundary:
         end = pd.to_datetime(row.pop("end")) - pd.to_timedelta("1ms")
@@ -113,8 +106,6 @@ class DefaultTransformRow(RowTransform):
             day_features = self.task.daily_features_labler(participant_id,start,end)
             label = np.concatenate([[label],day_features])
             
-
-<<<<<<< HEAD
         transform = {"inputs_embeds": inputs_embeds,
                     "label": label,
                     "id": data_id,
@@ -126,10 +117,3 @@ class DefaultTransformRow(RowTransform):
             transform[k] = l(participant_id,start,end)
 
         return transform
-=======
-        return {"inputs_embeds": inputs_embeds,
-                "label": label,
-                "id": data_id,
-                "participant_id": participant_id,
-                "end_date_str": str(end)}
->>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab

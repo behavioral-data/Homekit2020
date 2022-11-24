@@ -134,14 +134,11 @@ class TorchMetricRegression(MetricCollection):
 
 class TorchMetricClassification(MetricCollection):
     def __init__(self, bootstrap_samples=100,
-                 prefix="", save=False, savedir="."):
+                 prefix=""):
         
         self.add_prefix = prefix
         self.bootstrap_samples = bootstrap_samples
 
-        self.metric_metadata =  np.array([[]]*2).T
-        self.save = save
-        self.savedir = savedir
 
         metrics = {}
 
@@ -189,14 +186,6 @@ class TorchMetricClassification(MetricCollection):
                 self.best_metrics[metric] = (operator,results[metric])
                 results[f"best_{metric}"] = results[metric]
 
-        if self.save:
-            save_path = os.path.join(self.savedir, self.add_prefix)
-            if not os.path.isdir(save_path):
-                os.makedirs(save_path)
-
-            pd.DataFrame(self.metric_metadata, columns=["preds", "targets"]).to_csv(os.path.join(save_path, "predictions.csv"))
-            self.metric_metadata = np.array([[]]*2).T
-
         if self.add_prefix:
             return add_prefix(results,self.add_prefix)
         else:
@@ -204,9 +193,6 @@ class TorchMetricClassification(MetricCollection):
 
     def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:  # type: ignore
         probs = torch.nn.functional.softmax(preds,dim=1)[:,-1]
-
-        if self.save:
-            self.metric_metadata = np.vstack((self.metric_metadata, np.vstack([probs.cpu().numpy(), target.cpu().numpy()]).T))
 
         return super().update(probs, target)
 

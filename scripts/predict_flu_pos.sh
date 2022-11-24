@@ -17,8 +17,8 @@ for i in ${!TASKS[*]};
   do
     for seed in ${!SEEDS[*]};
     do
-      pythonCommand="python src/models/train.py fit --config configs/tasks/${TASKS[$i]}.yaml ${ARGS} --model.metric_save_dir 'predictions/${TASKS[$i]}/seed_${seed}' --run_name ${TASKS[$i]}-seed_${seed} --notes 'User Split'"
-#      eval $pythonCommand
-      eval "python slurm-utils/launch_on_slurm.py  -n 1 -m '64G' --num-gpus 1 -p gpu-a40 --num-cpus 5 --dir . --exp-name Split-CNNTransformer-${TASKS[$i]}-seed_${seed} --command \"$pythonCommand\" --conda-env \"mobs\""
+      pythonCommand="python src/models/train.py fit --config configs/tasks/${TASKS[$i]}.yaml ${ARGS} --run_name ${TASKS[$i]}-seed_${seed}-$(date +%F) --notes 'User Split'"
+      eval $pythonCommand
+#      eval "python slurm-utils/launch_on_slurm.py  -n 1 -m '64G' --num-gpus 1 -p gpu-a40 --num-cpus 5 --dir . --exp-name Split-CNNTransformer-${TASKS[$i]}-seed_${seed} --command \"$pythonCommand\" --conda-env \"mobs\""
     done
   done
