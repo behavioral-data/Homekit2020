@@ -53,12 +53,8 @@ from src.models.eval import classification_eval, regression_eval
 from src.data.utils import load_processed_table, url_from_path
 from src.utils import get_logger, read_yaml
 from src.models.lablers import (FluPosLabler, ClauseLabler, EvidationILILabler,
-                                DayOfWeekLabler, AudereObeseLabler, DailyFeaturesLabler,
-                                CovidLabler, SameParticipantLabler, SequentialLabler, CovidSignalsLabler,
-                                FluPosWeakLabler, CleanAnnotationLabler)
-
-
-from src.models.transforms import DefaultTransformRow
+                                DayOfWeekLabler, AudereObeseLabler, DailyFeaturesLabler, FluPosWeakLabler,
+                                CovidLabler, SameParticipantLabler, SequentialLabler, CovidSignalsLabler)
 
 
 from src.models.transforms import DefaultTransformRow
@@ -146,12 +142,6 @@ class Task(pl.LightningDataModule):
     def get_labler(self):
         return NotImplementedError
 
-    def get_metadata_lablers(self):
-        return {}
-
-    def get_metadata_types(self):
-        return []
-
 class TaskTypeMixin():
     def __init__(self):
         self.is_regression=False
@@ -218,7 +208,6 @@ class ActivityTask(Task):
     #     self.train_path = train_path
 
     def __init__(self,fields: Optional[List[str]] = None,
-<<<<<<< HEAD
                  train_path: Optional[str] = None,
                  val_path: Optional[str] = None,
                  test_path: Optional[str] = None,
@@ -233,22 +222,6 @@ class ActivityTask(Task):
                  row_transform: Optional[Callable] = None):
 
         #TODO does not currently support day level data
-=======
-                     train_path: Optional[str] = None,
-                     val_path: Optional[str] = None,
-                     test_path: Optional[str] = None,
-                     downsample_negative_frac: Optional[float] = None,
-                     shape: Optional[Tuple[int, ...]] = None,
-                     normalize_numerical: bool = True,
-                     append_daily_features: bool = False,
-                     daily_features_path: Optional[str] = None,
-                     backend: str = "petastorm",
-                     batch_size: int = 800,
-                     activity_level: str = "minute",
-                     row_transform: Optional[Callable] = None):
-
-        #TODO does not currently support day level data   
->>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
         super(ActivityTask,self).__init__()
         self.fields = fields
         self.batch_size=batch_size
@@ -301,24 +274,14 @@ class ActivityTask(Task):
 
             if not infer_schema_path:
                 raise ValueError("Must provide at least one of "
-<<<<<<< HEAD
                                  "train_path, val_path, or test_path")
 
 
-=======
-                                "train_path, val_path, or test_path")
-        
-            
->>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
             self.schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
 
             # self.all_fields = [k for k in self.schema.fields.keys() if not k in ["participant_id","id"]]
             # # features = [k for k in schema.fields.keys() if not k in ["start","end","participant_id"]]
-<<<<<<< HEAD
 
-=======
-            
->>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
             # if not self.is_autoencoder:
             #     label_type = np.int_
             # else:
@@ -329,26 +292,15 @@ class ActivityTask(Task):
             #             ("participant_id",np.str_,None,False),
             #             ("id",np.int32,None,False),
             #             ("end_date_str",np.str_,None,False)]
-<<<<<<< HEAD
 
-=======
-            
->>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
             # if not row_transform:
             #     _transform_row = DefaultTransformRow(self,normalize_numerical=normalize_numerical)
             # else:
             #     _transform_row = row_transform(self,normalize_numerical=normalize_numerical)
-<<<<<<< HEAD
 
             # self.transform = TransformSpec(_transform_row,removed_fields=self.all_fields,
             #                                         edit_fields= new_fields)
 
-=======
-
-            # self.transform = TransformSpec(_transform_row,removed_fields=self.all_fields,
-            #                                         edit_fields= new_fields)
-                
->>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
             # Infer the shape of the data
             lengths = set()
             for k in self.fields:
@@ -378,27 +330,17 @@ class ActivityTask(Task):
         removed_fields = row_transform.get_removed_fields()
         new_fields = row_transform.get_new_fields()
         return TransformSpec(row_transform,removed_fields=removed_fields,
-<<<<<<< HEAD
                              edit_fields= new_fields)
-=======
-                                                    edit_fields= new_fields)
->>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
 
     def train_dataloader(self):
         if self.train_url:
             return PetastormDataLoader(make_reader(self.train_url,transform_spec=self.get_transform_spec(),
-<<<<<<< HEAD
                                                    predicate=self.predicate),
                                        batch_size=self.batch_size)
-=======
-                                                    predicate=self.predicate),
-                                    batch_size=self.batch_size)        
->>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
 
     def val_dataloader(self):
         if self.val_url:
             return PetastormDataLoader(make_reader(self.val_url,transform_spec=self.get_transform_spec(),
-<<<<<<< HEAD
                                                    predicate=self.predicate),
                                        batch_size=self.batch_size)
     def test_dataloader(self):
@@ -406,15 +348,6 @@ class ActivityTask(Task):
             return PetastormDataLoader(make_reader(self.test_url,transform_spec=self.get_transform_spec(),
                                                    predicate=self.predicate),
                                        batch_size=self.batch_size)
-=======
-                                                    predicate=self.predicate),
-                                        batch_size=self.batch_size)   
-    def test_dataloader(self):
-        if self.test_url:
-            return PetastormDataLoader(make_reader(self.test_url,transform_spec=self.get_transform_spec(),
-                                                    predicate=self.predicate),
-                                        batch_size=self.batch_size)   
->>>>>>> 65da0325db35f86971af83bbfe2998a3ef9344ab
 
     def add_task_specific_args(parent_parser):
         parser = parent_parser.add_argument_group("Task")
@@ -482,46 +415,6 @@ class PredictFluPos(ActivityTask):
         return self.labler
 
 @DATAMODULE_REGISTRY
-class PredictFluPosWeak(ActivityTask):
-    """ Predict whether a participant was positive
-        given a rolling window of minute level activity data.
-
-        Note that this class should be deprecated in favor of the
-        PredictPositivity task.
-    """
-    is_classification = True
-    def __init__(self, fields: List[str] = DEFAULT_FIELDS, activity_level: str = "minute",
-                 window_onset_max: int = 0, window_onset_min:int = 0, survey_path: Optional[str] = None,
-                 **kwargs):
-
-        self.is_classification = True
-        self.survey_responses = load_processed_table("daily_surveys_onehot",path=survey_path).set_index("participant_id")
-
-        self.labler = FluPosLabler(window_onset_max=window_onset_max, window_onset_min=window_onset_min)
-
-        self.weak_labler = FluPosWeakLabler(survey_responses=self.survey_responses,
-                                            window_onset_max=window_onset_max, window_onset_min=window_onset_min)
-
-
-        self.mask_labler = CleanAnnotationLabler(survey_responses=self.survey_responses,
-                                                 window_onset_max=window_onset_max, window_onset_min=window_onset_min)
-
-        ActivityTask.__init__(self, fields=fields, activity_level=activity_level,**kwargs)
-
-
-    def get_name(self):
-        return "PredictFluPosWeak"
-
-    def get_labler(self):
-        return self.labler
-
-    def get_metadata_lablers(self):
-        return {"weak_label": self.weak_labler, "mask": self.mask_labler}
-
-    def get_metadata_types(self):
-        return [float, int]
-
-@DATAMODULE_REGISTRY
 class PredictCovidSignalsPositivity(ActivityTask):
 
     is_classification = True
@@ -563,8 +456,8 @@ class PredictCovidSignalsPositivity(ActivityTask):
 class PredictFluPos(ActivityTask):
     """ Predict whether a participant was positive
         given a rolling window of minute level activity data.
-       
-        Note that this class should be deprecated in favor of the 
+
+        Note that this class should be deprecated in favor of the
         PredictPositivity task.
     """
     is_classification = True
@@ -586,10 +479,45 @@ class PredictFluPos(ActivityTask):
     def get_labler(self):
         return self.labler
 
+@DATAMODULE_REGISTRY
+class PredictFluPosWeak(ActivityTask):
+    """ Predict whether a participant was positive
+        given a rolling window of minute level activity data.
+        Note that this class should be deprecated in favor of the
+        PredictPositivity task.
+    """
+    is_classification = True
+    def __init__(self, fields: List[str] = DEFAULT_FIELDS, activity_level: str = "minute",
+                 window_onset_max: int = 0, window_onset_min:int = 0, survey_path: Optional[str] = None,
+                 **kwargs):
+
+        self.is_classification = True
+        self.survey_responses = load_processed_table("daily_surveys_onehot",path=survey_path).set_index("participant_id")
+
+        self.labler = FluPosLabler(window_onset_max=window_onset_max, window_onset_min=window_onset_min)
+
+        self.weak_labler = FluPosWeakLabler(survey_responses=self.survey_responses,
+                                            window_onset_max=window_onset_max, window_onset_min=window_onset_min)
+
+
+        ActivityTask.__init__(self, fields=fields, activity_level=activity_level,**kwargs)
+
+
+    def get_name(self):
+        return "PredictFluPosWeak"
+
+    def get_labler(self):
+        return self.labler
+
+    def get_metadata_lablers(self):
+        return {"weak_label": self.weak_labler}
+
+    def get_metadata_types(self):
+        return [float]
 
 @DATAMODULE_REGISTRY
 class PredictWeekend(ActivityTask, ClassificationMixin):
-    """Predict the whether the associated data belongs to a 
+    """Predict the whether the associated data belongs to a
        weekend"""
 
     def __init__(self, fields: List[str] = DEFAULT_FIELDS,
@@ -611,9 +539,9 @@ class PredictWeekend(ActivityTask, ClassificationMixin):
 class PredictCovidSmall(ActivityTask, ClassificationMixin):
     """Predict the whether a participant was diagnosed with
     covid on the final day of the window
-    
+
     This was designed for data from Mirsha et. al,
-    and uses the processed results from 
+    and uses the processed results from
     /projects/bdata/datasets/covid-fitbit/processed/covid_dates.csv
     """
 
@@ -639,11 +567,11 @@ class PredictCovidSmall(ActivityTask, ClassificationMixin):
 @DATAMODULE_REGISTRY
 class PredictSurveyClause(ActivityTask,ClassificationMixin):
     """Predict the whether a clause in the onehot
-       encoded surveys is true for a given day. 
-       
+       encoded surveys is true for a given day.
+
        For a sense of what kind of logical clauses are
        supported, check out:
-    
+
        https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.query.html"""
 
     def __init__(self, clause: str,

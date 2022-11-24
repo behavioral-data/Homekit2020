@@ -140,9 +140,7 @@ def update_run(run, k, v):
     run.summary[k] = v
 
 def get_wandb_summaries(runids, project=None, entity=None):
-
-    results = [] 
-
+    results = []
     api = wandb.Api()
     if not project:
         project = config["WANDB_PROJECT"]
