@@ -33,7 +33,7 @@ def main(input_path, output_path=None):
     spark = SparkSession(sc)
 
     df = spark.read.parquet(input_path)
-    df = (df.select("participant_id","end")
+    df = (df.select("participant_id","date")
                            .distinct())
     if output_path:
         df.toPandas().to_csv(output_path,index=False)
@@ -42,7 +42,7 @@ def main(input_path, output_path=None):
         for row in df.collect():
             d = row.asDict()
             participant_id = d['participant_id']
-            date = d["end"]
+            date = d["date"]
             print(f"{participant_id},{date}")
 
 if __name__ == "__main__":

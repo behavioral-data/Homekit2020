@@ -27,7 +27,8 @@ class SensingModel(pl.LightningModule):
                        val_bootstraps : int = 100,
                        warmup_steps : int = 0,
                        batch_size : int = 800,
-                       input_shape : Optional[Tuple[int,...]] = None):
+                       input_shape : Optional[Tuple[int,...]] = None,
+                       metric_save_dir: str = '.'):
         
         super(SensingModel,self).__init__()
         self.val_preds = []
@@ -50,9 +51,9 @@ class SensingModel(pl.LightningModule):
 
         self.num_val_bootstraps = val_bootstraps
 
-        self.train_metrics = metric_class(bootstrap_samples=0, prefix="train/")
-        self.val_metrics = metric_class(bootstrap_samples=self.num_val_bootstraps, prefix="val/")
-        self.test_metrics = metric_class(bootstrap_samples=self.num_val_bootstraps, prefix="test/")
+        self.train_metrics = metric_class(bootstrap_samples=0, prefix="train/", save=False, savedir=metric_save_dir)
+        self.val_metrics = metric_class(bootstrap_samples=self.num_val_bootstraps, prefix="val/", save=False, savedir=metric_save_dir)
+        self.test_metrics = metric_class(bootstrap_samples=self.num_val_bootstraps, prefix="test/", save=True, savedir=metric_save_dir)
 
         self.learning_rate = learning_rate
         self.warmup_steps = warmup_steps
@@ -266,7 +267,7 @@ class SensingModel(pl.LightningModule):
             checkpoint.pop("optimizer_states", None)
 
     def upload_predictions_to_wandb(self):
-        upload_pandas_df_to_wandb(run_id=self.hparams.wandb_id,
+        upload_pandas_df_to_wandb(run_id=self.wandb_id,
                                   table_name="test_predictions",
                                   df=self.predictions_df)
 
