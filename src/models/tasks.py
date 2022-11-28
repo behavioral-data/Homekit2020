@@ -142,6 +142,15 @@ class Task(pl.LightningDataModule):
     def get_labler(self):
         return NotImplementedError
 
+    def get_labler(self):
+        return NotImplementedError
+
+    def get_metadata_lablers(self):
+        return {}
+
+    def get_metadata_types(self):
+        return []
+
 class TaskTypeMixin():
     def __init__(self):
         self.is_regression=False
