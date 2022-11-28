@@ -9,7 +9,7 @@ Transformations include scaling and grouping of data to time windows of specifie
 
 
 """
-from gc import callbacks
+from gc import callbacks, collect
 from os import name
 from xml.etree.ElementInclude import include
 import numpy as np
@@ -36,6 +36,8 @@ import pandas as pd
 from src.utils import validate_yaml_or_json
 
 MINS_IN_DAY = 60*24
+SECONDS_IN_MIN = 60
+NUMERICAL_DTYPES = ["double","smallint","bigint"]
 
 
 from contextlib import contextmanager
@@ -99,13 +101,14 @@ def filter_spark_dataframe_by_list(df, column_name, filter_list):
 @click.option("--min_date", type=str, default=None)
 @click.option("--max_date", type=str, default=None)
 @click.option("--partition_by", type=str, multiple=False)
+@click.option("--downsample_to", type=str)
 @click.option("--no_scale", is_flag=True)
 @click.option("--rename", type=str, multiple=True)
 @click.option("--include_users", type=click.Path(exists=True), callback=validate_yaml_or_json)
 def main(input_path, output_path, max_missing_days_in_window, 
                     min_windows, day_window_size, parse_timestamp,
                     min_date=None, max_date=None, partition_by = None, rename=None,
-                    no_scale=False, users=None, include_users=False):
+                    no_scale=False, users=None, include_users=False, downsample_to=None):
 
                 
     if not "file://" in output_path:
@@ -125,8 +128,13 @@ def main(input_path, output_path, max_missing_days_in_window,
                                     filters=filters)
     schema = Unischema.from_arrow_schema(pyarrow_dataset)
     
+    if downsample_to:
+        seconds_in_observation = pd.to_timedelta(downsample_to).total_seconds()
+        hertz = 1/seconds_in_observation
+        expected_length = (hertz * SECONDS_IN_MIN) * day_window_size * MINS_IN_DAY
+    else:
+        expected_length = day_window_size*MINS_IN_DAY
    
-    expected_length = day_window_size*MINS_IN_DAY
     new_fields = []
     for field in schema.fields.values():
         name = field.name
@@ -148,7 +156,7 @@ def main(input_path, output_path, max_missing_days_in_window,
     rowgroup_size_mb = 256
 
     configuation_properties = [
-    ("spark.master","local[64]"),
+    ("spark.master","local[16]"),
     ("spark.ui.port","4050"),
     ("spark.executor.memory","32g"),
     ('spark.driver.memory',  '2000g'),
@@ -201,6 +209,17 @@ def main(input_path, output_path, max_missing_days_in_window,
         
         else:
            scaledData = df
+        
+        if downsample_to:
+            aggs = [f.percentile_approx(x,0.5).alias(x) for x,t in df.dtypes if t in NUMERICAL_DTYPES] +\
+                   [f.max(x).alias(x) for x,t in df.dtypes if t == "boolean"]
+            downsampled = scaledData.groupBy("participant_id","date",
+                                            f.window("timestamp", downsample_to,startTime="0 minutes"))\
+                                   .agg(*aggs)
+            
+            downsampled = downsampled.withColumn("timestamp",downsampled.window.start)
+            downsampled_columns = [c for c in downsampled.columns if c in scaledData.columns]
+            scaledData = downsampled.select(*downsampled_columns)
 
         # Apply windowing
         window_duration = f"{day_window_size} days"
@@ -215,7 +234,6 @@ def main(input_path, output_path, max_missing_days_in_window,
 
         # Remove windows that don't have enough samples (e.g. on the edges)
         result  = result.filter(result.count_col == expected_length)
-        
         result.drop("count_col")
         
         result = rename_columns(result,{f"collect_list({x})" : x for x in feature_columns})
