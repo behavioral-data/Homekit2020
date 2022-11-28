@@ -139,7 +139,7 @@ class CLI(LightningCLI):
             data_logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],
                                 entity=CONFIG["WANDB_USERNAME"],
                                 notes=self.config["fit"]["notes"],
-                                log_model=True, #saves checkpoints to wandb as artifacts, might add overhead 
+                                log_model=False, #saves checkpoints to wandb as artifacts, might add overhead 
                                 reinit=True,
                                 resume = 'allow',
                                 # save_dir = ".",
@@ -150,7 +150,8 @@ class CLI(LightningCLI):
             data_logger.experiment.summary["task"] = self.datamodule.get_name()
             data_logger.experiment.summary["model"] = self.model.name
             data_logger.experiment.config.update(self.model.hparams, allow_val_change=True)
-            self.model.wandb_id = data_logger.experiment.id  
+            self.model.wandb_id = data_logger.experiment.id 
+            self.model.save_hyperparameters() 
             
             # Necessary to save config in the right location
             data_logger._save_dir = data_logger.experiment.dir
@@ -202,7 +203,8 @@ class CLI(LightningCLI):
                 )
 
                 results = self.trainer.test(**fn_kwargs)[0] if has_test_loader else {}
-
+                if hasattr(self.model, "wandb_id"):
+                    self.model.upload_predictions_to_wandb()
         else:
             results = self.trainer.logged_metrics
 
