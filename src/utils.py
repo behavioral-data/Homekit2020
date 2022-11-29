@@ -1,5 +1,5 @@
 import os
-import json 
+import json
 import logging
 import gc
 import argparse
@@ -40,7 +40,7 @@ def read_yaml(path):
 
 def write_yaml(data,path):
     with open(path, 'w') as stream:
-        yaml.dump(data, stream) 
+        yaml.dump(data, stream)
 
 def clean_datum_for_serialization(datum):
     for k, v in datum.items():
@@ -60,7 +60,7 @@ def read_jsonl(path,line=None):
         for line in f:
             data.append(json.loads(line))
     return data
-    
+
 def get_logger(name):
     logger = logging.getLogger(name)
     logging.basicConfig(
@@ -91,7 +91,7 @@ def set_gpus_automatically(n):
     free_devices = get_unused_gpus()
     n_free = len(free_devices)
     if n_free < n:
-        raise ValueError(f"Insufficent GPUs available for automatic allocation: {n_free} available, {n} requested.")     
+        raise ValueError(f"Insufficent GPUs available for automatic allocation: {n_free} available, {n} requested.")
     devices = free_devices[:n]
 
     logger = get_logger(__name__)
@@ -140,7 +140,7 @@ def update_run(run, k, v):
     run.summary[k] = v
 
 def get_wandb_summaries(runids, project=None, entity=None):
-    results = [] 
+    results = []
     api = wandb.Api()
     if not project:
         project = config["WANDB_PROJECT"]
@@ -151,18 +151,18 @@ def get_wandb_summaries(runids, project=None, entity=None):
         run_url = f"{entity}/{project}/{run_id}"
         run = api.run(run_url)
         summary = run.summary._json_dict
-        
+
         meta = json.load(run.file("wandb-metadata.json").download(replace=True))
-        summary["command"] = " ".join(["python", meta["program"]] +  meta["args"]) 
+        summary["command"] = " ".join(["python", meta["program"]] +  meta["args"])
 
         summary["id"] = run_id
         results.append(summary)
-    
+
     return results
 
 
 def upload_pandas_df_to_wandb(run_id,table_name,df,run=None):
-    
+
     model_table = wandb.Table(dataframe=df)
     if run:
         run.log({table_name:model_table})
@@ -175,7 +175,7 @@ def get_historical_run(run_id: str):
     """
     return wandb.init(id=run_id, resume='allow', settings=wandb.Settings(start_method='fork'))
 
-    
+
 def binary_logits_to_pos_probs(arr,pos_index=-1):
     probs = softmax(arr,axis=1)
     return probs[:,pos_index]
@@ -200,5 +200,5 @@ def argparse_to_groups(args,parser):
     for group in parser._action_groups:
         group_dict={a.dest:getattr(args,a.dest,None) for a in group._group_actions}
         arg_groups[group.title]=argparse.Namespace(**group_dict)
-    
+
     return arg_groups

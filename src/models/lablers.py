@@ -7,6 +7,15 @@ from pandas.core.computation.eval import eval as _eval
 from pandas.core.indexes.datetimes import date_range
 from pyspark.sql.functions import window
 
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, average_precision_score, roc_curve, auc
+from sklearn.preprocessing import StandardScaler
+import sqlite3
+
+
 from src.data.utils import load_processed_table
 
 
@@ -59,6 +68,190 @@ class FluPosLabler(object):
 
     def get_positive_keys(self):
         return set([(x[0], x[1].normalize()) for x in self.result_lookup.keys()])
+
+
+class FluPosWeakLabler(object):
+    def __init__(self, survey_responses, data_location=None, window_size=7, normalize=True, window_onset_min = 0, window_onset_max = 0):
+
+        """ survey responses """
+        self.survey_responses = survey_responses.drop("Unnamed: 0", axis=1)
+        self.survey_responses["_date"] = self.survey_responses["timestamp"].dt.normalize()
+
+        """ lab results """
+        flus = ["Influenza A (Flu A)","Influenza B (Flu B)"]
+        self.results = LabResultsReader().results.drop("Unnamed: 0", axis=1)
+        self.results["_date"] = pd.to_datetime(self.results["trigger_datetime"].dt.date)
+
+        # import pdb; pdb.set_trace()
+
+        activity = load_processed_table("fitbit_day_level_activity", path=data_location)
+        activity["_date"] = pd.to_datetime(activity["date"].dt.date)
+        del activity["date"]
+
+        # import pdb; pdb.set_trace()
+        feature_cols = ['resting_heart_rate', "body_temp_f",
+                        'main_in_bed_minutes', 'main_efficiency', 'nap_count',
+                        'total_asleep_minutes', 'total_in_bed_minutes', 'activityCalories',
+                        'caloriesOut', 'caloriesBMR', 'marginalCalories', 'sedentaryMinutes',
+                        'lightlyActiveMinutes', 'fairlyActiveMinutes', 'veryActiveMinutes',
+                        'missing_hr', 'missing_sleep', 'missing_steps', 'missing_day']
+
+        self.label_size = len(feature_cols) * window_size
+
+
+        self.results["is_pos"] = (self.results["result"] == "Detected") & (self.results["test_name"].isin(flus))
+        self.results = self.results.groupby(["participant_id", "_date", "first_report_yn"])["is_pos"].any().reset_index()
+        self.results["flu_prob"] = 0.0
+        self.results.loc[self.results["is_pos"] == True, "flu_prob"] = 1.0
+
+        # import pdb; pdb.set_trace()
+        # merges flu results to survey responses
+        self.merged_table = self.survey_responses.merge(self.results, on=["participant_id", "_date", "first_report_yn"], how="left")
+        self.merged_table = self.merged_table.merge(activity, on=["participant_id", "_date"], how="left")
+
+        flu_features = np.concatenate((np.array(self.merged_table.columns[8:-2]), np.array(feature_cols)))
+        # flu_features = self.merged_table.columns[8:-2]
+
+        """ fits label model """
+        labeled_responses = self.merged_table[~pd.isna(self.merged_table["is_pos"])]
+        X_labeled = labeled_responses[flu_features]
+        y_labeled = labeled_responses["is_pos"]
+        lm, scaler = fit_labelmodel(X_labeled, y_labeled)
+
+        """ initializes result table """
+        # self.results = self.merged_table[(~pd.isna(self.merged_table["is_pos"])) | (self.merged_table["first_report_yn"])]
+
+
+        """ adds label predictions to table """
+        missing_response_idx = (pd.isna(self.merged_table["is_pos"])) & (self.merged_table["first_report_yn"]==True)
+        X_missing = self.merged_table[missing_response_idx][flu_features]
+        self.merged_table.loc[missing_response_idx, "flu_prob"] = predict_labelmodel(lm, X_missing, scaler)[:, 1]
+
+
+        return_table = self.merged_table[~pd.isna(self.merged_table["flu_prob"])]
+
+        mapper = lambda x: get_dates_around(x, days_minus=window_onset_min, days_plus=window_onset_max)
+        return_table["_date"] = return_table["_date"].map(mapper)
+        return_table = return_table.explode("_date")
+
+        self.result_lookup = return_table \
+            .reset_index() \
+            .groupby(["participant_id","_date"]) \
+            ["flu_prob"].max() \
+            .to_dict()
+
+    def _get_partition_results(self, results, file_path: str):
+        partition = pd.read_csv(file_path)
+
+        qry = '''
+            SELECT *
+            FROM results 
+            WHERE EXISTS (
+                SELECT 1 
+                FROM partition
+                WHERE 
+                    ((results._date BETWEEN partition.start AND partition.end) 
+                    AND 
+                    (partition.participant_id = results.participant_id))
+                )
+            '''
+        conn = sqlite3.connect(':memory:')
+        results.reset_index().to_sql('results', conn, index=False)
+        partition.to_sql('partition', conn, index=False)
+
+        return pd.read_sql_query(qry, conn)
+
+
+    def __call__(self,participant_id,start_date,end_date):
+        flu_prob_on_date = self.result_lookup.get((participant_id,end_date.normalize()),False)
+        return float(flu_prob_on_date)
+
+    def get_positive_keys(self):
+        return set([(x[0], x[1].normalize()) for x in self.result_lookup.keys()])
+
+def float_mapper(x):
+    try:
+        return float(x)
+    except:
+        return -1
+
+def fit_labelmodel(x, y):
+
+    x = x.fillna(-1).applymap(float_mapper)
+
+    x_train, x_val = train_test_split(x.to_numpy(), train_size=0.8)
+    y_train, y_val = train_test_split(y.to_numpy().astype(int), train_size=0.8)
+
+    scaler = StandardScaler()
+    x_train = scaler.fit_transform(x_train)
+    x_val = scaler.transform(x_val)
+
+
+    # model = GradientBoostingClassifier(n_estimators=100)
+    model = RandomForestClassifier(max_features="sqrt")
+
+    model.fit(x_train, y_train)
+
+    preds = model.predict_proba(x_val)
+
+    fpr, tpr, thresholds = roc_curve(y_val, preds[:, 1])
+
+    print("PR-AUC: {}".format(average_precision_score(y_val, preds[:, 1])))
+    print("ROC-AUC: {}".format(auc(fpr, tpr)))
+
+    return model, scaler
+
+
+def predict_labelmodel(lm, x, scaler):
+    x = scaler.transform(x.fillna(-1).applymap(float_mapper))
+    return lm.predict_proba(x)
+
+
+class CleanAnnotationLabler(object):
+    def __init__(self, survey_responses, window_onset_min = 0,
+                 window_onset_max = 0):
+
+        self.survey_responses = survey_responses
+        self.survey_responses["_date"] = self.survey_responses["timestamp"].dt.normalize()
+
+        groups = (self.survey_responses["_date"].diff() != pd.Timedelta("1d")).cumsum()
+        self.survey_responses["response_groups"] = groups
+
+        flus = ["Influenza A (Flu A)","Influenza B (Flu B)"]
+        self.lab_results_reader = LabResultsReader()
+        self.results = self.lab_results_reader.results
+        self.results["_date"] = pd.to_datetime(self.results["trigger_datetime"].dt.date)
+        self.results["is_pos"] = (self.results["result"] == "Detected") & (self.results["test_name"].isin(flus))
+
+        self.merged_table = self.survey_responses.merge(self.results, on=["participant_id", "_date", "first_report_yn"], how="left")
+
+        # if a participant tested positive at any given time,
+        # all symptomatic consecutive days during the same time period are considered positive
+        dd = self.merged_table.groupby("response_groups")["is_pos"].apply(lambda x: x.any() if not x.isnull().all() else np.nan).to_dict()
+        self.merged_table["is_pos"] = self.merged_table["response_groups"].apply(lambda d: dd[d])
+
+
+        mapper = lambda x: get_dates_around(x, days_minus=window_onset_min, days_plus=window_onset_max)
+        self.merged_table["_date"] = self.merged_table["_date"].map(mapper)
+        self.merged_table = self.merged_table.explode("_date")
+
+        # participant exhibits flu-like symptoms but is missing a PCR report
+        self.merged_table["is_missing"] = ~(((self.merged_table["have_flu"]==1) & ~pd.isna(self.merged_table["is_pos"])) | (self.merged_table["have_flu"]==0))
+        missing = self.merged_table[self.merged_table["is_missing"]==True]
+
+        self.result_lookup = missing \
+            .reset_index() \
+            .groupby(["participant_id","_date"]) \
+            ["is_missing"].any() \
+            .to_dict()
+
+    def __call__(self,participant_id,start_date,end_date):
+        is_clean = not self.result_lookup.get((participant_id,end_date.normalize()),False)
+        return int(is_clean)
+
+    def get_positive_keys(self):
+        return set([(x[0], x[1].normalize()) for x in self.result_lookup.keys()])
+
 
 class DailyFeaturesLabler(object):
     def __init__(self, window_size=7,

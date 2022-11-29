@@ -31,6 +31,9 @@ from src.utils import get_logger
 from src.models.loops import DummyOptimizerLoop, NonNeuralLoop
 from src.models.models.bases import ClassificationModel, NonNeuralMixin
 
+from src.models.losses import build_loss_fn
+
+
 from torch.utils.data.dataloader import DataLoader
 from wandb.plot.roc_curve import roc_curve
 
@@ -52,7 +55,7 @@ class CNNToTransformerClassifier(ClassificationModel):
                 kernel_sizes=[5,3,1], out_channels = [256,128,64], 
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, 
                 positional_encoding = False, pretrained_ckpt_path : Optional[str] = None,
-                 **kwargs) -> None:
+                loss_fn="CrossEntropyLoss", pos_clas_weight=1, neg_class_weight=1, **kwargs) -> None:
 
         super().__init__(**kwargs)
 
@@ -61,7 +64,10 @@ class CNNToTransformerClassifier(ClassificationModel):
         else:
             self.name = "CNNToTransformerClassifier"
         n_timesteps, input_features = kwargs.get("input_shape")
-        self.criterion = nn.CrossEntropyLoss()
+
+        self.criterion = build_loss_fn(loss_fn=loss_fn, task_type="classification")
+
+
         self.encoder = modules.CNNToTransformerEncoder(input_features, num_attention_heads, num_hidden_layers,
                                                       n_timesteps, kernel_sizes=kernel_sizes, out_channels=out_channels,
                                                       stride_sizes=stride_sizes, dropout_rate=dropout_rate, num_labels=num_labels,
@@ -91,6 +97,109 @@ class CNNToTransformerClassifier(ClassificationModel):
         preds = self.head(encoding)
         loss =  self.criterion(preds,labels)
         return loss, preds
+
+@MODEL_REGISTRY
+class MaskedCNNToTransformerClassifier(CNNToTransformerClassifier):
+
+    def __init__(self, mask_train=True, mask_eval=True, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.mask_train = mask_train
+        self.mask_eval = mask_eval
+
+    def training_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[torch.Tensor, Dict[str, torch.Tensor]]]]:
+
+        x = batch["inputs_embeds"].type(torch.cuda.FloatTensor)
+        y = batch["label"]
+
+        if self.mask_train:
+            mask = batch["mask"].bool()
+            x = x[mask]
+            y = y[mask]
+
+        loss,preds = self.forward(x,y)
+
+        self.log("train/loss", loss.item(),on_step=True)
+        preds = preds.detach()
+
+        y = y.int().detach()
+        self.train_metrics.update(preds,y)
+
+        if self.is_classifier:
+            self.train_preds.append(preds.detach().cpu())
+            self.train_labels.append(y.detach().cpu())
+
+        return {"loss": loss, "preds": preds, "labels":y}
+
+    def validation_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[torch.Tensor, Dict[str, torch.Tensor]]]]:
+        x = batch["inputs_embeds"].type(torch.cuda.FloatTensor)
+        y = batch["label"]
+
+
+        if self.mask_eval:
+            mask = batch["mask"].bool()
+            x = x[mask]
+            y = y[mask]
+
+        loss,preds = self.forward(x,y)
+
+        self.log("val/loss", loss.item(),on_step=True,sync_dist=True)
+
+
+        if self.is_classifier:
+            self.val_preds.append(preds.detach())
+            self.val_labels.append(y.detach())
+
+        self.val_metrics.update(preds,y)
+        return {"loss":loss, "preds": preds, "labels":y}
+
+    def test_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[torch.Tensor, Dict[str, torch.Tensor]]]]:
+
+        x = batch["inputs_embeds"].type(torch.cuda.FloatTensor)
+        y = batch["label"]
+        dates = batch["end_date_str"]
+        participant_ids = batch["participant_id"]
+
+        if self.mask_eval:
+            mask = batch["mask"].bool()
+            x = x[mask]
+            y = y[mask]
+
+        loss,preds = self.forward(x,y)
+
+        self.log("test/loss", loss.item(),on_step=True,sync_dist=True)
+
+
+        self.test_preds.append(preds.detach())
+        self.test_labels.append(y.detach())
+        self.test_participant_ids.append(participant_ids)
+        self.test_dates.append(dates)
+
+        self.test_metrics.update(preds,y)
+        return {"loss":loss, "preds": preds, "labels":y}
+
+
+@MODEL_REGISTRY
+class WeakCNNToTransformerClassifier(MaskedCNNToTransformerClassifier):
+
+    def training_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[torch.Tensor, Dict[str, torch.Tensor]]]]:
+
+        x = batch["inputs_embeds"].type(torch.cuda.FloatTensor)
+        y = batch["label"]
+        y_bar = batch["weak_label"]
+
+        loss,preds = self.forward(x,y_bar)
+
+        self.log("train/loss", loss.item(),on_step=True)
+        preds = preds.detach()
+
+        y = y.int().detach()
+        self.train_metrics.update(preds,y)
+
+        if self.is_classifier:
+            self.train_preds.append(preds.detach().cpu())
+            self.train_labels.append(y.detach().cpu())
+
+        return {"loss": loss, "preds": preds, "labels": y}
 
 @MODEL_REGISTRY
 class ResNet(ClassificationModel):
