@@ -244,7 +244,7 @@ class TransformerClassifier(ClassificationModel):
         num_attention_heads: int = 4,
         num_hidden_layers: int = 4,
         dropout_rate: float = 0.,
-        num_classes: int = 2,
+        num_labels: int = 2,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -257,7 +257,7 @@ class TransformerClassifier(ClassificationModel):
             modules.EncoderBlock(input_features, num_attention_heads, dropout_rate) for _ in range(num_hidden_layers)
         ])
         
-        self.head = modules.ClassificationModule(input_features, n_timesteps, num_classes)
+        self.head = modules.ClassificationModule(input_features, n_timesteps, num_labels)
 
     
     def forward(self, inputs_embeds,labels):
