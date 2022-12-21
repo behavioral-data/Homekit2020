@@ -12,7 +12,7 @@ TASKS=(
 )
 
 
-for i in ${!TASKS[*]}; 
+for i in ${!TASKS[*]};
   do
     pythonCommand="python src/models/train.py fit --config configs/tasks/${TASKS[$i]}.yaml $BASE_COMMAND --notes 'User Split'"
     eval "python slurm-utils/launch_on_slurm.py  -n 1 -m '64G' --num-gpus 1 --num-cpus 5 --dir . --exp-name Split-CNNTransformer-${TASKS[$i]} --command \"$pythonCommand\""
