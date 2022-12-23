@@ -23,7 +23,7 @@ from torchvision.models.resnet import ResNet as BaseResNet
 from torchvision.models.resnet import BasicBlock
 
 from sktime.classification.hybrid import HIVECOTEV2 as BaseHIVECOTEV2
-
+import xgboost as xgb
 from pytorch_lightning.utilities.cli import MODEL_REGISTRY
 
 import src.models.models.modules as modules
@@ -179,13 +179,13 @@ class MaskedCNNToTransformerClassifier(CNNToTransformerClassifier):
 
 
 @MODEL_REGISTRY
-class WeakCNNToTransformerClassifier(MaskedCNNToTransformerClassifier):
+class WeakCNNToTransformerClassifier(CNNToTransformerClassifier):
 
     def training_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[torch.Tensor, Dict[str, torch.Tensor]]]]:
 
         x = batch["inputs_embeds"].type(torch.cuda.FloatTensor)
         y = batch["label"]
-        y_bar = batch["weak_label"]
+        y_bar = batch["weak_label"].float()
 
         loss,preds = self.forward(x,y_bar)
 
@@ -270,8 +270,6 @@ class TransformerClassifier(ClassificationModel):
         return loss, preds
 
 
-
-        
 @MODEL_REGISTRY
 class HIVECOTE2(NonNeuralMixin,ClassificationModel):
     
@@ -288,3 +286,21 @@ class HIVECOTE2(NonNeuralMixin,ClassificationModel):
     
     def forward(self, inputs_embeds,labels):
         return self.base_model(inputs_embeds)
+
+
+@MODEL_REGISTRY
+class XGBoost(xgb.XGBClassifier, NonNeuralMixin,ClassificationModel):
+
+    def __init__(
+            self,
+            # early_stopping_rounds=-1,
+            **kwargs,
+    ) -> None:
+        super().__init__(**kwargs)
+        # self.early_stopping_rounds = early_stopping_rounds
+        self.fit_loop = NonNeuralLoop()
+        self.optimizer_loop = DummyOptimizerLoop()
+        self.save_hyperparameters()
+
+    def forward(self, inputs_embeds,labels):
+        raise NotImplementedError

@@ -56,6 +56,8 @@ from src.models.lablers import (FluPosLabler, ClauseLabler, EvidationILILabler,
                                 DayOfWeekLabler, AudereObeseLabler, DailyFeaturesLabler, FluPosWeakLabler,
                                 CovidLabler, SameParticipantLabler, SequentialLabler, CovidSignalsLabler)
 
+from src.data.utils import read_parquet_to_pandas
+
 
 from src.models.transforms import DefaultTransformRow
 
@@ -97,9 +99,9 @@ def get_task_with_name(name):
 
 def get_task_from_config_path(path,**kwargs):
     config = read_yaml(path)
-    task_class = get_task_with_name(config["task_name"])
-    task = task_class(dataset_args=config.get("dataset_args",{}),
-                      **config.get("task_args",{}),
+    task_class = get_task_with_name(config["data"]["class_path"])
+    task = task_class(dataset_args=config["data"].get(["dataset_args"],{}),
+                      **config["data"].get("init_args",{}),
                       **kwargs)
     return task
 
@@ -125,6 +127,11 @@ class Task(pl.LightningDataModule):
         for task_type in SUPPORTED_TASK_TYPES:
             setattr(self,f"is_{task_type}",False)
 
+        # only computes full dataset if dataset getter methods are invoked
+        self.train_dataset = None
+        self.val_dataset = None
+        self.test_dataset = None
+
     def get_description(self):
         raise NotImplementedError
     def __str__(self):
@@ -134,10 +141,13 @@ class Task(pl.LightningDataModule):
         return self.__doc__
 
     def get_train_dataset(self):
-        return self.train_dataset
+        raise NotImplementedError
 
     def get_val_dataset(self):
-        return self.eval_dataset
+        raise NotImplementedError
+
+    def get_test_dataset(self):
+        raise NotImplementedError
 
     def get_labler(self):
         return NotImplementedError
@@ -358,9 +368,39 @@ class ActivityTask(Task):
                                                    predicate=self.predicate),
                                        batch_size=self.batch_size)
 
-    def add_task_specific_args(parent_parser):
-        parser = parent_parser.add_argument_group("Task")
-        return parent_parser
+
+    def get_train_dataset(self):
+        if self.train_dataset is None:
+            # we only process the full training dataset once if this method is called
+            self.train_dataset = ActivityTask._format_dataset(self.train_path, self.get_labler())
+
+        return self.train_dataset
+
+    def get_val_dataset(self):
+        if self.val_dataset is None:
+            # we only process the full validation dataset once if this method is called
+            self.val_dataset = ActivityTask._format_dataset(self.val_path, self.get_labler())
+
+        return self.val_dataset
+
+    def get_test_dataset(self):
+        if self.test_dataset is None:
+            # we only process the full testing dataset once if this method is called
+            self.test_dataset = ActivityTask._format_dataset(self.test_path, self.get_labler())
+
+        return self.test_dataset
+
+    @staticmethod
+    def _format_dataset(data_path, labler):
+        dataset = read_parquet_to_pandas(data_path)
+        x = np.array(dataset[dataset.columns[3:-2]].values.tolist()).reshape(len(dataset), -1)
+        y = dataset.apply(lambda x: labler(x["participant_id"], x["start"], x["end"]), axis=1)
+        return (dataset["participant_id"], dataset["start"], x, y)
+
+    # def add_task_specific_args(parent_parser):
+    #         parser = parent_parser.add_argument_group("Task")
+    #         return parent_parser
+
 
 ################################################
 ########### TASKS IMPLEMENTATIONS ##############
@@ -602,6 +642,7 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
 
     def get_description(self):
         return self.__doc__
+
 
 @DATAMODULE_REGISTRY
 class ClassifyObese(ActivityTask, ClassificationMixin):
