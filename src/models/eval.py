@@ -138,6 +138,8 @@ class TorchMetricClassification(MetricCollection):
         
         self.add_prefix = prefix
         self.bootstrap_samples = bootstrap_samples
+
+
         metrics = {}
 
         if bootstrap_samples:
@@ -191,6 +193,7 @@ class TorchMetricClassification(MetricCollection):
 
     def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:  # type: ignore
         probs = torch.nn.functional.softmax(preds,dim=1)[:,-1]
+
         return super().update(probs, target)
 
 def make_ci_bootsrapper(estimator):

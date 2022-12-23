@@ -14,18 +14,19 @@ def get_loss_with_name(name):
     raise TypeError(f"{name} is not a valid loss function.")
 
 
-def build_loss_fn(kwargs,task_type="classification"):
-    loss_fn = kwargs.pop("loss_fn",None)
-    
+def build_loss_fn(loss_fn, pos_class_weight=1, neg_class_weight=1, task_type="classification"):
+
+
     if task_type == "classification":
-        if loss_fn == "FocalLoss":
-            alpha = kwargs.pop("focal_alpha",0.25)
-            gamma = kwargs.pop("focal_gamma",2.0)
-            return FocalLoss(alpha=alpha,gamma=gamma)
-        
+        # if loss_fn == "FocalLoss":
+        #     alpha = kwargs.pop("focal_alpha",0.25)
+        #     gamma = kwargs.pop("focal_gamma",2.0)
+        #     return FocalLoss(alpha=alpha,gamma=gamma)
+        if loss_fn == "WeakCrossEntropyLoss":
+            return WeakCrossEntropyLoss()
         else:
-            neg_class_weight = kwargs.pop("neg_class_weight",1)
-            pos_class_weight = kwargs.pop("pos_class_weight",1)
+            neg_class_weight = neg_class_weight
+            pos_class_weight = pos_class_weight
             loss_weights = torch.tensor([float(neg_class_weight),float(pos_class_weight)])
             return nn.CrossEntropyLoss(weight=loss_weights)
 
@@ -57,3 +58,24 @@ class FocalLoss(nn.Module):
             weight= input_tensor.new(self.weight),
             reduction = self.reduction
         )
+
+
+class WeakCrossEntropyLoss(nn.Module):
+
+    def __init__(self, reduction: str = 'mean', weight=None, eps: float = 1e-8) -> None:
+        super().__init__()
+        self.reduction = reduction
+        self.weight = weight
+        self.eps = eps
+
+    def forward(self, input: torch.Tensor, target: torch.Tensor):
+
+        log_likelihood = F.log_softmax(input, dim=-1)
+        # likelihood = F.softmax(input, dim=-1)
+        loss = -(target * log_likelihood[:, 1] + (1-target) * log_likelihood[:, 0])
+
+        if self.reduction == "mean":
+            return torch.mean(loss)
+        elif self.reduction == "sum":
+            return torch.sum(loss)
+        raise NotImplementedError

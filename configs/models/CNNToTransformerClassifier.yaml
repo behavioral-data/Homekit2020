@@ -15,7 +15,7 @@ model:
     - 5
     - 3
     - 2
-    dropout_rate: 0.3
+    dropout_rate: 0.4
     num_labels: 2
     positional_encoding: false
     # bootstrap_val_metrics: true

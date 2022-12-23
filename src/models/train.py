@@ -25,11 +25,15 @@ from pytorch_lightning.utilities.cli import LightningCLI, SaveConfigCallback
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 # from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities.cloud_io import get_filesystem
+<<<<<<< HEAD
 from pytorch_lightning import Trainer, LightningModule, seed_everything
 import wandb
 import pandas as pd
 from src.models.models.bases import ClassificationModel, NonNeuralMixin
 
+=======
+from pytorch_lightning import Trainer, LightningModule
+>>>>>>> f81c8ee49a59f0a32c07ae9c7ee02072e4b0bc37
 
 logger = get_logger(__name__)
 CONFIG = dotenv_values(".env")
@@ -58,9 +62,12 @@ def add_general_args(parent_parser):
                                help = "Interval with which to log gradients to WandB. 0 -> Never")
     parent_parser.add_argument("--run_name", type=str, default=None,
                                help="run name to use for to WandB")
+<<<<<<< HEAD
     parent_parser.add_argument("--pl_seed", type=int, default=2494,
                                help="Pytorch Lightning seed for current experiment")
 
+=======
+>>>>>>> f81c8ee49a59f0a32c07ae9c7ee02072e4b0bc37
 
     return parent_parser
 
@@ -102,9 +109,12 @@ class CLI(LightningCLI):
 
         extra_callbacks = []
 
+<<<<<<< HEAD
         pl_seed = self.config["fit"]["pl_seed"]
         seed_everything(pl_seed)
 
+=======
+>>>>>>> f81c8ee49a59f0a32c07ae9c7ee02072e4b0bc37
         checkpoint_metric = self.config["fit"]["checkpoint_metric"]
         mode = self.config["fit"]["checkpoint_mode"]
         run_name = self.config["fit"]["run_name"]
@@ -172,9 +182,12 @@ class CLI(LightningCLI):
             data_logger = None
         kwargs["logger"] = data_logger
 
+<<<<<<< HEAD
         if isinstance(self.model, NonNeuralMixin):
             return NonNeuralTrainer(self.config["fit"]["no_wandb"])
 
+=======
+>>>>>>> f81c8ee49a59f0a32c07ae9c7ee02072e4b0bc37
         extra_callbacks = extra_callbacks + [self._get(self.config_init, c) for c in self._parser(self.subcommand).callback_keys]
         trainer_config = {**self._get(self.config_init, "trainer"), **kwargs}
         return self._instantiate_trainer(trainer_config, extra_callbacks)
