@@ -28,6 +28,7 @@ from operator import mul
 import warnings
 import os
 import petastorm
+import wandb
 
 logging.getLogger("petastorm").setLevel(logging.ERROR)
 
@@ -217,6 +218,8 @@ def train_cnn_transformer(
     
     if pl_seed:
         pl.seed_everything(pl_seed)
+        wandb.log({"pl_seed": pl_seed})
+
 
     logger.info(f"Training CNNTransformer")
     
