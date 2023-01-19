@@ -1,12 +1,6 @@
-<<<<<<<< HEAD:slurm-utils/neurips_jobs/temporal_split/minute/run_audere_temporal_split_cnn_transformer.sh
 TRAIN_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/train_7_day"
 EVAL_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/eval_7_day"
 TEST_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/eval_7_day"
-========
-TRAIN_PATH="/gscratch/bdata/estebans/Homekit2020/data/processed/split/audere_split_2020_02_10_by_user/train"
-EVAL_PATH="/gscratch/bdata/estebans/Homekit2020/data/processed/split/audere_split_2020_02_10_by_user/eval"
-TEST_PATH="/gscratch/bdata/estebans/Homekit2020/data/processed/split/audere_split_2020_02_10_by_user/test"
->>>>>>>> 018557b6852670ee51f9620675e76fff813b6deb:slurm-utils/neurips_jobs/user_split/run_audere_user_split_cnn_transformer.sh
 
 export WANDB_DISABLE_SERVICE=True
 export WANDB_CACHE_DIR="/gscratch/bdata/estebans/Homekit2020/.wandb_cache"
@@ -28,16 +22,8 @@ for i in ${!TASKS[*]};
   do
     for seed in ${!SEEDS[*]};
     do
-<<<<<<<< HEAD:slurm-utils/neurips_jobs/temporal_split/minute/run_audere_temporal_split_cnn_transformer.sh
       EXPERIMENT_NAME="CNNTransformer-${TASKS[$i]}-temp_split-seed_${seed}-$(date +%F)"
       pythonCommand="python src/models/train.py fit --config configs/tasks/${TASKS[$i]}.yaml ${BASE_COMMAND} --pl_seed ${seed} --run_name ${EXPERIMENT_NAME} --notes 'temporal split'"
       eval "python slurm-utils/launch_on_slurm.py  -n 1 -m '36G' --num-gpus 1 -p gpu-rtx6k --num-cpus 4 --dir . --exp-name ${EXPERIMENT_NAME} --command \"$pythonCommand\" --conda-env \"mobs\""
-========
-      EXPERIMENT_NAME="CNNTransformer-${TASKS[$i]}-user_split-seed_${seed}-$(date +%F)"
-
-      pythonCommand="python src/models/train.py fit --config configs/tasks/${TASKS[$i]}.yaml ${BASE_COMMAND} --run_name ${EXPERIMENT_NAME} --notes 'User Split'"
-      eval $pythonCommand
-#      eval "python slurm-utils/launch_on_slurm.py  -n 1 -m '36G' --num-gpus 1 -p gpu-rtx6k --num-cpus 4 --dir . --exp-name ${EXPERIMENT_NAME} --command \"$pythonCommand\" --conda-env \"mobs\""
->>>>>>>> 018557b6852670ee51f9620675e76fff813b6deb:slurm-utils/neurips_jobs/user_split/run_audere_user_split_cnn_transformer.sh
     done
   done

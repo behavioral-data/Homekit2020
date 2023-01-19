@@ -29,18 +29,9 @@ from pytorch_lightning import Trainer, LightningModule, seed_everything
 import wandb
 import pandas as pd
 from src.models.models.bases import ClassificationModel, NonNeuralMixin
-<<<<<<< HEAD
-from wandb.xgboost import wandb_callback
-=======
->>>>>>> 018557b6852670ee51f9620675e76fff813b6deb
-
-
 logger = get_logger(__name__)
 CONFIG = dotenv_values(".env")
-<<<<<<< HEAD
-=======
-from wandb.xgboost import wandb_callback
->>>>>>> 018557b6852670ee51f9620675e76fff813b6deb
+
 
 def add_task_args(parser,name):
     task = get_task_with_name(name)
