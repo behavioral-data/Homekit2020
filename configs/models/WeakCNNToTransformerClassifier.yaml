@@ -1,0 +1,22 @@
+model:  
+  class_path: src.models.models.WeakCNNToTransformerClassifier
+  init_args:
+    num_attention_heads: 4
+    num_hidden_layers: 2
+    kernel_sizes:
+    - 5
+    - 5
+    - 2
+    out_channels:
+    - 8
+    - 16
+    - 32
+    stride_sizes:
+    - 5
+    - 3
+    - 2
+    dropout_rate: 0.3
+    num_labels: 2
+    positional_encoding: false
+    # bootstrap_val_metrics: true
+    warmup_steps: 20

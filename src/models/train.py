@@ -29,11 +29,18 @@ from pytorch_lightning import Trainer, LightningModule, seed_everything
 import wandb
 import pandas as pd
 from src.models.models.bases import ClassificationModel, NonNeuralMixin
+<<<<<<< HEAD
 from wandb.xgboost import wandb_callback
+=======
+>>>>>>> 018557b6852670ee51f9620675e76fff813b6deb
 
 
 logger = get_logger(__name__)
 CONFIG = dotenv_values(".env")
+<<<<<<< HEAD
+=======
+from wandb.xgboost import wandb_callback
+>>>>>>> 018557b6852670ee51f9620675e76fff813b6deb
 
 def add_task_args(parser,name):
     task = get_task_with_name(name)
@@ -281,6 +288,58 @@ class NonNeuralTrainer(Trainer):
                                      columns = ["participant_id","date","label","pred"])
             upload_pandas_df_to_wandb(wandb.run.id,"test_predictions",result_df,run=wandb.run)
 
+            # model_path = os.path.join(checkpoint_path, "best.json")
+            # model.save_model(model_path)
+            # print(f"Saving model to {model_path}")
+
+        print(results)
+
+class NonNeuralTrainer(Trainer):
+
+    def __init__(self, no_wandb=False, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.no_wandb = no_wandb
+
+    def fit(self, model, datamodule, *args, **kwargs):
+        # ensures the non-neural model has a fit() function
+        assert hasattr(model, "fit")
+
+        _, _, x_train, y_train = datamodule.get_train_dataset()
+        _, _, x_val, y_val = datamodule.get_val_dataset()
+
+        model.fit(x_train, y_train, eval_set=[(x_val, y_val)])
+
+        self.test(model, datamodule, *args, **kwargs)
+
+    def validate(self, model, datamodule, *args, **kwargs):
+        assert hasattr(model, "predict")
+
+        _, _, x, y = datamodule.get_val_dataset()
+
+        preds = model.predict(x)
+        classification_eval(preds, y, prefix="val/", bootstrap_cis=True)
+
+    def test(self, model, datamodule, *args, **kwargs):
+
+        assert hasattr(model, "predict")
+
+        participant_ids, dates, x, y = datamodule.get_test_dataset()
+
+        preds = model.predict(x)
+        results = classification_eval(preds, y, prefix="test/", bootstrap_cis=True)
+
+        if not self.no_wandb:
+            wandb.log(results)
+            project = wandb.run.project
+            checkpoint_path = os.path.join(project,wandb.run.id,"checkpoints")
+            os.makedirs(checkpoint_path)
+
+            participant_ids = [pid for pid, _date in dates]
+            dates = [date for _pid, date in dates]
+            result_df = pd.DataFrame(zip(participant_ids, dates,  participant_ids, preds,),
+                                     columns = ["participant_id","date","label","pred"])
+
+            upload_pandas_df_to_wandb(wandb.run.id,"test_predictions",result_df,run=wandb.run)
             # model_path = os.path.join(checkpoint_path, "best.json")
             # model.save_model(model_path)
             # print(f"Saving model to {model_path}")

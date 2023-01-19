@@ -1,9 +1,17 @@
 model:
+<<<<<<< HEAD
   class_path: src.models.models.XGBoostClassifier
   init_args:
     use_label_encoder: false
     gpu_id: 0
     max_depth: 2
+=======
+  class_path: src.models.models.XGBoost
+  init_args:
+    use_label_encoder: false
+    gpu_id: 0
+    max_depth: 5
+>>>>>>> 018557b6852670ee51f9620675e76fff813b6deb
     objective: binary:logistic
     eval_metric: auc
 

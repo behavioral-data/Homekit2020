@@ -287,10 +287,18 @@ class HIVECOTE2(NonNeuralMixin,ClassificationModel):
 
 
 @MODEL_REGISTRY
+<<<<<<< HEAD
 class XGBoostClassifier(xgb.XGBClassifier, NonNeuralMixin,ClassificationModel):
 
     def __init__(
             self,
+=======
+class XGBoost(xgb.XGBClassifier, NonNeuralMixin,ClassificationModel):
+
+    def __init__(
+            self,
+            # early_stopping_rounds=-1,
+>>>>>>> 018557b6852670ee51f9620675e76fff813b6deb
             **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -298,7 +306,10 @@ class XGBoostClassifier(xgb.XGBClassifier, NonNeuralMixin,ClassificationModel):
         self.fit_loop = NonNeuralLoop()
         self.optimizer_loop = DummyOptimizerLoop()
         self.save_hyperparameters()
+<<<<<<< HEAD
         self.name = "XGBoostClassifier"
+=======
+>>>>>>> 018557b6852670ee51f9620675e76fff813b6deb
 
     def forward(self, inputs_embeds,labels):
         raise NotImplementedError
