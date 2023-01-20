@@ -306,8 +306,8 @@ class XGBoost(xgb.XGBClassifier, NonNeuralMixin,ClassificationModel):
                                 random_state=random_state,
                                 max_depth=max_depth,
                                 early_stopping_rounds=early_stopping_rounds,
-                                objective=objective, **kwargs)
-        NonNeuralMixin.__init__(self, **kwargs)
+                                objective=objective, **kwargs)        
+        NonNeuralMixin.__init__(self)
         ClassificationModel.__init__(self, **kwargs)
     
         self.fit_loop = NonNeuralLoop()
