@@ -47,7 +47,6 @@ import petastorm.predicates  as peta_pred
 from petastorm.pytorch import DataLoader as PetastormDataLoader
 
 
-from pytorch_lightning.utilities.cli import DATAMODULE_REGISTRY
 
 from src.models.eval import classification_eval, regression_eval
 from src.data.utils import load_processed_table, url_from_path
@@ -297,38 +296,39 @@ class ActivityTask(Task):
 
 
             self.schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
+            numerical_fields = [k for k,v in self.schema.fields.items() if  np.issubdtype(v.numpy_dtype,np.number)]
 
-            # self.all_fields = [k for k in self.schema.fields.keys() if not k in ["participant_id","id"]]
-            # # features = [k for k in schema.fields.keys() if not k in ["start","end","participant_id"]]
-
-            # if not self.is_autoencoder:
-            #     label_type = np.int_
-            # else:
-            #     label_type = np.float32
-
-            # self.new_fields = [("inputs_embeds",np.float32,None,False),
-            #             ("label",label_type,None,False),
-            #             ("participant_id",np.str_,None,False),
-            #             ("id",np.int32,None,False),
-            #             ("end_date_str",np.str_,None,False)]
-
-            # if not row_transform:
-            #     _transform_row = DefaultTransformRow(self,normalize_numerical=normalize_numerical)
-            # else:
-            #     _transform_row = row_transform(self,normalize_numerical=normalize_numerical)
-
-            # self.transform = TransformSpec(_transform_row,removed_fields=self.all_fields,
-            #                                         edit_fields= new_fields)
-
-            # Infer the shape of the data
+            # Try to infer the shape of the data 
+            # TODO: Really, really don't like how many guesses we make here. There
+            # are two issues:
+            #   1) We allow the user to provide field names, but then entirely ignore
+            #      them if they're missing from the schema, which is confusing. 
+            #      I think that rather than providing all field names, we should ask
+            #      for schema fields that are to be used as keys for the labler,
+            #      and fields that should be ignored (e.g. "id")
+            #   2) Input length feels sloppy. We should be able to infer this from the schema
             lengths = set()
-            for k in self.fields:
-                lengths.add(getattr(self.schema,k).shape[-1])
-            lengths = set(lengths)
-            if len(lengths) != 1:
-                raise ValueError("Provided fields have mismatched feature sizes")
+            missing_fields = [x for x in self.fields if not x in self.schema.fields.keys()]
+            
+            if not missing_fields:
+                for k in self.fields:
+                    lengths.add(getattr(self.schema,k).shape[-1])
+            
             else:
-                data_length = list(lengths)[0]
+                logger.warning(f"""Missing fields {missing_fields} in schema {self.schema.fields.keys()}
+                                   Will attempt to infer data shape from numerical fields""")
+                self.fields = numerical_fields
+                for k in numerical_fields:
+                    shape = getattr(self.schema,k).shape[-1]
+                    if shape:
+                        lengths.add(shape[-1])
+                
+            if len(lengths) > 1:
+                raise ValueError("Provided fields have mismatched feature sizes")
+            if len(lengths) == 0:
+                logger.warning(f"Could not infer data shape from schema, assuming ({len(numerical_fields)},)") 
+            else:
+                data_length = lengths.pop()
 
             self.data_shape = (int(data_length),len(self.fields))
 
@@ -406,7 +406,7 @@ class ActivityTask(Task):
 ########### TASKS IMPLEMENTATIONS ##############
 ################################################
 
-@DATAMODULE_REGISTRY
+
 class PredictDailyFeatures(ActivityTask, RegressionMixin):
     """Predict whether a participant was positive
        given a rolling window of minute level activity data.
@@ -438,7 +438,6 @@ class PredictDailyFeatures(ActivityTask, RegressionMixin):
         return self.labler
 
 
-@DATAMODULE_REGISTRY
 class PredictFluPos(ActivityTask):
     """Predict whether a participant was positive
        given a rolling window of minute level activity data.
@@ -463,7 +462,7 @@ class PredictFluPos(ActivityTask):
     def get_labler(self):
         return self.labler
 
-@DATAMODULE_REGISTRY
+
 class PredictCovidSignalsPositivity(ActivityTask):
 
     is_classification = True
@@ -501,7 +500,7 @@ class PredictCovidSignalsPositivity(ActivityTask):
     def get_labler(self):
         return self.labler
 
-@DATAMODULE_REGISTRY
+
 class PredictFluPos(ActivityTask):
     """ Predict whether a participant was positive
         given a rolling window of minute level activity data.
@@ -528,7 +527,7 @@ class PredictFluPos(ActivityTask):
     def get_labler(self):
         return self.labler
 
-@DATAMODULE_REGISTRY
+
 class PredictFluPosWeak(ActivityTask):
     """ Predict whether a participant was positive
         given a rolling window of minute level activity data.
@@ -564,7 +563,7 @@ class PredictFluPosWeak(ActivityTask):
     def get_metadata_types(self):
         return [float]
 
-@DATAMODULE_REGISTRY
+
 class PredictWeekend(ActivityTask, ClassificationMixin):
     """Predict the whether the associated data belongs to a
        weekend"""
@@ -584,7 +583,7 @@ class PredictWeekend(ActivityTask, ClassificationMixin):
         return self.labler
 
 
-@DATAMODULE_REGISTRY
+
 class PredictCovidSmall(ActivityTask, ClassificationMixin):
     """Predict the whether a participant was diagnosed with
     covid on the final day of the window
@@ -613,7 +612,7 @@ class PredictCovidSmall(ActivityTask, ClassificationMixin):
     def get_labler(self):
         return self.labler
 
-@DATAMODULE_REGISTRY
+
 class PredictSurveyClause(ActivityTask,ClassificationMixin):
     """Predict the whether a clause in the onehot
        encoded surveys is true for a given day.
@@ -644,7 +643,7 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
         return self.__doc__
 
 
-@DATAMODULE_REGISTRY
+
 class ClassifyObese(ActivityTask, ClassificationMixin):
     def __init__(self, activity_level: str = "minute",
                  fields: List[str] = DEFAULT_FIELDS,
