@@ -286,34 +286,20 @@ class HIVECOTE2(NonNeuralMixin,ClassificationModel):
 
 
 
+@MODEL_REGISTRY
 class XGBoost(xgb.XGBClassifier, NonNeuralMixin,ClassificationModel):
 
     def __init__(
             self,
-            eval_metric: str = "logloss",
-            use_label_encoder:bool =  False,
-            gpu_id:int = 0,
-            max_depth:int = 2,
-            objective:str = "binary:logistic",
-            random_state:int = 42,
-            early_stopping_rounds:int = 10,
+            random_state=None,
             **kwargs,
     ) -> None:
-        xgb.XGBClassifier.__init__(self,
-                                eval_metric=eval_metric,
-                                use_label_encoder=use_label_encoder,
-                                gpu_id=gpu_id,
-                                random_state=random_state,
-                                max_depth=max_depth,
-                                early_stopping_rounds=early_stopping_rounds,
-                                objective=objective, **kwargs)        
-        NonNeuralMixin.__init__(self)
-        ClassificationModel.__init__(self, **kwargs)
-    
+        super().__init__(**kwargs)
         self.fit_loop = NonNeuralLoop()
         self.optimizer_loop = DummyOptimizerLoop()
         self.save_hyperparameters()
         self.name = "XGBoostClassifier"
+        self.random_state = random_state
 
     def forward(self, inputs_embeds,labels):
         raise NotImplementedError
