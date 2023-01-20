@@ -317,11 +317,11 @@ class ActivityTask(Task):
             else:
                 logger.warning(f"""Missing fields {missing_fields} in schema {self.schema.fields.keys()}
                                    Will attempt to infer data shape from numerical fields""")
-                self.fields = numerical_fields
-                for k in numerical_fields:
+                self.fields = [x for x in numerical_fields if not x in ["id","__index_level_0__"]]
+                for k in self.fields:
                     shape = getattr(self.schema,k).shape[-1]
                     if shape:
-                        lengths.add(shape[-1])
+                        lengths.add(shape)
                 
             if len(lengths) > 1:
                 raise ValueError("Provided fields have mismatched feature sizes")
@@ -372,28 +372,27 @@ class ActivityTask(Task):
     def get_train_dataset(self):
         if self.train_dataset is None:
             # we only process the full training dataset once if this method is called
-            self.train_dataset = ActivityTask._format_dataset(self.train_path, self.get_labler())
+            self.train_dataset = self.format_dataset(self.train_path, self.get_labler())
 
         return self.train_dataset
 
     def get_val_dataset(self):
         if self.val_dataset is None:
             # we only process the full validation dataset once if this method is called
-            self.val_dataset = ActivityTask._format_dataset(self.val_path, self.get_labler())
+            self.val_dataset = self.format_dataset(self.val_path, self.get_labler())
 
         return self.val_dataset
 
     def get_test_dataset(self):
         if self.test_dataset is None:
             # we only process the full testing dataset once if this method is called
-            self.test_dataset = ActivityTask._format_dataset(self.test_path, self.get_labler())
+            self.test_dataset = self.format_dataset(self.test_path, self.get_labler())
 
         return self.test_dataset
 
-    @staticmethod
-    def _format_dataset(data_path, labler):
+    def format_dataset(self,data_path, labler):
         dataset = read_parquet_to_pandas(data_path)
-        x = np.array(dataset[dataset.columns[3:-2]].values.tolist()).reshape(len(dataset), -1)
+        x = np.array(dataset[self.fields].values.tolist()).reshape(len(dataset), -1)
         y = dataset.apply(lambda x: labler(x["participant_id"], x["start"], x["end"]), axis=1)
         return (dataset["participant_id"], dataset["start"], x, y)
 
