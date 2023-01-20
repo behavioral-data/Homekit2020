@@ -32,8 +32,6 @@ from src.models.loops import DummyOptimizerLoop, NonNeuralLoop
 from src.models.models.bases import ClassificationModel, NonNeuralMixin
 
 from src.models.losses import build_loss_fn
-
-
 from torch.utils.data.dataloader import DataLoader
 from wandb.plot.roc_curve import roc_curve
 
@@ -202,7 +200,7 @@ class WeakCNNToTransformerClassifier(CNNToTransformerClassifier):
         return {"loss": loss, "preds": preds, "labels": y}
 
 @MODEL_REGISTRY
-class ResNet(ClassificationModel):
+class ResNetClassifier(ClassificationModel):
     
     def __init__(
         self,
@@ -289,18 +287,18 @@ class HIVECOTE2(NonNeuralMixin,ClassificationModel):
 
 
 @MODEL_REGISTRY
+
 class XGBoost(xgb.XGBClassifier, NonNeuralMixin,ClassificationModel):
 
     def __init__(
             self,
-            # early_stopping_rounds=-1,
             **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        # self.early_stopping_rounds = early_stopping_rounds
         self.fit_loop = NonNeuralLoop()
         self.optimizer_loop = DummyOptimizerLoop()
         self.save_hyperparameters()
+        self.name = "XGBoostClassifier"
 
     def forward(self, inputs_embeds,labels):
         raise NotImplementedError

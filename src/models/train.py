@@ -29,11 +29,9 @@ from pytorch_lightning import Trainer, LightningModule, seed_everything
 import wandb
 import pandas as pd
 from src.models.models.bases import ClassificationModel, NonNeuralMixin
-
-
 logger = get_logger(__name__)
 CONFIG = dotenv_values(".env")
-from wandb.xgboost import wandb_callback
+
 
 def add_task_args(parser,name):
     task = get_task_with_name(name)
@@ -131,9 +129,10 @@ class CLI(LightningCLI):
                 mode = "min"
 
         self.checkpoint_callback = ModelCheckpoint(
-            filename='{epoch}',
+            # filename='{epoch}',
+            filename='test_model',
             save_last=True,
-            save_top_k=3,
+            save_top_k=1,
             save_on_train_epoch_end = True,
             monitor=checkpoint_metric,
             every_n_epochs=1,
@@ -141,11 +140,15 @@ class CLI(LightningCLI):
 
         extra_callbacks.append(self.checkpoint_callback)
 
+
         local_rank = os.environ.get("LOCAL_RANK",0)
         if not self.config["fit"]["no_wandb"] and local_rank == 0:
             lr_monitor = LearningRateMonitor(logging_interval='step')
             extra_callbacks.append(lr_monitor)
             # kwargs["save_config_callback"] = WandBSaveConfigCallback
+
+            logger_id = self.model.wandb_id if hasattr(self.model, "id") else None
+
             data_logger = WandbLogger(project=CONFIG["WANDB_PROJECT"],
                                       entity=CONFIG["WANDB_USERNAME"],
                                       name=run_name,
@@ -156,9 +159,9 @@ class CLI(LightningCLI):
                                       # save_dir = ".",
                                       allow_val_change=True,
                                       # settings=wandb.Settings(start_method="fork"),
-                                      id = self.model.wandb_id)   #id of run to resume from, None if model is not from checkpoint. Alternative: directly use id = model.logger.experiment.id, or try setting WANDB_RUN_ID env variable
+                                      id = logger_id)   #id of run to resume from, None if model is not from checkpoint. Alternative: directly use id = model.logger.experiment.id, or try setting WANDB_RUN_ID env variable
 
-            data_logger.experiment.summary["task"] = self.datamodule.get_name()
+            data_logger.experiment.summary["task"] = os.path.splitext(os.path.basename(str(self.config["fit"]["config"][0])))[0]
             data_logger.experiment.summary["model"] = self.model.name
             data_logger.experiment.summary["pl_seed"] = pl_seed
             data_logger.experiment.summary["checkpoint_metric"] = checkpoint_metric
@@ -232,6 +235,55 @@ class CLI(LightningCLI):
 
     def set_defaults(self):
         ...
+class NonNeuralTrainer(Trainer):
+
+    def __init__(self, no_wandb=False, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.no_wandb = no_wandb
+
+    def fit(self, model, datamodule, *args, **kwargs):
+        # ensures the non-neural model has a fit() function
+        assert hasattr(model, "fit")
+
+        _, _, x_train, y_train = datamodule.get_train_dataset()
+        _, _, x_val, y_val = datamodule.get_val_dataset()
+
+        model.fit(x_train, y_train, eval_set=[(x_val, y_val)]) #, callbacks=[wandb_callback()])
+
+        self.test(model, datamodule, *args, **kwargs)
+
+    def validate(self, model, datamodule, *args, **kwargs):
+        assert hasattr(model, "predict")
+
+        _, _, x, y = datamodule.get_val_dataset()
+
+        preds = model.predict_proba(x)[:, 1]
+        classification_eval(preds, y, prefix="val/", bootstrap_cis=True)
+
+    def test(self, model, datamodule, *args, **kwargs):
+        assert hasattr(model, "predict")
+
+        participant_ids, dates, x, y = datamodule.get_test_dataset()
+
+        preds = model.predict_proba(x)[:, 1]
+
+        results = classification_eval(preds, y, prefix="test/", bootstrap_cis=True)
+
+        if not self.no_wandb:
+            wandb.log(results)
+            # project = wandb.run.project
+            # checkpoint_path = os.path.join(project,wandb.run.id,"checkpoints")
+            # os.makedirs(checkpoint_path)
+
+            result_df = pd.DataFrame(zip(participant_ids, dates,  y, preds,),
+                                     columns = ["participant_id","date","label","pred"])
+            upload_pandas_df_to_wandb(wandb.run.id,"test_predictions",result_df,run=wandb.run)
+
+            # model_path = os.path.join(checkpoint_path, "best.json")
+            # model.save_model(model_path)
+            # print(f"Saving model to {model_path}")
+
+        print(results)
 
 class NonNeuralTrainer(Trainer):
 
