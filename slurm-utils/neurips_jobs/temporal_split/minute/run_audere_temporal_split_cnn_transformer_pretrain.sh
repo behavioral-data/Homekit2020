@@ -1,6 +1,6 @@
 TRAIN_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/train_7_day"
 EVAL_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/eval_7_day"
-TEST_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/eval_7_day"
+TEST_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/test_7_day"
 
 #PRETRAINED_PATH="/mmfs1/gscratch/bdata/mikeam/MobileSensingSuite/models/pretrained_CNNTransformer_predict_daily_features_participant_split.ckpt"
 

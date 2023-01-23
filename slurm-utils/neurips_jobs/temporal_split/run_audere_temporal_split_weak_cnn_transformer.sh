@@ -1,6 +1,6 @@
 TRAIN_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/train_7_day"
 EVAL_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/eval_7_day"
-TEST_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/eval_7_day"
+TEST_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/test_7_day"
 
 wandb artifact cache cleanup 1GB
 
