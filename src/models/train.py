@@ -21,7 +21,7 @@ from src.data.utils import read_parquet_to_pandas
 from src.models.eval import classification_eval
 from src.utils import upload_pandas_df_to_wandb
 
-from pytorch_lightning.utilities.cli import LightningCLI, SaveConfigCallback
+from pytorch_lightning.cli import LightningCLI, SaveConfigCallback
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 # from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities.cloud_io import get_filesystem

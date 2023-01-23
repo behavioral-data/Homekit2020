@@ -24,7 +24,6 @@ from torchvision.models.resnet import BasicBlock
 
 from sktime.classification.hybrid import HIVECOTEV2 as BaseHIVECOTEV2
 import xgboost as xgb
-from pytorch_lightning.utilities.cli import MODEL_REGISTRY
 
 import src.models.models.modules as modules
 from src.utils import get_logger
@@ -46,7 +45,7 @@ def pair(t):
     return t if isinstance(t, tuple) else (t, t)
 
 
-@MODEL_REGISTRY       
+       
 class CNNToTransformerClassifier(ClassificationModel):
 
     def __init__(self, num_attention_heads : int = 4, num_hidden_layers: int = 4,  
@@ -96,7 +95,7 @@ class CNNToTransformerClassifier(ClassificationModel):
         loss =  self.criterion(preds,labels)
         return loss, preds
 
-@MODEL_REGISTRY
+
 class MaskedCNNToTransformerClassifier(CNNToTransformerClassifier):
 
     def __init__(self, mask_train=True, mask_eval=True, *args, **kwargs):
@@ -176,7 +175,7 @@ class MaskedCNNToTransformerClassifier(CNNToTransformerClassifier):
         return {"loss":loss, "preds": preds, "labels":y}
 
 
-@MODEL_REGISTRY
+
 class WeakCNNToTransformerClassifier(CNNToTransformerClassifier):
 
     def training_step(self, batch, batch_idx) -> Union[int, Dict[str, Union[torch.Tensor, Dict[str, torch.Tensor]]]]:
@@ -199,7 +198,7 @@ class WeakCNNToTransformerClassifier(CNNToTransformerClassifier):
 
         return {"loss": loss, "preds": preds, "labels": y}
 
-@MODEL_REGISTRY
+
 class ResNetClassifier(ClassificationModel):
     
     def __init__(
@@ -234,7 +233,7 @@ class ResNetClassifier(ClassificationModel):
         return loss, preds
 
 
-@MODEL_REGISTRY
+
 class TransformerClassifier(ClassificationModel):
     
     def __init__(
@@ -268,7 +267,7 @@ class TransformerClassifier(ClassificationModel):
         return loss, preds
 
 
-@MODEL_REGISTRY
+
 class HIVECOTE2(NonNeuralMixin,ClassificationModel):
     
     def __init__(
@@ -286,7 +285,7 @@ class HIVECOTE2(NonNeuralMixin,ClassificationModel):
         return self.base_model(inputs_embeds)
 
 
-@MODEL_REGISTRY
+
 
 class XGBoost(xgb.XGBClassifier, NonNeuralMixin,ClassificationModel):
 

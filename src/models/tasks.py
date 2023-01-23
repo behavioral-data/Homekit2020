@@ -46,9 +46,6 @@ from petastorm.etl.dataset_metadata import infer_or_load_unischema
 import petastorm.predicates  as peta_pred
 from petastorm.pytorch import DataLoader as PetastormDataLoader
 
-
-from pytorch_lightning.utilities.cli import DATAMODULE_REGISTRY
-
 from src.models.eval import classification_eval, regression_eval
 from src.data.utils import load_processed_table, url_from_path
 from src.utils import get_logger, read_yaml
@@ -406,7 +403,7 @@ class ActivityTask(Task):
 ########### TASKS IMPLEMENTATIONS ##############
 ################################################
 
-@DATAMODULE_REGISTRY
+
 class PredictDailyFeatures(ActivityTask, RegressionMixin):
     """Predict whether a participant was positive
        given a rolling window of minute level activity data.
@@ -438,7 +435,7 @@ class PredictDailyFeatures(ActivityTask, RegressionMixin):
         return self.labler
 
 
-@DATAMODULE_REGISTRY
+
 class PredictFluPos(ActivityTask):
     """Predict whether a participant was positive
        given a rolling window of minute level activity data.
@@ -463,7 +460,7 @@ class PredictFluPos(ActivityTask):
     def get_labler(self):
         return self.labler
 
-@DATAMODULE_REGISTRY
+
 class PredictCovidSignalsPositivity(ActivityTask):
 
     is_classification = True
@@ -501,7 +498,7 @@ class PredictCovidSignalsPositivity(ActivityTask):
     def get_labler(self):
         return self.labler
 
-@DATAMODULE_REGISTRY
+
 class PredictFluPos(ActivityTask):
     """ Predict whether a participant was positive
         given a rolling window of minute level activity data.
@@ -528,7 +525,7 @@ class PredictFluPos(ActivityTask):
     def get_labler(self):
         return self.labler
 
-@DATAMODULE_REGISTRY
+
 class PredictFluPosWeak(ActivityTask):
     """ Predict whether a participant was positive
         given a rolling window of minute level activity data.
@@ -564,7 +561,7 @@ class PredictFluPosWeak(ActivityTask):
     def get_metadata_types(self):
         return [float]
 
-@DATAMODULE_REGISTRY
+
 class PredictWeekend(ActivityTask, ClassificationMixin):
     """Predict the whether the associated data belongs to a
        weekend"""
@@ -584,7 +581,7 @@ class PredictWeekend(ActivityTask, ClassificationMixin):
         return self.labler
 
 
-@DATAMODULE_REGISTRY
+
 class PredictCovidSmall(ActivityTask, ClassificationMixin):
     """Predict the whether a participant was diagnosed with
     covid on the final day of the window
@@ -613,7 +610,7 @@ class PredictCovidSmall(ActivityTask, ClassificationMixin):
     def get_labler(self):
         return self.labler
 
-@DATAMODULE_REGISTRY
+
 class PredictSurveyClause(ActivityTask,ClassificationMixin):
     """Predict the whether a clause in the onehot
        encoded surveys is true for a given day.
@@ -644,7 +641,7 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
         return self.__doc__
 
 
-@DATAMODULE_REGISTRY
+
 class ClassifyObese(ActivityTask, ClassificationMixin):
     def __init__(self, activity_level: str = "minute",
                  fields: List[str] = DEFAULT_FIELDS,
