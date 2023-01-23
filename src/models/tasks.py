@@ -294,38 +294,39 @@ class ActivityTask(Task):
 
 
             self.schema = infer_or_load_unischema(ParquetDataset(infer_schema_path,validate_schema=False))
+            numerical_fields = [k for k,v in self.schema.fields.items() if  np.issubdtype(v.numpy_dtype,np.number)]
 
-            # self.all_fields = [k for k in self.schema.fields.keys() if not k in ["participant_id","id"]]
-            # # features = [k for k in schema.fields.keys() if not k in ["start","end","participant_id"]]
-
-            # if not self.is_autoencoder:
-            #     label_type = np.int_
-            # else:
-            #     label_type = np.float32
-
-            # self.new_fields = [("inputs_embeds",np.float32,None,False),
-            #             ("label",label_type,None,False),
-            #             ("participant_id",np.str_,None,False),
-            #             ("id",np.int32,None,False),
-            #             ("end_date_str",np.str_,None,False)]
-
-            # if not row_transform:
-            #     _transform_row = DefaultTransformRow(self,normalize_numerical=normalize_numerical)
-            # else:
-            #     _transform_row = row_transform(self,normalize_numerical=normalize_numerical)
-
-            # self.transform = TransformSpec(_transform_row,removed_fields=self.all_fields,
-            #                                         edit_fields= new_fields)
-
-            # Infer the shape of the data
+            # Try to infer the shape of the data 
+            # TODO: Really, really don't like how many guesses we make here. There
+            # are two issues:
+            #   1) We allow the user to provide field names, but then entirely ignore
+            #      them if they're missing from the schema, which is confusing. 
+            #      I think that rather than providing all field names, we should ask
+            #      for schema fields that are to be used as keys for the labler,
+            #      and fields that should be ignored (e.g. "id")
+            #   2) Input length feels sloppy. We should be able to infer this from the schema
             lengths = set()
-            for k in self.fields:
-                lengths.add(getattr(self.schema,k).shape[-1])
-            lengths = set(lengths)
-            if len(lengths) != 1:
-                raise ValueError("Provided fields have mismatched feature sizes")
+            missing_fields = [x for x in self.fields if not x in self.schema.fields.keys()]
+            
+            if not missing_fields:
+                for k in self.fields:
+                    lengths.add(getattr(self.schema,k).shape[-1])
+            
             else:
-                data_length = list(lengths)[0]
+                logger.warning(f"""Missing fields {missing_fields} in schema {self.schema.fields.keys()}
+                                   Will attempt to infer data shape from numerical fields""")
+                self.fields = [x for x in numerical_fields if not x in ["id","__index_level_0__"]]
+                for k in self.fields:
+                    shape = getattr(self.schema,k).shape[-1]
+                    if shape:
+                        lengths.add(shape)
+                
+            if len(lengths) > 1:
+                raise ValueError("Provided fields have mismatched feature sizes")
+            if len(lengths) == 0:
+                logger.warning(f"Could not infer data shape from schema, assuming ({len(numerical_fields)},)") 
+            else:
+                data_length = lengths.pop()
 
             self.data_shape = (int(data_length),len(self.fields))
 
@@ -369,28 +370,27 @@ class ActivityTask(Task):
     def get_train_dataset(self):
         if self.train_dataset is None:
             # we only process the full training dataset once if this method is called
-            self.train_dataset = ActivityTask._format_dataset(self.train_path, self.get_labler())
+            self.train_dataset = self.format_dataset(self.train_path, self.get_labler())
 
         return self.train_dataset
 
     def get_val_dataset(self):
         if self.val_dataset is None:
             # we only process the full validation dataset once if this method is called
-            self.val_dataset = ActivityTask._format_dataset(self.val_path, self.get_labler())
+            self.val_dataset = self.format_dataset(self.val_path, self.get_labler())
 
         return self.val_dataset
 
     def get_test_dataset(self):
         if self.test_dataset is None:
             # we only process the full testing dataset once if this method is called
-            self.test_dataset = ActivityTask._format_dataset(self.test_path, self.get_labler())
+            self.test_dataset = self.format_dataset(self.test_path, self.get_labler())
 
         return self.test_dataset
 
-    @staticmethod
-    def _format_dataset(data_path, labler):
+    def format_dataset(self,data_path, labler):
         dataset = read_parquet_to_pandas(data_path)
-        x = np.array(dataset[dataset.columns[3:-2]].values.tolist()).reshape(len(dataset), -1)
+        x = np.array(dataset[self.fields].values.tolist()).reshape(len(dataset), -1)
         y = dataset.apply(lambda x: labler(x["participant_id"], x["start"], x["end"]), axis=1)
         return (dataset["participant_id"], dataset["start"], x, y)
 
@@ -433,8 +433,6 @@ class PredictDailyFeatures(ActivityTask, RegressionMixin):
 
     def get_labler(self):
         return self.labler
-
-
 
 class PredictFluPos(ActivityTask):
     """Predict whether a participant was positive
