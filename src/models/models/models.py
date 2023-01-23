@@ -24,6 +24,7 @@ from torchvision.models.resnet import BasicBlock
 
 from sktime.classification.hybrid import HIVECOTEV2 as BaseHIVECOTEV2
 import xgboost as xgb
+
 import src.models.models.modules as modules
 from src.utils import get_logger
 from src.models.loops import DummyOptimizerLoop, NonNeuralLoop
@@ -282,7 +283,6 @@ class HIVECOTE2(NonNeuralMixin,ClassificationModel):
     
     def forward(self, inputs_embeds,labels):
         return self.base_model(inputs_embeds)
-
 
 
 

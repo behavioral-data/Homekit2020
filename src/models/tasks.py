@@ -46,8 +46,6 @@ from petastorm.etl.dataset_metadata import infer_or_load_unischema
 import petastorm.predicates  as peta_pred
 from petastorm.pytorch import DataLoader as PetastormDataLoader
 
-
-
 from src.models.eval import classification_eval, regression_eval
 from src.data.utils import load_processed_table, url_from_path
 from src.utils import get_logger, read_yaml
@@ -435,7 +433,6 @@ class PredictDailyFeatures(ActivityTask, RegressionMixin):
 
     def get_labler(self):
         return self.labler
-
 
 class PredictFluPos(ActivityTask):
     """Predict whether a participant was positive
