@@ -284,9 +284,6 @@ class HIVECOTE2(NonNeuralMixin,ClassificationModel):
     def forward(self, inputs_embeds,labels):
         return self.base_model(inputs_embeds)
 
-
-
-@MODEL_REGISTRY
 class XGBoost(xgb.XGBClassifier, NonNeuralMixin,ClassificationModel):
 
     def __init__(
