@@ -115,6 +115,7 @@ slurm-utils/jobs
 
 #More logs
 lightning_logs/
+checkpoints/
 
 #datasets used for debugging support 
 debugbatch_fulldata/
