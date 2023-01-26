@@ -325,15 +325,10 @@ class NonNeuralTrainer(Trainer):
             checkpoint_path = os.path.join(project,wandb.run.id,"checkpoints")
             os.makedirs(checkpoint_path)
 
-            participant_ids = [pid for pid, _date in dates]
-            dates = [date for _pid, date in dates]
-            result_df = pd.DataFrame(zip(participant_ids, dates,  participant_ids, preds,),
+            result_df = pd.DataFrame(zip(participant_ids, dates,  y, preds,),
                                      columns = ["participant_id","date","label","pred"])
 
             upload_pandas_df_to_wandb(wandb.run.id,"test_predictions",result_df,run=wandb.run)
-            # model_path = os.path.join(checkpoint_path, "best.json")
-            # model.save_model(model_path)
-            # print(f"Saving model to {model_path}")
 
         print(results)
 
