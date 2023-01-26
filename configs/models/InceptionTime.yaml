@@ -6,41 +6,13 @@ model:
         init_args:
           in_channels: 8
           n_filters: 32
-          kernel_sizes: [5,11,23]
+          kernel_sizes: [11,21,33]
           bottleneck_channels: 32
           use_residual: True
       - class_path : src.models.models.inceptiontime.InceptionBlock
         init_args:
           in_channels: 128
           n_filters: 32
-          kernel_sizes: [5,11,23]
-          bottleneck_channels: 32
-          use_residual: True
-      - class_path : src.models.models.inceptiontime.InceptionBlock
-        init_args:
-          in_channels: 128
-          n_filters: 32
-          kernel_sizes: [5,11,23]
-          bottleneck_channels: 32
-          use_residual: True
-      - class_path : src.models.models.inceptiontime.InceptionBlock
-        init_args:
-          in_channels: 128
-          n_filters: 32
-          kernel_sizes: [5,11,23]
-          bottleneck_channels: 32
-          use_residual: True
-      - class_path : src.models.models.inceptiontime.InceptionBlock
-        init_args:
-          in_channels: 128
-          n_filters: 32
-          kernel_sizes: [5,11,23]
-          bottleneck_channels: 32
-          use_residual: True
-      - class_path : src.models.models.inceptiontime.InceptionBlock
-        init_args:
-          in_channels: 128
-          n_filters: 32
-          kernel_sizes: [5,11,23]
+          kernel_sizes: [11,21,33]
           bottleneck_channels: 32
           use_residual: True
