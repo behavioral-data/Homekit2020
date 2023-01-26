@@ -47,7 +47,6 @@ All models in this project should be based on [Pytorch Lightning](https://github
 
 from pytorch_lightning.utilities.cli import MODEL_REGISTRY
 
-@MODEL_REGISTRY #This exposes the model to the command line through Lightning CLI 
 class ResNet(ClassificationModel):
     def __init__(self,
                  n_layers: int = 3,
@@ -80,7 +79,7 @@ python src/models/train.py fit `# Main entry point` \
 Since all models are built with pytorch, it's easy to extend pretrained models.  Let's say that you had a model that had been pretrained for regression, but which you wanted to use for classification. All that's needed is to structure your new model similarly to the old, and let the `state_dict` do the rest:
 
 ```python
-@MODEL_REGISTRY 
+ 
 class MyRegressionModel(RegressionModel):
     def __init__(self,
                  n_layers: int = 3,
@@ -101,7 +100,7 @@ class MyRegressionModel(RegressionModel):
 
         return loss, preds
 
-@MODEL_REGISTRY 
+ 
 class MyClassificationModel(ClassificationModel):
     def __init__(self,
                  n_layers: int = 3
@@ -149,7 +148,7 @@ class ClauseLabler(object):
         result = self.survey_lookup.get((participant_id,end_date.normalize()),False)
         return int(result)
 
-@DATAMODULE_REGISTRY
+
 class PredictSurveyClause(ActivityTask,ClassificationMixin):
     """Predict the whether a clause in the onehot
        encoded surveys is true for a given day. 
