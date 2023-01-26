@@ -1,6 +1,6 @@
-TRAIN_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/train_daily"
-EVAL_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/eval_daily"
-TEST_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/test_daily"
+TRAIN_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/train_7_day_daily_features"
+EVAL_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/eval_7_day_daily_features"
+TEST_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/test_7_day_daily_features"
 
 export WANDB_DISABLE_SERVICE=True
 export WANDB_CACHE_DIR="/gscratch/bdata/estebans/Homekit2020/.wandb_cache"
@@ -23,9 +23,10 @@ for i in ${!TASKS[*]};
     for seed in ${!SEEDS[*]};
     do
       EXPERIMENT_NAME="XGBoost-${TASKS[$i]}-daily_temp_split-seed_${seed}-$(date +%F)"
-      pythonCommand="python src/models/train.py fit --config configs/tasks/${TASKS[$i]}.yaml ${BASE_COMMAND} --model.random_state ${seed} --pl_seed ${seed} --run_name ${EXPERIMENT_NAME} --notes 'daily temporal split' --no_wandb"
-      eval $pythonCommand
-      exit
-      eval "python slurm-utils/launch_on_slurm.py  -n 1 -m '36G' --num-cpus 4 --dir . --exp-name ${EXPERIMENT_NAME} --command \"$pythonCommand\" --conda-env \"mobs\""
+      pythonCommand="python src/models/train.py fit --config configs/tasks/${TASKS[$i]}.yaml ${BASE_COMMAND} --model.random_state ${seed} --pl_seed ${seed} --run_name ${EXPERIMENT_NAME} --notes 'daily temporal split'"
+      # eval $pythonCommand
+      # exit
+      eval "python slurm-utils/launch_on_slurm.py  -n 1 -m '36G' --num-cpus 4 --dir . --exp-name ${EXPERIMENT_NAME} --command \"$pythonCommand\" --conda-env \"Homekit2020\""
+      # exit
     done
   done
