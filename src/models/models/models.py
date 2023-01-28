@@ -28,7 +28,7 @@ import xgboost as xgb
 import src.models.models.modules as modules
 from src.utils import get_logger
 from src.models.loops import DummyOptimizerLoop, NonNeuralLoop
-from src.models.models.bases import ClassificationModel, NonNeuralMixin
+from src.models.models.bases import ClassificationModel, RegressionModel, NonNeuralMixin
 
 from src.models.losses import build_loss_fn
 from torch.utils.data.dataloader import DataLoader
@@ -44,6 +44,55 @@ logger = get_logger(__name__)
 def pair(t):
     return t if isinstance(t, tuple) else (t, t)
 
+
+class CNNToTransformerRegressor(RegressionModel):
+
+    def __init__(self, num_attention_heads : int = 4, num_hidden_layers: int = 4,  
+                kernel_sizes=[5,3,1], out_channels = [256,128,64], 
+                stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, 
+                positional_encoding = False, pretrained_ckpt_path : Optional[str] = None,
+                loss_fn="MSE", pos_clas_weight=1, neg_class_weight=1, **kwargs) -> None:
+
+        super().__init__(**kwargs)
+
+        if num_hidden_layers == 0:
+            self.name = "CNNRegressor"
+        else:
+            self.name = "CNNToTransformerRegressor"
+            
+        n_timesteps, input_features = kwargs.get("input_shape")
+        self.criterion = build_loss_fn(loss_fn=loss_fn, task_type="regression")
+
+        self.encoder = modules.CNNToTransformerEncoder(input_features, num_attention_heads, num_hidden_layers,
+                                                      n_timesteps, kernel_sizes=kernel_sizes, out_channels=out_channels,
+                                                      stride_sizes=stride_sizes, dropout_rate=dropout_rate, num_labels=num_labels,
+                                                      positional_encoding=positional_encoding)
+        
+        # Regression head
+        self.head = modules.ClassificationModule(self.encoder.d_model, self.encoder.final_length, num_labels)
+
+        if pretrained_ckpt_path:
+            ckpt = torch.load(pretrained_ckpt_path)
+            try:
+                self.load_state_dict(ckpt['state_dict'])
+            
+            #TODO: Nasty hack for reverse compatability! 
+            except RuntimeError:
+                new_state_dict = {}
+                for k,v in ckpt["state_dict"].items():
+                    if not "encoder" in k :
+                        new_state_dict["encoder."+k] = v
+                    else:
+                        new_state_dict[k] = v
+                self.load_state_dict(new_state_dict, strict=False)
+
+        self.save_hyperparameters()
+        
+    def forward(self, inputs_embeds,labels):
+        encoding = self.encoder.encode(inputs_embeds)
+        preds = self.head(encoding)
+        loss =  self.criterion(preds,labels)
+        return loss, preds
 
        
 class CNNToTransformerClassifier(ClassificationModel):

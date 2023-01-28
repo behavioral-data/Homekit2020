@@ -105,7 +105,7 @@ class TorchMetricRegression(MetricCollection):
     
     def compute(self) -> Dict[str, Any]:
         results = super().compute()
-        if self.bootstrap_cis:
+        if self.bootstrap_samples:
 
             cosine_sim = results["cosine_sim"]["mean"] 
             cosine_sim_std = results["cosine_sim"]["std"] 

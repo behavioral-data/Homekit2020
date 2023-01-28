@@ -404,7 +404,8 @@ class ActivityTask(Task):
 ################################################
 
 
-class PredictDailyFeatures(ActivityTask, RegressionMixin):
+# Should be generalized to just predict a row of a csv
+class PredictDailyFeatures(ActivityTask):
     """Predict whether a participant was positive
        given a rolling window of minute level activity data.
        We validate on data after split_date, but before
@@ -413,8 +414,9 @@ class PredictDailyFeatures(ActivityTask, RegressionMixin):
     def __init__(self, fields: List[str] = DEFAULT_FIELDS,
                  activity_level: str = "minute",
                  window_size: int =7,
+                 feature_data_location: str = None,
                  **kwargs):
-        self.labler = DailyFeaturesLabler(window_size=window_size)
+        self.labler = DailyFeaturesLabler(window_size=window_size, data_location=feature_data_location)
         self.fields = ['heart_rate',
                        'missing_heart_rate',
                        'missing_steps',
@@ -425,7 +427,6 @@ class PredictDailyFeatures(ActivityTask, RegressionMixin):
                        'steps']
 
         ActivityTask.__init__(self, fields=fields, activity_level=activity_level,**kwargs)
-        RegressionMixin.__init__(self)
 
 
     def get_name(self):

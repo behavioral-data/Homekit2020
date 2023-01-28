@@ -317,4 +317,5 @@ class ClassificationModel(SensingModel):
 class RegressionModel(SensingModel,ModelTypeMixin):
     def __init__(self,**kwargs) -> None:
         SensingModel.__init__(self, metric_class = TorchMetricRegression, **kwargs)
+        ModelTypeMixin.__init__(self)
         self.is_regressor = True

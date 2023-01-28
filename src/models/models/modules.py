@@ -96,6 +96,86 @@ class CNNEncoder(nn.Module):
                 x = l(x)
         return x
 
+
+class CNNDecoder(nn.Module):
+    def __init__(self, input_features, input_length,
+                kernel_sizes=[1], out_channels = [128], 
+                stride_sizes=[1], max_pool_kernel_size = 3,
+                max_pool_stride_size=2, max_indices=None,
+                unpool_output_sizes=None) -> None:
+
+        n_layers = len(kernel_sizes)
+        assert len(out_channels) == n_layers
+        assert len(stride_sizes) == n_layers
+
+        self.out_channels = out_channels
+        self.kernel_sizes = kernel_sizes
+        self.stride_sizes = stride_sizes
+        self.max_pool_stride_size = max_pool_stride_size
+        self.max_pool_kernel_size = max_pool_kernel_size
+        
+        # A symmetric encoder
+        self.max_indices = max_indices
+
+        super(CNNDecoder,self).__init__()
+        self.input_features = input_features
+        logger.warning("The CNN Decoder uses hard-coded features and will probably break if you try anything fancy")
+        layers = []
+        for i in range(n_layers):
+            if i == 0:
+                in_channels = input_features
+            else:
+                in_channels = out_channels[i-1]
+
+            if max_pool_stride_size and max_pool_kernel_size:
+                layers.append(nn.MaxUnpool1d(max_pool_kernel_size, stride=max_pool_stride_size))
+
+            if i in (0,):
+                output_padding=(1,)
+            else:
+                output_padding = (0,)
+
+            layers.append(nn.ConvTranspose1d(in_channels = in_channels,
+                                    out_channels = out_channels[i],
+                                    kernel_size=kernel_sizes[i],
+                                    stride = stride_sizes[i],
+                                    output_padding=output_padding))
+            layers.append(nn.ReLU())
+            
+        self.layers = nn.ModuleList(layers)
+        self.unpool_output_sizes = unpool_output_sizes
+        self.final_output_length = get_final_conv_l_out(input_length,kernel_sizes,stride_sizes, 
+                                                        max_pool_kernel_size=max_pool_kernel_size, 
+                                                        max_pool_stride_size=max_pool_stride_size)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.transpose(1,2)
+        max_pool_id = 0
+        for l in self.layers:
+            if isinstance(l,nn.MaxUnpool1d):
+                inds = self.max_indices.pop(-1)
+                x = l(x,indices=inds, output_size=self.unpool_output_sizes[max_pool_id])
+                max_pool_id+=1
+            else:
+                x = l(x)
+        x = x.transpose(1,2)
+        return x
+
+    @staticmethod
+    def from_inverse_of_encoder(encoder):
+            # decoder_out_channels = encoder.out_channels[::-1]
+            return CNNDecoder(
+                encoder.out_channels[-1],
+                encoder.final_output_length,
+                out_channels = encoder.out_channels[:-1][::-1] + [encoder.input_features],
+                stride_sizes = encoder.stride_sizes[::-1],
+                kernel_sizes = encoder.kernel_sizes[::-1],
+                max_pool_kernel_size=encoder.max_pool_kernel_size,
+                max_pool_stride_size=encoder.max_pool_stride_size,
+                max_indices=encoder.max_indices,
+                unpool_output_sizes=encoder.conv_output_sizes[::-1]
+            )
+    
 class CNNToTransformerEncoder(nn.Module):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
                 stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, positional_encoding = False) -> None:
@@ -139,6 +219,9 @@ class CNNToTransformerEncoder(nn.Module):
     def forward(self,inputs):
         return self.encode(inputs)
 
+    # The implementation of this model is weird, 
+    # but probabaly not wrong because it returns
+    # all "token" embeddings, rather than just the [CLS] token
     def encode(self, inputs_embeds):
     
         x = inputs_embeds.transpose(1, 2)
@@ -344,6 +427,7 @@ class DenseInterpolation(nn.Module):
         w = self.W.repeat(x.shape[0], 1, 1).requires_grad_(False)
         u = torch.bmm(w, x)
         return u.transpose_(1, 2)
+
 
 
 class ClassificationModule(nn.Module):

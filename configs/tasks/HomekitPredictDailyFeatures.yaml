@@ -1,2 +1,4 @@
 data: 
   class_path: src.models.tasks.PredictDailyFeatures
+  init_args:
+    window_size: 1

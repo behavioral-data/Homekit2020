@@ -1,26 +1,23 @@
-seed_everything: null
+# pytorch_lightning==1.7.0
+seed_everything: 999
 trainer:
   logger: true
-  checkpoint_callback: true
   enable_checkpointing: true
   callbacks: null
   default_root_dir: null
   gradient_clip_val: null
   gradient_clip_algorithm: null
-  process_position: 0
   num_nodes: 1
-  num_processes: 1
+  num_processes: null
   devices: null
   gpus: -1
   auto_select_gpus: false
   tpu_cores: null
   ipus: null
-  log_gpu_memory: null
-  progress_bar_refresh_rate: null
   enable_progress_bar: true
   overfit_batches: 0.0
   track_grad_norm: -1
-  check_val_every_n_epoch: 10
+  check_val_every_n_epoch: 1
   fast_dev_run: false
   accumulate_grad_batches: null
   max_epochs: 50
@@ -28,67 +25,72 @@ trainer:
   max_steps: -1
   min_steps: null
   max_time: null
-  limit_train_batches: 1.0
-  limit_val_batches: 1.0
-  limit_test_batches: 1.0
-  limit_predict_batches: 1.0
-  val_check_interval: 1.0
-  flush_logs_every_n_steps: null
-  log_every_n_steps: 10
-  accelerator: ddp
+  limit_train_batches: null
+  limit_val_batches: null
+  limit_test_batches: null
+  limit_predict_batches: null
+  val_check_interval: null
+  log_every_n_steps: 50
+  accelerator: cuda
   strategy: null
   sync_batchnorm: false
   precision: 32
   enable_model_summary: true
-  weights_summary: top
   weights_save_path: null
   num_sanity_val_steps: 0
   resume_from_checkpoint: null
-  profiler: simple
-  benchmark: false
-  deterministic: false
+  profiler: null
+  benchmark: null
+  deterministic: null
   reload_dataloaders_every_n_epochs: 0
-  reload_dataloaders_every_epoch: false
   auto_lr_find: false
   replace_sampler_ddp: true
   detect_anomaly: false
   auto_scale_batch_size: false
-  prepare_data_per_node: null
   plugins: null
   amp_backend: native
   amp_level: null
   move_metrics_to_cpu: false
   multiple_trainloader_mode: max_size_cycle
-  stochastic_weight_avg: false
-  terminate_on_nan: true
-no_wandb: false
+checkpoint_metric: null
+checkpoint_mode: max
+no_wandb: true
 notes: null
-early_stopping_patience: null
+early_stopping_patience: 10
+gradient_log_interval: 0
+run_name: null
+pl_seed: 2494
 ckpt_path: null
 model:
-  class_path: src.models.models.CNNToTransformerClassifier
+  class_path: src.models.models.CNNToTransformerRegressor
   init_args:
     num_attention_heads: 4
-    num_hidden_layers: 4
+    num_hidden_layers: 2
     kernel_sizes:
     - 5
-    - 3
-    - 1
+    - 5
+    - 2
     out_channels:
-    - 256
-    - 128
-    - 64
+    - 8
+    - 16
+    - 32
     stride_sizes:
+    - 5
+    - 3
     - 2
-    - 2
-    - 2
-    dropout_rate: 0.3
-    num_labels: 2
+    dropout_rate: 0.4
+    num_labels: 18
     positional_encoding: false
-    bootstrap_val_metrics: true
-    warmup_steps: 0
+    pretrained_ckpt_path: null
+    loss_fn: MSE
+    pos_clas_weight: 1
+    neg_class_weight: 1
+    learning_rate: 0.0003
+    val_bootstraps: 100
+    warmup_steps: 20
+    batch_size: 2000
 data:
-  class_path: src.models.tasks.PredictFluPos
+  class_path: src.models.tasks.PredictDailyFeatures
   init_args:
     fields:
     - heart_rate
@@ -100,10 +102,10 @@ data:
     - sleep_classic_3
     - steps
     activity_level: minute
-    window_onset_max: 0
-    window_onset_min: 0
-    train_path: /homes/gws/mikeam/MobileSensingSuite/data/debug/petastorm_datasets/debug
-    val_path: /homes/gws/mikeam/MobileSensingSuite/data/debug/petastorm_datasets/debug
+    window_size: 1
+    feature_data_location: /gscratch/bdata/datasets/homekit2020-1.0/fitbit_day_level_activity.csv
+    train_path: /gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/train_7_day
+    val_path: /gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/eval_7_day
     test_path: null
     downsample_negative_frac: null
     shape: null
@@ -111,4 +113,4 @@ data:
     append_daily_features: false
     daily_features_path: null
     backend: petastorm
-    batch_size: 800
+    row_transform: null

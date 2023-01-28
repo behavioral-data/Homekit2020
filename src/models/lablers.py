@@ -254,8 +254,8 @@ class CleanAnnotationLabler(object):
 
 
 class DailyFeaturesLabler(object):
-    def __init__(self, window_size=7,
-                       data_location=None,
+    def __init__(self, window_size:int = 7,
+                       data_location:str = None,
                        normalize=True) -> None:
 
         super().__init__()
@@ -280,7 +280,7 @@ class DailyFeaturesLabler(object):
         self.default_features = np.array(([0]*n_non_missing  + [1]*(len(feature_cols)-n_non_missing)) * window_size).astype(np.float32)
 
         for user, group in iter(self.df.groupby("participant_id")):
-            windows = list(group.set_index("date")["features"].rolling(f"{window_size}D",
+            windows = list(group.set_index("date").sort_index()["features"].rolling(f"{window_size}D",
                                                                               min_periods=window_size))
             for window in windows:
                 if not len(window) == window_size:
