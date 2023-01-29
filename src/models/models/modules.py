@@ -178,22 +178,31 @@ class CNNDecoder(nn.Module):
     
 class CNNToTransformerEncoder(nn.Module):
     def __init__(self, input_features, num_attention_heads, num_hidden_layers, n_timesteps, kernel_sizes=[5,3,1], out_channels = [256,128,64], 
-                stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, positional_encoding = False) -> None:
+                stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, positional_encoding = False, max_pool_kernel_size = 3,
+                max_pool_stride_size=2) -> None:
         
         
         super(CNNToTransformerEncoder, self).__init__()
 
         self.input_dim = (n_timesteps,input_features)
         self.num_labels = num_labels
-          
+        self.out_channels = out_channels
+        self.kernel_sizes = kernel_sizes
+        self.stride_sizes = stride_sizes
+        self.input_features = input_features
+        self.max_pool_stride_size = max_pool_stride_size
+        self.max_pool_kernel_size = max_pool_kernel_size
 
         self.input_embedding = CNNEncoder(input_features, n_timesteps=n_timesteps, kernel_sizes=kernel_sizes,
-                                out_channels=out_channels, stride_sizes=stride_sizes)
+                                out_channels=out_channels, stride_sizes=stride_sizes, max_pool_kernel_size=max_pool_kernel_size,
+                                max_pool_stride_size=max_pool_stride_size)
         
+    
         self.d_model = out_channels[-1]
-        final_length = self.input_embedding.final_output_length
         
-        self.final_length = final_length
+        final_length = self.input_embedding.final_output_length
+        self.final_output_length = final_length
+        
         
         if self.input_embedding.final_output_length < 1:
             raise ValueError("CNN final output dim is <1 ")                                

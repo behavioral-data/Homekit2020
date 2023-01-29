@@ -74,7 +74,14 @@ class TorchPrecisionRecallAUC(AUROC):
         return tm_auc(recalls,precisions)
 
 
-
+class DummyMetrics(MetricCollection):
+    def __init__(self, bootstrap_samples=0, prefix=""):
+        self.add_prefix = prefix
+        metrics = {}
+        super(DummyMetrics,self).__init__(metrics)
+    
+    def compute(self) -> Dict[str, Any]:
+        return {}
 
 class TorchMetricRegression(MetricCollection):
     def __init__(self, bootstrap_samples=1000,

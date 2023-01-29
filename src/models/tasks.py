@@ -641,6 +641,39 @@ class PredictSurveyClause(ActivityTask,ClassificationMixin):
 
 
 
+SAME_PARTICIPANT_FIELDS = ['heart_rate_l',
+                           'missing_heart_rate_l',
+                           'missing_steps_l',
+                           'sleep_classic_0_l',
+                           'sleep_classic_1_l',
+                           'sleep_classic_2_l',
+                           'sleep_classic_3_l', 
+                           'steps_l',
+                           'heart_rate_r',
+                           'missing_heart_rate_r',
+                           'missing_steps_r',
+                           'sleep_classic_0_r',
+                           'sleep_classic_1_r',
+                           'sleep_classic_2_r',
+                           'sleep_classic_3_r', 
+                           'steps_r']
+
+class SameParticipant(ActivityTask, ClassificationMixin):
+    def __init__(self, activity_level: str = "minute",
+                 fields: List[str] = SAME_PARTICIPANT_FIELDS,
+                 **kwargs):
+
+        self.labler = SameParticipantLabler()
+        ActivityTask.__init__(self, fields=fields, activity_level=activity_level,**kwargs)
+        ClassificationMixin.__init__(self)
+
+    def get_labler(self):
+        return self.labler
+
+    def get_name(self):
+        return "ClassifyObese"
+    
+
 class ClassifyObese(ActivityTask, ClassificationMixin):
     def __init__(self, activity_level: str = "minute",
                  fields: List[str] = DEFAULT_FIELDS,
@@ -655,3 +688,19 @@ class ClassifyObese(ActivityTask, ClassificationMixin):
 
     def get_name(self):
         return "ClassifyObese"
+    
+
+class Autoencode(AutoencodeMixin, ActivityTask):
+    """Autoencode minute level data"""
+
+    def __init__(self, fields: List[str] = DEFAULT_FIELDS, **kwargs):
+                                     
+        ActivityTask.__init__(self,fields=fields,**kwargs)
+        AutoencodeMixin.__init__(self)
+        self.is_autoencoder = True
+
+    def get_name(self):
+        return "Autoencode"
+
+    def get_labler(self):
+        return None

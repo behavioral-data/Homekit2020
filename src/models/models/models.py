@@ -112,8 +112,6 @@ class CNNToTransformerClassifier(ClassificationModel):
         n_timesteps, input_features = kwargs.get("input_shape")
 
         self.criterion = build_loss_fn(loss_fn=loss_fn, task_type="classification")
-
-
         self.encoder = modules.CNNToTransformerEncoder(input_features, num_attention_heads, num_hidden_layers,
                                                       n_timesteps, kernel_sizes=kernel_sizes, out_channels=out_channels,
                                                       stride_sizes=stride_sizes, dropout_rate=dropout_rate, num_labels=num_labels,
@@ -144,6 +142,34 @@ class CNNToTransformerClassifier(ClassificationModel):
         loss =  self.criterion(preds,labels)
         return loss, preds
 
+
+class CNNToTransformerAutoencoder(RegressionModel):
+    def __init__(self, num_attention_heads : int = 4, num_hidden_layers: int = 4,  
+                kernel_sizes=[5,3,1], out_channels = [256,128,64], 
+                stride_sizes=[2,2,2], dropout_rate=0.3, num_labels=2, 
+                positional_encoding = False, pretrained_ckpt_path : Optional[str] = None,
+                loss_fn="MSE", pos_clas_weight=1, neg_class_weight=1, **kwargs) -> None:
+        
+        self.is_autoencoder=True
+        super().__init__(**kwargs)
+        # Probably don't want to actually subclass
+        n_timesteps, input_features = kwargs.get("input_shape")
+        self.criterion = build_loss_fn(loss_fn=loss_fn, task_type="regression")
+
+        self.encoder = modules.CNNToTransformerEncoder(input_features, num_attention_heads, num_hidden_layers,
+                                                      n_timesteps, kernel_sizes=kernel_sizes, out_channels=out_channels,
+                                                      stride_sizes=stride_sizes, dropout_rate=dropout_rate, num_labels=num_labels,
+                                                      positional_encoding=positional_encoding)
+
+        self.decoder = modules.CNNDecoder.from_inverse_of_encoder(self.encoder.input_embedding)
+        self.name = "CNNToTransformerAutoEncoder"
+        self.base_model_prefix = self.name
+
+    def forward(self, inputs_embeds,labels):
+        encoding = self.encoder.encode(inputs_embeds)
+        decoded = self.decoder(encoding)
+        loss = self.criterion(inputs_embeds,decoded)
+        return loss, decoded
 
 class MaskedCNNToTransformerClassifier(CNNToTransformerClassifier):
 

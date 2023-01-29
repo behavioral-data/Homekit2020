@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 import torch
 import torchmetrics
 from pytorch_lightning.loggers.wandb import WandbLogger
-from src.models.eval import (TorchMetricClassification, TorchMetricRegression,
+from src.models.eval import (TorchMetricClassification, TorchMetricRegression, DummyMetrics,
                              wandb_detection_error_tradeoff_curve,
                              wandb_pr_curve, wandb_roc_curve)
 from src.utils import (binary_logits_to_pos_probs, get_logger,
@@ -316,6 +316,11 @@ class ClassificationModel(SensingModel):
 
 class RegressionModel(SensingModel,ModelTypeMixin):
     def __init__(self,**kwargs) -> None:
-        SensingModel.__init__(self, metric_class = TorchMetricRegression, **kwargs)
+        if self.is_autoencoder:
+            metric_class = DummyMetrics
+        else:
+            metric_class = TorchMetricRegression
+
+        SensingModel.__init__(self, metric_class = metric_class, **kwargs)
         ModelTypeMixin.__init__(self)
         self.is_regressor = True
