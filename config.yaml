@@ -17,7 +17,7 @@ trainer:
   enable_progress_bar: true
   overfit_batches: 0.0
   track_grad_norm: -1
-  check_val_every_n_epoch: 1
+  check_val_every_n_epoch: 2
   fast_dev_run: false
   accumulate_grad_batches: null
   max_epochs: 50
@@ -56,13 +56,15 @@ checkpoint_metric: null
 checkpoint_mode: max
 no_wandb: true
 notes: null
-early_stopping_patience: 10
+early_stopping_patience: 5
 gradient_log_interval: 0
 run_name: null
 pl_seed: 2494
+load_weights_path: models/CNNTransformerDailyFeatures.ckpt
+freeze_encoder: true
 ckpt_path: null
 model:
-  class_path: src.models.models.CNNToTransformerRegressor
+  class_path: src.models.models.CNNToTransformerClassifier
   init_args:
     num_attention_heads: 4
     num_hidden_layers: 2
@@ -79,19 +81,21 @@ model:
     - 3
     - 2
     dropout_rate: 0.4
-    num_labels: 18
+    num_labels: 2
     positional_encoding: false
     pretrained_ckpt_path: null
-    loss_fn: MSE
+    loss_fn: CrossEntropyLoss
     pos_clas_weight: 1
     neg_class_weight: 1
-    learning_rate: 0.0003
-    val_bootstraps: 100
+    learning_rate: 0.001
+    val_bootstraps: 0
     warmup_steps: 20
-    batch_size: 2000
+    batch_size: 100
 data:
-  class_path: src.models.tasks.PredictDailyFeatures
+  class_path: src.models.tasks.PredictSurveyClause
   init_args:
+    clause: symptom_severity__cough_q_3 > 0 | symptom_severity__cough_q_2 > 0
+    activity_level: minute
     fields:
     - heart_rate
     - missing_heart_rate
@@ -101,12 +105,10 @@ data:
     - sleep_classic_2
     - sleep_classic_3
     - steps
-    activity_level: minute
-    window_size: 1
-    feature_data_location: /gscratch/bdata/datasets/homekit2020-1.0/fitbit_day_level_activity.csv
-    train_path: /gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/train_7_day
-    val_path: /gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/eval_7_day
-    test_path: null
+    survey_path: null
+    train_path: /mmfs1/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/train_7_day
+    val_path: /mmfs1/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/eval_7_day
+    test_path: /mmfs1/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/test_7_day
     downsample_negative_frac: null
     shape: null
     normalize_numerical: true

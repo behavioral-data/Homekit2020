@@ -69,7 +69,7 @@ class CNNToTransformerRegressor(RegressionModel):
                                                       positional_encoding=positional_encoding)
         
         # Regression head
-        self.head = modules.ClassificationModule(self.encoder.d_model, self.encoder.final_length, num_labels)
+        self.head = modules.ClassificationModule(self.encoder.d_model, self.encoder.final_output_length, num_labels)
 
         if pretrained_ckpt_path:
             ckpt = torch.load(pretrained_ckpt_path)
@@ -117,7 +117,7 @@ class CNNToTransformerClassifier(ClassificationModel):
                                                       stride_sizes=stride_sizes, dropout_rate=dropout_rate, num_labels=num_labels,
                                                       positional_encoding=positional_encoding)
         
-        self.head = modules.ClassificationModule(self.encoder.d_model, self.encoder.final_length, num_labels)
+        self.head = modules.ClassificationModule(self.encoder.d_model, self.encoder.final_output_length, num_labels)
 
         if pretrained_ckpt_path:
             ckpt = torch.load(pretrained_ckpt_path)

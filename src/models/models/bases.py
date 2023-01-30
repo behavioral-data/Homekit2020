@@ -73,7 +73,8 @@ class SensingModel(pl.LightningModule):
         parser.add_argument("--batch_size", type=int, default=800,
                             help="Training batch size")      
         parser.add_argument("--num_val_bootstraps", type=int, default=100,
-                            help="Number of bootstraps to use for validation metrics. Set to 0 to disable bootstrapping.")                       
+                            help="Number of bootstraps to use for validation metrics. Set to 0 to disable bootstrapping.")     
+              
         return parser
 
     def on_train_start(self) -> None:
@@ -270,6 +271,10 @@ class SensingModel(pl.LightningModule):
                                   table_name="test_predictions",
                                   df=self.predictions_df)
 
+    def freeze_encoder(self):
+        if hasattr(self,"encoder"):
+            for param in self.encoder.parameters():
+                param.requires_grad = False
 
 class NonNeuralMixin(object):
     def training_step(self,*args,**kwargs):
@@ -316,11 +321,14 @@ class ClassificationModel(SensingModel):
 
 class RegressionModel(SensingModel,ModelTypeMixin):
     def __init__(self,**kwargs) -> None:
+        ModelTypeMixin.__init__(self)
+        self.is_regressor = True
+        
         if self.is_autoencoder:
             metric_class = DummyMetrics
         else:
             metric_class = TorchMetricRegression
 
         SensingModel.__init__(self, metric_class = metric_class, **kwargs)
-        ModelTypeMixin.__init__(self)
-        self.is_regressor = True
+        
+        

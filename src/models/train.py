@@ -21,6 +21,7 @@ from src.data.utils import read_parquet_to_pandas
 from src.models.eval import classification_eval
 from src.utils import upload_pandas_df_to_wandb
 
+import torch
 from pytorch_lightning.cli import LightningCLI, SaveConfigCallback
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 # from pytorch_lightning.loggers import WandbLogger
@@ -58,6 +59,8 @@ def add_general_args(parent_parser):
                                help="run name to use for to WandB")
     parent_parser.add_argument("--pl_seed", type=int, default=2494,
                                help="Pytorch Lightning seed for current experiment")
+    parent_parser.add_argument("--load_weights_path", default=None, type=str)
+    parent_parser.add_argument("--freeze_encoder", action="store_true", default=False)    
 
 
     return parent_parser
@@ -187,7 +190,27 @@ class CLI(LightningCLI):
         gradient_log_interval = self.config["fit"]["gradient_log_interval"]
         if isinstance(self.trainer.logger, WandbLogger) and gradient_log_interval:
             self.trainer.logger.watch(self.model, log="all", log_freq=gradient_log_interval)
-
+        
+        if self.config["fit"]["load_weights_path"]:
+            current_state_dict=self.model.state_dict()
+            loaded_state_dict = torch.load(self.config["fit"]["load_weights_path"])["state_dict"]
+            
+            new_state_dict = current_state_dict
+            
+            for k, v in loaded_state_dict.items():
+                if k in current_state_dict:
+                    if v.size() == current_state_dict[k].size():
+                        new_state_dict[k] = v
+                    else:
+                        logger.warning(f"Didn't load {k}. Size mismatch: {v.size()} vs {current_state_dict[k].size()}")
+                else:
+                    logger.warning(f"Extra key in loaded state dict: {k}")
+            
+            self.model.load_state_dict(new_state_dict,strict=False)
+    
+        if self.config["fit"]["freeze_encoder"]:
+            self.model.freeze_encoder()
+            
     def after_fit(self):
         if self.trainer.is_global_zero:
             logger.info(f"Best model score: {self.checkpoint_callback.best_model_score}")
