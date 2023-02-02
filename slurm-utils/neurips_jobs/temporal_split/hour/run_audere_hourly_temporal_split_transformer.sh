@@ -16,7 +16,7 @@ TASKS=(
     "HomekitPredictFatigue"
 )
 
-SEEDS=(0 1 2 3 4 )
+SEEDS=(0 1 2 3 4)
 
 for i in ${!TASKS[*]};
   do
@@ -24,6 +24,6 @@ for i in ${!TASKS[*]};
     do
       EXPERIMENT_NAME="Transformer-${TASKS[$i]}-hourly_temp_split-seed_${seed}-$(date +%F)"
       pythonCommand="python src/models/train.py fit --config configs/tasks/${TASKS[$i]}.yaml ${BASE_COMMAND} --pl_seed ${seed} --run_name ${EXPERIMENT_NAME} --notes 'hourly temporal split'"
-      eval "python slurm-utils/launch_on_slurm.py  -n 1 -m '36G' --num-gpus 1 -p gpu-rtx6k --num-cpus 4 --dir . --exp-name ${EXPERIMENT_NAME} --command \"$pythonCommand\" --conda-env \"mobs\""
+      eval "python slurm-utils/launch_on_slurm.py  -n 1 -m '36G' --num-gpus 1 -p gpu-a40 --num-cpus 4 --dir . --exp-name ${EXPERIMENT_NAME} --command \"$pythonCommand\" --conda-env \"mobs\""
     done
   done

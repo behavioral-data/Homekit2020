@@ -1,6 +1,6 @@
-TRAIN_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/train_7_day"
-EVAL_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/eval_7_day"
-TEST_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/eval_7_day"
+TRAIN_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10_by_user/train_7_day"
+EVAL_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10_by_user/eval_7_day"
+TEST_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10_by_user/test_7_day"
 
 export WANDB_DISABLE_SERVICE=True
 export WANDB_CACHE_DIR="/gscratch/bdata/estebans/Homekit2020/.wandb_cache"
@@ -22,8 +22,8 @@ for i in ${!TASKS[*]};
   do
     for seed in ${!SEEDS[*]};
     do
-      EXPERIMENT_NAME="CNNTransformer-${TASKS[$i]}-temporal_split-seed_${seed}-$(date +%F)"
-      pythonCommand="python src/models/train.py fit --config configs/tasks/${TASKS[$i]}.yaml ${BASE_COMMAND} --pl_seed ${seed} --run_name ${EXPERIMENT_NAME} --notes 'temporal split'"
+      EXPERIMENT_NAME="CNNTransformer-${TASKS[$i]}-user_split-seed_${seed}-$(date +%F)"
+      pythonCommand="python src/models/train.py fit --config configs/tasks/${TASKS[$i]}.yaml ${BASE_COMMAND} --pl_seed ${seed} --run_name ${EXPERIMENT_NAME} --notes 'user split'"
       eval "python slurm-utils/launch_on_slurm.py  -n 1 -m '36G' --num-gpus 1 -p gpu-rtx6k --num-cpus 4 --dir . --exp-name ${EXPERIMENT_NAME} --command \"$pythonCommand\" --conda-env \"mobs\""
     done
   done
