@@ -30,7 +30,7 @@ def hierarchical_bootstrapping(tables, metrics=None, num_bootstraps=10):
         # samples with replacement from data
         resampled_data_indices = np.random.choice(np.arange(len_data), len_data, replace=True)
 
-        for table in tables:
+        for table in resampled_tables:
             bootstrapped_preds = table.iloc[resampled_data_indices]
             labels = bootstrapped_preds["label"].to_numpy(int)
             preds = bootstrapped_preds["pred"].to_numpy()
