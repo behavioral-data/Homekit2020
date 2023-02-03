@@ -1,6 +1,9 @@
 TRAIN_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/train_7_day_daily_features"
 EVAL_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/eval_7_day_daily_features"
 TEST_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/test_7_day_daily_features"
+TRAIN_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/train_7_day_daily_features"
+EVAL_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/eval_7_day_daily_features"
+TEST_PATH="/gscratch/bdata/datasets/homekit2020-1.0/split_2020_02_10/test_7_day_daily_features"
 
 export WANDB_DISABLE_SERVICE=True
 export WANDB_CACHE_DIR="/gscratch/bdata/estebans/Homekit2020/.wandb_cache"
