@@ -1,0 +1,4 @@
+model:  
+  class_path: src.models.models.myresnet.ResNetBaseline
+  init_args:
+    in_channels: 8
