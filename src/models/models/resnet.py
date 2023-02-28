@@ -82,22 +82,12 @@ class ResNetBlock(nn.Module):
     
 class ResNetBaseline(ClassificationModel):
     """A PyTorch implementation of the ResNet Baseline
-    From https://arxiv.org/abs/1909.04939
-    Attributes
-    ----------
-    sequence_length:
-        The size of the input sequence
-    mid_channels:
-        The 3 residual blocks will have as output channels:
-        [mid_channels, mid_channels * 2, mid_channels * 2]
-    num_pred_classes:
-        The number of output classes
     """
 
     def __init__(self, in_channels: int, mid_channels: int = 64,
                  num_pred_classes: int = 2, **kwargs) -> None:
         super().__init__(**kwargs)
-
+        self.name="ResNet"
         # for easier saving and loading
         self.input_args = {
             'in_channels': in_channels,

@@ -19,8 +19,6 @@ from copy import copy
 from typing import Dict, Tuple,  Union, Any, Optional, List, Callable
 import torch
 import torch.nn as nn
-from torchvision.models.resnet import ResNet as BaseResNet
-from torchvision.models.resnet import BasicBlock
 
 from sktime.classification.hybrid import HIVECOTEV2 as BaseHIVECOTEV2
 import xgboost as xgb
@@ -197,42 +195,6 @@ class WeakCNNToTransformerClassifier(CNNToTransformerClassifier):
             self.train_labels.append(y.detach().cpu())
 
         return {"loss": loss, "preds": preds, "labels": y}
-
-
-class ResNetClassifier(ClassificationModel):
-    
-    def __init__(
-        self,
-        layers: List[int] = [2,2,2,2],
-        num_classes: int = 2,
-        groups: int = 1,
-        width_per_group: int = 64,
-        replace_stride_with_dilation: Optional[List[bool]] = None,
-        **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-        self.name = "ResNet"
-        self.base_model = BaseResNet(block=BasicBlock,
-                                    layers=layers,
-                                    num_classes=num_classes,
-                                    groups=groups,
-                                    width_per_group=width_per_group,
-                                    replace_stride_with_dilation=replace_stride_with_dilation)
-        
-        # So that the model can handle the input shape...
-        self.base_model.conv1 = nn.Conv2d(1, 64, 
-                                          kernel_size=7, stride=2, padding=3, bias=False)                                    
-
-        self.criterion = nn.CrossEntropyLoss()
-        self.save_hyperparameters()
-    
-    def forward(self, inputs_embeds,labels):
-        x = inputs_embeds.unsqueeze(1) # Add a dummy dimension for channels
-        preds = self.base_model(x)
-        loss =  self.criterion(preds,labels)
-        return loss, preds
-
-
 
 class TransformerClassifier(ClassificationModel):
     
