@@ -28,17 +28,6 @@ python src/models/train.py fit `# Main entry point` \
         --data.val_path $PWD/data/processed/split/audere_split_2020_02_10/eval_7_day  `# Validation data location`\
 ```
 
-### Loading a Pretrained Model
-TODO: Models need to be stored somewhere external
-Pretrained models are located in the `models` subdirectory. To load a model for finetuning, pass the path to the model checkpoint to the training script like so:
-``` bash
-python src/models/train.py fit  \
-        --trainer.resume_from_checkpoint PATH_TO_PRETRAINED
-        --config configs/tasks/HomekitPredictFluPos.yaml \
-        --config configs/models/CNNToTransformerClassifier.yaml \
-        --data.train_path  $PWD/data/processed/split/audere_split_2020_02_10/train_7_day \
-        --data.val_path  $PWD/data/processed/split/audere_split_2020_02_10/eval_7_day \
-```
 
 ### Adding a new model
 All models in this project should be based on [Pytorch Lightning](https://github.com/PyTorchLightning/pytorch-lightning).  This is done by subclassing `src.models.models.SensingModel` (or one of its derivatives, like `src.models.models.ClassificationModel`). All that's necessary is overriding the `forward` method, and optionally `__init__`:
