@@ -1,5 +1,21 @@
 Homekit2020
 ==============================
+Homekit2020 is the first large-scale public benchmark for wearable sensor data! Our new paper offers an unprecedented dataset with 14 million+ hours of #Fitbit data, symptom reports, & PCR influenza test results.
+[Paper](https://behavioral-data.github.io/resources/pubpdfs/merrillHomekit2020BenchmarkTime2023.pdf)
+If you find these data or code useful, please use this citation:
+```bibtex
+@article{merrillHomekit2020BenchmarkTime2023,
+  title = {Homekit2020: {{A Benchmark}} for {{Time Series Classification}} on a {{Large Mobile Sensing Dataset}} with {{Laboratory Tested Ground Truth}} of {{Influenza Infections}}},
+  author = {Merrill, Mike A and Safranchik, Esteban and Kolbeinsson, Arinbjorn and Gade, Piyusha and Ramirez, Ernesto and Schmidt, Ludwig and Foshchini, Luca and Althoff, Tim},
+  year = {2023},
+  journaltitle = {Conference on Health, Inference, and Learning},
+  shortjournal = {CHIL},
+  langid = {english},
+}
+
+
+```
+
 
 ## Getting Started
 ------------
