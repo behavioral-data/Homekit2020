@@ -15,10 +15,8 @@ If you find these data or code useful, please use this citation:
 
 
 ```
-
-
-## Getting Started
 ------------
+## Getting Started
 
 ### Installation
 1. Clone this repo: `git clone https://github.com/behavioral-data/Homekit2020.git`
